@@ -16,7 +16,7 @@ import "./App.css";
   - 這是研究工具，不是投資建議
 */
 
-const API_BASE = "https://stock-radar-hv9h.onrender.com";
+const API_BASE = "https://stock-radar-api-os48.onrender.com";
 
 const NAME_TO_CODE = {
   台積電: "2330",
