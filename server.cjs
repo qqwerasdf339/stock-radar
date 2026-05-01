@@ -5,6 +5,9 @@ const axios = require("axios");
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+let cache = null;
+let lastFetch = 0;
+
 app.use(cors());
 
 // 🔥 Yahoo API（核心）
@@ -50,6 +53,32 @@ app.get("/api/yahoo/chart/:symbol", async (req, res) => {
   } catch (error) {
     console.error("Yahoo error:", error.message);
     res.status(500).json({ error: "Yahoo API failed" });
+  }
+});
+
+app.get("/api/twse/list", async (req, res) => {
+  try {
+    const now = Date.now();
+
+    // 1 小時更新一次
+    if (cache && now - lastFetch < 3600000) {
+      return res.json(cache);
+    }
+
+    const url = "https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL";
+    const response = await axios.get(url);
+
+    const map = {};
+    response.data.forEach((item) => {
+      map[item.Code] = item.Name;
+    });
+
+    cache = map;
+    lastFetch = now;
+
+    res.json(map);
+  } catch (err) {
+    res.status(500).json({ error: "TWSE failed" });
   }
 });
 
