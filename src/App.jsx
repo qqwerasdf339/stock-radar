@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import "./App.css";
 
 /*
@@ -28,17 +28,6 @@ const NAME_TO_CODE = {
   台灣50: "0050",
 };
 
-
-const CODE_TO_NAME = [
-  "2330 台積電",
-  "2317 鴻海",
-  "2454 聯發科",
-  "2308 台達電",
-  "2382 廣達",
-  "3231 緯創",
-  "0050 台灣50",
-];
-
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -65,7 +54,7 @@ function cleanNumber(value) {
   return Number.isFinite(n) ? n : null;
 }
 
-async function fetchYahooHistory(input, range = "6mo", interval = "1d") {
+async function fetchYahooHistory(input, range = "6mo", interval = "1d", twNameMap = {}) {
   const symbol = resolveSymbol(input);
   if (!symbol) throw new Error("請輸入股票代碼或名稱");
 
@@ -97,7 +86,7 @@ async function fetchYahooHistory(input, range = "6mo", interval = "1d") {
 
 return {
   symbol,
-  name: CODE_TO_NAME[code] || meta.longName || meta.shortName || symbol,
+  name: twNameMap[code] || meta.longName || meta.shortName || symbol,
     currency: meta.currency || "TWD",
     regularMarketPrice: meta.regularMarketPrice || history.at(-1)?.close || null,
     history,
@@ -323,12 +312,20 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [error, setError] = useState("");
+  const [twNameMap, setTwNameMap] = useState({});
+
+useEffect(() => {
+  fetch(`${API_BASE}/api/twse/list`)
+    .then((res) => res.json())
+    .then((data) => setTwNameMap(data))
+    .catch((err) => console.error("TWSE name list failed", err));
+}, []);
 
   async function searchOne(input = query) {
     setLoading(true);
     setError("");
     try {
-      const data = await fetchYahooHistory(input, range, "1d");
+      const data = await fetchYahooHistory(input, range, "1d", twNameMap);
       const analyzed = analyzeStock(data);
       setStock(analyzed);
     } catch (err) {
@@ -352,7 +349,7 @@ export default function App() {
       const result = [];
       for (const item of items) {
         try {
-          const data = await fetchYahooHistory(item, range, "1d");
+          const data = await fetchYahooHistory(item, range, "1d", twNameMap);
           result.push(analyzeStock(data));
           await sleep(150);
         } catch (err) {
