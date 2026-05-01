@@ -507,6 +507,9 @@ export default function Stock() {
 
   return (
     <div className="radar-page">
+      <button className="ghost" onClick={() => navigate("/")}>
+      ← 返回首頁
+      </button>
       <style>{`
         body { margin: 0; background: #0f172a; color: #e5e7eb; font-family: Arial, 'Microsoft JhengHei', sans-serif; }
         button, input, select, textarea { font-family: inherit; }
