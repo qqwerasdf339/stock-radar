@@ -18,29 +18,16 @@ import "./App.css";
 
 const API_BASE = "https://stock-radar-hv9h.onrender.com";
 
-const STOCK_NAME_MAP = {
-  "2330": "台積電",
-  "2317": "鴻海",
-  "2454": "聯發科",
-  "2308": "台達電",
-  "2382": "廣達",
-  "2412": "中華電",
-  "2881": "富邦金",
-  "2882": "國泰金",
-  "2891": "中信金",
-  "2603": "長榮",
-  "2615": "萬海",
-  "3037": "欣興",
-  "3661": "世芯-KY",
-  "3711": "日月光投控",
-  "2357": "華碩",
-  "3231": "緯創",
-  "3017": "奇鋐",
-  "6669": "緯穎",
-  "2379": "瑞昱",
-  "3008": "大立光",
-  "0050": "元大台灣50",
+const NAME_TO_CODE = {
+  台積電: "2330",
+  鴻海: "2317",
+  聯發科: "2454",
+  台達電: "2308",
+  廣達: "2382",
+  元大台灣50: "0050",
+  台灣50: "0050",
 };
+
 
 const QUICK_LIST = [
   "2330 台積電",
@@ -113,7 +100,7 @@ async function fetchYahooHistory(input, range = "6mo", interval = "1d") {
 
 return {
   symbol,
-  name: STOCK_NAME_MAP[code] || meta.longName || meta.shortName || symbol,
+  name: CODE_TO_NAME[code] || meta.longName || meta.shortName || symbol,
     currency: meta.currency || "TWD",
     regularMarketPrice: meta.regularMarketPrice || history.at(-1)?.close || null,
     history,
