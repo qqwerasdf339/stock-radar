@@ -395,6 +395,13 @@ function TradingChart({ stock }) {
 
 export default function App() {
   const [query, setQuery] = useState("2330");
+  const [favorites, setFavorites] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem("stockRadarFavorites") || "[]");
+    } catch {
+      return [];
+    }
+  });
   const [watchText, setWatchText] = useState("2330,2317,2454,2308,2382,0050,AAPL,NVDA,TSLA,SPY,QQQ");
   const [range, setRange] = useState("6mo");
   const [stock, setStock] = useState(null);
@@ -403,6 +410,31 @@ export default function App() {
   const [scanning, setScanning] = useState(false);
   const [autoScan, setAutoScan] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    localStorage.setItem("stockRadarFavorites", JSON.stringify(favorites));
+  }, [favorites]);
+
+  function addFavorite(targetStock = stock) {
+    if (!targetStock?.symbol) return;
+
+    setFavorites((prev) => {
+      const exists = prev.some((item) => item.symbol === targetStock.symbol);
+      if (exists) return prev;
+
+      return [
+        ...prev,
+        {
+          symbol: targetStock.symbol,
+          name: targetStock.name,
+        },
+      ];
+    });
+  }
+
+  function removeFavorite(symbol) {
+    setFavorites((prev) => prev.filter((item) => item.symbol !== symbol));
+  }
 
   async function searchOne(input = query) {
     setLoading(true);
@@ -486,6 +518,8 @@ export default function App() {
         button:disabled { opacity: .55; cursor: not-allowed; }
         button.ghost { background: #1e293b; color: #e5e7eb; border: 1px solid #334155; }
         button.danger { background: #fb7185; color: #450a0a; }
+        button.small { padding: 8px 10px; font-size: 13px; }
+        .stock-actions { display: flex; flex-direction: column; gap: 10px; align-items: flex-end; }
         .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
         .chips button { padding: 8px 10px; background: #172554; color: #bfdbfe; font-size: 13px; }
         .error { color: #fecaca; background: rgba(127,29,29,.4); padding: 10px; border-radius: 12px; margin-top: 12px; }
@@ -572,9 +606,16 @@ export default function App() {
                   <h3>{stock.symbol} {stock.name}</h3>
                   <p>{stock.level}・{stock.currency}</p>
                 </div>
-                <div className={stock.changePct >= 0 ? "price up" : "price down"}>
-                  {stock.close?.toFixed?.(2)}
-                  <small>{stock.changePct.toFixed(2)}%</small>
+                <div className="stock-actions">
+                  <div className={stock.changePct >= 0 ? "price up" : "price down"}>
+                    {stock.close?.toFixed?.(2)}
+                    <small>{stock.changePct.toFixed(2)}%</small>
+                  </div>
+                  {favorites.some((item) => item.symbol === stock.symbol) ? (
+                    <button className="danger small" onClick={() => removeFavorite(stock.symbol)}>取消收藏</button>
+                  ) : (
+                    <button className="ghost small" onClick={() => addFavorite(stock)}>加入收藏</button>
+                  )}
                 </div>
               </div>
               <TradingChart stock={stock} />
@@ -615,6 +656,33 @@ export default function App() {
       </section>
 
       <section className="panel" style={{ marginTop: 16 }}>
+        <h2>⭐ 收藏股票</h2>
+        {favorites.length > 0 ? (
+          <table>
+            <thead>
+              <tr>
+                <th>股票</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {favorites.map((item) => (
+                <tr key={item.symbol}>
+                  <td>{item.symbol}<br />{item.name}</td>
+                  <td>
+                    <button className="ghost small" onClick={() => searchOne(item.symbol)}>查看</button>{" "}
+                    <button className="danger small" onClick={() => removeFavorite(item.symbol)}>刪除</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <p className="empty">尚未收藏股票。查詢股票後，點「加入收藏」。</p>
+        )}
+      </section>
+
+      <section className="panel" style={{ marginTop: 16 }}>
         <h2>🔥 自選清單排行榜</h2>
         {watchList.length > 0 ? (
           <table>
@@ -627,6 +695,7 @@ export default function App() {
                 <th>AI</th>
                 <th>回測</th>
                 <th>狀態</th>
+                <th>收藏</th>
               </tr>
             </thead>
             <tbody>
@@ -639,6 +708,13 @@ export default function App() {
                   <td><span className="score">{s.score}</span></td>
                   <td>{s.backtest.totalReturn}%</td>
                   <td>{s.level}</td>
+                  <td>
+                    {favorites.some((item) => item.symbol === s.symbol) ? (
+                      <button className="danger small" onClick={(e) => { e.stopPropagation(); removeFavorite(s.symbol); }}>取消</button>
+                    ) : (
+                      <button className="ghost small" onClick={(e) => { e.stopPropagation(); addFavorite(s); }}>收藏</button>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
