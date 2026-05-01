@@ -70,7 +70,7 @@ function resolveSymbol(input) {
 
   // 已經輸入 2330.TW / 3234.TWO / AAPL 就照原樣
   if (upper.endsWith(".TW") || upper.endsWith(".TWO")) return upper;
-  
+
   // 台股代碼
   if (/^\d{4}$/.test(upper)) return upper;
 
@@ -110,9 +110,11 @@ async function fetchYahooHistory(input, range = "6mo", interval = "1d") {
     }))
     .filter((x) => x.open && x.high && x.low && x.close);
 
-  return {
-    symbol,
-    name: meta.longName || meta.shortName || symbol,
+  const code = symbol.split(".")[0];
+
+return {
+  symbol,
+  name: STOCK_NAME_MAP[code] || meta.longName || meta.shortName || symbol,
     currency: meta.currency || "TWD",
     regularMarketPrice: meta.regularMarketPrice || history.at(-1)?.close || null,
     history,
