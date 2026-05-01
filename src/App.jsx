@@ -43,24 +43,22 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function resolveSymbol(input) {
+ function resolveSymbol(input) {
   const raw = String(input || "").trim();
   if (!raw) return "";
 
-  const codeFromName = STOCK_NAME_MAP[raw];
-  if (codeFromName) return codeFromName;
+  if (NAME_TO_CODE[raw]) return NAME_TO_CODE[raw];
 
   const upper = raw.toUpperCase();
 
-  // 已經輸入 2330.TW / 3234.TWO / AAPL 就照原樣
   if (upper.endsWith(".TW") || upper.endsWith(".TWO")) return upper;
 
-  // 台股代碼
-  if (/^\d{4}$/.test(upper)) return upper;
+  const code = upper.match(/\d{4}/)?.[0];
+  if (code) return code;
 
-  // 美股 / 美股 ETF
   return upper;
 }
+
 
 function cleanNumber(value) {
   const n = Number(value);
