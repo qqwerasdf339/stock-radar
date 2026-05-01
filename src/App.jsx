@@ -109,6 +109,8 @@ async function fetchYahooHistory(input, range = "6mo", interval = "1d") {
 
   const code = symbol.split(".")[0];
 
+  console.log("code:", code, "name:", STOCK_NAME_MAP[code]);
+
 return {
   symbol,
   name: STOCK_NAME_MAP[code] || meta.longName || meta.shortName || symbol,
