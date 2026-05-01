@@ -29,7 +29,7 @@ const NAME_TO_CODE = {
 };
 
 
-const QUICK_LIST = [
+const CODE_TO_NAME = [
   "2330 台積電",
   "2317 鴻海",
   "2454 聯發科",
@@ -94,7 +94,6 @@ async function fetchYahooHistory(input, range = "6mo", interval = "1d") {
 
   const code = symbol.split(".")[0];
 
-  console.log("code:", code, "name:", STOCK_NAME_MAP[code]);
 
 return {
   symbol,
@@ -373,7 +372,7 @@ export default function App() {
   const suggestion = useMemo(() => {
     const q = query.trim();
     if (!q) return [];
-    return Object.entries(STOCK_NAME_MAP)
+    return Object.entries(NAME_TO_CODE)
       .filter(([name, code]) => name.includes(q) || code.includes(q))
       .slice(0, 8);
   }, [query]);
