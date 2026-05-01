@@ -64,14 +64,17 @@ function resolveSymbol(input) {
   if (!raw) return "";
 
   const codeFromName = STOCK_NAME_MAP[raw];
-  if (codeFromName) return `${codeFromName}.TW`;
-
-  const onlyCode = raw.match(/\d{4}/)?.[0];
-  if (onlyCode) return `${onlyCode}.TW`;
+  if (codeFromName) return codeFromName;
 
   const upper = raw.toUpperCase();
-  if (upper.endsWith(".TW") || upper.endsWith(".TWO")) return upper;
 
+  // 已經輸入 2330.TW / 3234.TWO / AAPL 就照原樣
+  if (upper.endsWith(".TW") || upper.endsWith(".TWO")) return upper;
+  
+  // 台股代碼
+  if (/^\d{4}$/.test(upper)) return upper;
+
+  // 美股 / 美股 ETF
   return upper;
 }
 
