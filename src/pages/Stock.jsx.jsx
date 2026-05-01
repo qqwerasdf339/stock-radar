@@ -397,6 +397,7 @@ function TradingChart({ stock }) {
 export default function Stock() {
   const navigate = useNavigate();
   const { symbol } = useParams();
+  const [activeTab, setActiveTab] = useState("analysis");
   const [query, setQuery] = useState(symbol || "2330");
   const [favorites, setFavorites] = useState(() => {
     try {
@@ -440,10 +441,14 @@ export default function Stock() {
   }
 
   async function searchOne(input = query) {
+    const target = String(input || "").trim();
+    if (!target) return;
+    setQuery(target);
+    setActiveTab("analysis");
     setLoading(true);
     setError("");
     try {
-      const data = await fetchYahooHistory(input, range, "1d");
+      const data = await fetchYahooHistory(target, range, "1d");
       const analyzed = analyzeStock(data);
       setStock(analyzed);
     } catch (err) {
@@ -485,9 +490,9 @@ export default function Stock() {
   }
 
   useEffect(() => {
-  if (symbol) searchOne(symbol);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
- }, [symbol]);
+    if (symbol) searchOne(symbol);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [symbol]);
 
   useEffect(() => {
     if (!autoScan) return;
@@ -506,14 +511,16 @@ export default function Stock() {
   }, [query]);
 
   return (
-    <div className="radar-page">
-      <button className="ghost" onClick={() => navigate("/")}>
-      ← 返回首頁
-      </button>
+    <div className="radar-page has-fixed-nav">
       <style>{`
         body { margin: 0; background: #0f172a; color: #e5e7eb; font-family: Arial, 'Microsoft JhengHei', sans-serif; }
         button, input, select, textarea { font-family: inherit; }
-        .radar-page { min-height: 100vh; padding: 28px; background: radial-gradient(circle at top left, #1e293b, #020617 55%); }
+        .radar-page { min-height: 100vh; padding: 84px 28px 96px; background: radial-gradient(circle at top left, #1e293b, #020617 55%); }
+        .top-nav { position: fixed; top: 0; left: 0; right: 0; height: 60px; z-index: 999; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 18px; background: rgba(2, 6, 23, 0.82); backdrop-filter: blur(12px); border-bottom: 1px solid rgba(148,163,184,.18); box-sizing: border-box; }
+        .nav-left, .nav-tabs { display: flex; align-items: center; gap: 8px; }
+        .nav-title { color: #cbd5e1; font-size: 14px; font-weight: 800; letter-spacing: .3px; }
+        .tab-btn { background: transparent; color: #cbd5e1; border: 1px solid rgba(148,163,184,.25); padding: 8px 12px; border-radius: 999px; }
+        .tab-btn.active { background: #38bdf8; color: #082f49; border-color: #38bdf8; }
         .hero { display: flex; justify-content: space-between; gap: 20px; align-items: stretch; margin-bottom: 20px; }
         .eyebrow { color: #38bdf8; font-size: 13px; letter-spacing: 1px; text-transform: uppercase; }
         h1 { font-size: 36px; margin: 8px 0; }
@@ -556,8 +563,30 @@ export default function Stock() {
         tr:hover { background: rgba(56,189,248,.09); }
         .score { display: inline-flex; align-items: center; justify-content: center; min-width: 38px; height: 28px; border-radius: 999px; background: #1d4ed8; color: white; font-weight: 800; }
         .empty { color: #94a3b8; padding: 18px; }
+        .mobile-bottom-nav { display: none; }
         @media (max-width: 1100px) { .hero, .control-grid, .dashboard { grid-template-columns: 1fr; display: grid; } }
+        @media (max-width: 720px) {
+          .radar-page { padding: 78px 14px 92px; }
+          .nav-title { display: none; }
+          .nav-tabs { display: none; }
+          h1 { font-size: 28px; }
+          .dashboard { grid-template-columns: 1fr; }
+          .mobile-bottom-nav { position: fixed; left: 12px; right: 12px; bottom: 12px; z-index: 999; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 8px; border-radius: 18px; background: rgba(2, 6, 23, 0.88); backdrop-filter: blur(12px); border: 1px solid rgba(148,163,184,.2); }
+          .mobile-bottom-nav button { padding: 10px 6px; font-size: 13px; }
+        }
       `}</style>
+
+      <nav className="top-nav">
+        <div className="nav-left">
+          <button className="ghost small" onClick={() => navigate("/")}>← 返回</button>
+          <span className="nav-title">AI 股票雷達 Pro</span>
+        </div>
+        <div className="nav-tabs">
+          <button className={`tab-btn ${activeTab === "home" ? "active" : ""}`} onClick={() => setActiveTab("home")}>首頁</button>
+          <button className={`tab-btn ${activeTab === "analysis" ? "active" : ""}`} onClick={() => setActiveTab("analysis")}>分析</button>
+          <button className={`tab-btn ${activeTab === "favorites" ? "active" : ""}`} onClick={() => setActiveTab("favorites")}>收藏</button>
+        </div>
+      </nav>
 
       <header className="hero">
         <div>
@@ -567,173 +596,183 @@ export default function Stock() {
         </div>
       </header>
 
-      <section className="control-grid">
-        <div className="panel">
-          <h2>單股快速查詢</h2>
-          <label>股票代碼或名稱</label>
-          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="例如 2330、台積電、AAPL、SPY" onKeyDown={(e) => e.key === "Enter" && searchOne()} />
-          <label>資料區間</label>
-          <select value={range} onChange={(e) => setRange(e.target.value)}>
-            <option value="3mo">3個月</option>
-            <option value="6mo">6個月</option>
-            <option value="1y">1年</option>
-            <option value="2y">2年</option>
-            <option value="5y">5年</option>
-          </select>
-          <div className="btn-row">
-            <button onClick={() => searchOne()} disabled={loading}>{loading ? "查詢中..." : "查詢股票"}</button>
+      {activeTab === "home" && (
+        <section className="control-grid">
+          <div className="panel">
+            <h2>單股快速查詢</h2>
+            <label>股票代碼或名稱</label>
+            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="例如 2330、台積電、AAPL、SPY" onKeyDown={(e) => e.key === "Enter" && searchOne()} />
+            <label>資料區間</label>
+            <select value={range} onChange={(e) => setRange(e.target.value)}>
+              <option value="3mo">3個月</option>
+              <option value="6mo">6個月</option>
+              <option value="1y">1年</option>
+              <option value="2y">2年</option>
+              <option value="5y">5年</option>
+            </select>
+            <div className="btn-row">
+              <button onClick={() => searchOne()} disabled={loading}>{loading ? "查詢中..." : "搜尋並前往分析"}</button>
+            </div>
+            {suggestion.length > 0 && (
+              <div className="chips">
+                {suggestion.map(([name, code]) => (
+                  <button key={name} onClick={() => { setQuery(code); searchOne(code); }}>{code} {name}</button>
+                ))}
+              </div>
+            )}
+            {error && <p className="error">{error}</p>}
           </div>
-          {suggestion.length > 0 && (
-            <div className="chips">
-              {suggestion.map(([name, code]) => (
-                <button key={name} onClick={() => { setQuery(code); searchOne(code); }}>{code} {name}</button>
-              ))}
+
+          <div className="panel">
+            <h2>自選清單掃描</h2>
+            <label>輸入股票，最多 20 檔</label>
+            <textarea rows={4} value={watchText} onChange={(e) => setWatchText(e.target.value)} />
+            <div className="btn-row">
+              <button className="ghost" onClick={scanWatchList} disabled={scanning}>{scanning ? "掃描中..." : "掃描自選清單"}</button>
+              <button className={autoScan ? "danger" : "ghost"} onClick={() => setAutoScan((v) => !v)}>
+                {autoScan ? "停止5秒刷新" : "啟動5秒刷新"}
+              </button>
+            </div>
+            <p className="note">5秒刷新會持續呼叫 Yahoo API，自選清單建議控制在 5～10 檔。</p>
+          </div>
+
+          {watchList.length > 0 && (
+            <div className="panel" style={{ gridColumn: "1 / -1" }}>
+              <h2>🔥 自選清單排行榜</h2>
+              <table>
+                <thead>
+                  <tr>
+                    <th>股票</th>
+                    <th>價格</th>
+                    <th>漲跌%</th>
+                    <th>RSI</th>
+                    <th>AI</th>
+                    <th>回測</th>
+                    <th>狀態</th>
+                    <th>收藏</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {watchList.map((s) => (
+                    <tr key={s.symbol} onClick={() => { setStock(s); setActiveTab("analysis"); }}>
+                      <td>{s.symbol}<br />{s.name}</td>
+                      <td>{s.close?.toFixed?.(2)}</td>
+                      <td className={s.changePct >= 0 ? "up" : "down"}>{s.changePct.toFixed(2)}%</td>
+                      <td>{s.rsi?.toFixed(1) ?? "--"}</td>
+                      <td><span className="score">{s.score}</span></td>
+                      <td>{s.backtest.totalReturn}%</td>
+                      <td>{s.level}</td>
+                      <td>
+                        {favorites.some((item) => item.symbol === s.symbol) ? (
+                          <button className="danger small" onClick={(e) => { e.stopPropagation(); removeFavorite(s.symbol); }}>取消</button>
+                        ) : (
+                          <button className="ghost small" onClick={(e) => { e.stopPropagation(); addFavorite(s); }}>收藏</button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
-          {error && <p className="error">{error}</p>}
-        </div>
+        </section>
+      )}
 
-        <div className="panel">
-          <h2>自選清單掃描</h2>
-          <label>輸入股票，最多 20 檔</label>
-          <textarea rows={4} value={watchText} onChange={(e) => setWatchText(e.target.value)} />
-          <div className="btn-row">
-            <button className="ghost" onClick={scanWatchList} disabled={scanning}>{scanning ? "掃描中..." : "掃描自選清單"}</button>
-            <button className={autoScan ? "danger" : "ghost"} onClick={() => setAutoScan((v) => !v)}>
-              {autoScan ? "停止5秒刷新" : "啟動5秒刷新"}
-            </button>
-          </div>
-          <p className="note">5秒刷新會持續呼叫 Yahoo API，自選清單建議控制在 5～10 檔。</p>
-        </div>
-      </section>
-
-      <section className="dashboard">
-        <div className="panel">
-          <h2>📊 互動 K 線圖</h2>
-          {stock ? (
-            <>
-              <div className="stock-head">
-                <div>
-                  <h3>{stock.symbol} {stock.name}</h3>
-                  <p>{stock.level}・{stock.currency}</p>
-                </div>
-                <div className="stock-actions">
-                  <div className={stock.changePct >= 0 ? "price up" : "price down"}>
-                    {stock.close?.toFixed?.(2)}
-                    <small>{stock.changePct.toFixed(2)}%</small>
+      {activeTab === "analysis" && (
+        <section className="dashboard">
+          <div className="panel">
+            <h2>📊 互動 K 線圖</h2>
+            {stock ? (
+              <>
+                <div className="stock-head">
+                  <div>
+                    <h3>{stock.symbol} {stock.name}</h3>
+                    <p>{stock.level}・{stock.currency}</p>
                   </div>
-                  {favorites.some((item) => item.symbol === stock.symbol) ? (
-                    <button className="danger small" onClick={() => removeFavorite(stock.symbol)}>取消收藏</button>
-                  ) : (
-                    <button className="ghost small" onClick={() => addFavorite(stock)}>加入收藏</button>
-                  )}
-                </div>
-              </div>
-              <TradingChart stock={stock} />
-              <div className="tag-row">
-                {stock.tags.length ? stock.tags.map((t) => <span key={t}>{t}</span>) : <span>暫無強勢訊號</span>}
-              </div>
-            </>
-          ) : (
-            <p className="empty">輸入股票代碼後按「查詢股票」。</p>
-          )}
-        </div>
-
-        <div className="panel">
-          <h2>🧠 AI 分數 + 回測</h2>
-          {stock ? (
-            <>
-              <div className="score-card">
-                <div><b>{stock.score}</b><span>AI分數</span></div>
-                <div><b>{stock.level}</b><span>狀態</span></div>
-                <div><b>{stock.volumeRatio?.toFixed(2) ?? "--"}</b><span>量比</span></div>
-              </div>
-              <div className="metric-grid">
-                <div><b>{stock.rsi?.toFixed(1) ?? "--"}</b><span>RSI</span></div>
-                <div><b>{stock.k?.toFixed(1) ?? "--"}</b><span>K 值</span></div>
-                <div><b>{stock.d?.toFixed(1) ?? "--"}</b><span>D 值</span></div>
-                <div><b>{stock.macdHist?.toFixed(2) ?? "--"}</b><span>MACD</span></div>
-                <div><b>{stock.ma5?.toFixed(2) ?? "--"}</b><span>MA5</span></div>
-                <div><b>{stock.ma20?.toFixed(2) ?? "--"}</b><span>MA20</span></div>
-                <div><b>{stock.backtest.totalReturn}%</b><span>回測報酬</span></div>
-                <div><b>{stock.backtest.winRate}%</b><span>勝率</span></div>
-                <div><b>{stock.backtest.maxDrawdown}%</b><span>最大回撤</span></div>
-              </div>
-            </>
-          ) : (
-            <p className="empty">尚無分析資料。</p>
-          )}
-        </div>
-      </section>
-
-      <section className="panel" style={{ marginTop: 16 }}>
-        <h2>⭐ 收藏股票</h2>
-        {favorites.length > 0 ? (
-          <table>
-            <thead>
-              <tr>
-                <th>股票</th>
-                <th>操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              {favorites.map((item) => (
-                <tr key={item.symbol}>
-                  <td>{item.symbol}<br />{item.name}</td>
-                  <td>
-                    <button className="ghost small" onClick={() => searchOne(item.symbol)}>查看</button>{" "}
-                    <button className="danger small" onClick={() => removeFavorite(item.symbol)}>刪除</button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        ) : (
-          <p className="empty">尚未收藏股票。查詢股票後，點「加入收藏」。</p>
-        )}
-      </section>
-
-      <section className="panel" style={{ marginTop: 16 }}>
-        <h2>🔥 自選清單排行榜</h2>
-        {watchList.length > 0 ? (
-          <table>
-            <thead>
-              <tr>
-                <th>股票</th>
-                <th>價格</th>
-                <th>漲跌%</th>
-                <th>RSI</th>
-                <th>AI</th>
-                <th>回測</th>
-                <th>狀態</th>
-                <th>收藏</th>
-              </tr>
-            </thead>
-            <tbody>
-              {watchList.map((s) => (
-                <tr key={s.symbol} onClick={() => setStock(s)}>
-                  <td>{s.symbol}<br />{s.name}</td>
-                  <td>{s.close?.toFixed?.(2)}</td>
-                  <td className={s.changePct >= 0 ? "up" : "down"}>{s.changePct.toFixed(2)}%</td>
-                  <td>{s.rsi?.toFixed(1) ?? "--"}</td>
-                  <td><span className="score">{s.score}</span></td>
-                  <td>{s.backtest.totalReturn}%</td>
-                  <td>{s.level}</td>
-                  <td>
-                    {favorites.some((item) => item.symbol === s.symbol) ? (
-                      <button className="danger small" onClick={(e) => { e.stopPropagation(); removeFavorite(s.symbol); }}>取消</button>
+                  <div className="stock-actions">
+                    <div className={stock.changePct >= 0 ? "price up" : "price down"}>
+                      {stock.close?.toFixed?.(2)}
+                      <small>{stock.changePct.toFixed(2)}%</small>
+                    </div>
+                    {favorites.some((item) => item.symbol === stock.symbol) ? (
+                      <button className="danger small" onClick={() => removeFavorite(stock.symbol)}>取消收藏</button>
                     ) : (
-                      <button className="ghost small" onClick={(e) => { e.stopPropagation(); addFavorite(s); }}>收藏</button>
+                      <button className="ghost small" onClick={() => addFavorite(stock)}>加入收藏</button>
                     )}
-                  </td>
+                  </div>
+                </div>
+                <TradingChart stock={stock} />
+                <div className="tag-row">
+                  {stock.tags.length ? stock.tags.map((t) => <span key={t}>{t}</span>) : <span>暫無強勢訊號</span>}
+                </div>
+              </>
+            ) : (
+              <p className="empty">請先到「首頁」搜尋股票，或使用網址 /stock/2330。</p>
+            )}
+          </div>
+
+          <div className="panel">
+            <h2>🧠 AI 分數 + 回測</h2>
+            {stock ? (
+              <>
+                <div className="score-card">
+                  <div><b>{stock.score}</b><span>AI分數</span></div>
+                  <div><b>{stock.level}</b><span>狀態</span></div>
+                  <div><b>{stock.volumeRatio?.toFixed(2) ?? "--"}</b><span>量比</span></div>
+                </div>
+                <div className="metric-grid">
+                  <div><b>{stock.rsi?.toFixed(1) ?? "--"}</b><span>RSI</span></div>
+                  <div><b>{stock.k?.toFixed(1) ?? "--"}</b><span>K 值</span></div>
+                  <div><b>{stock.d?.toFixed(1) ?? "--"}</b><span>D 值</span></div>
+                  <div><b>{stock.macdHist?.toFixed(2) ?? "--"}</b><span>MACD</span></div>
+                  <div><b>{stock.ma5?.toFixed(2) ?? "--"}</b><span>MA5</span></div>
+                  <div><b>{stock.ma20?.toFixed(2) ?? "--"}</b><span>MA20</span></div>
+                  <div><b>{stock.backtest.totalReturn}%</b><span>回測報酬</span></div>
+                  <div><b>{stock.backtest.winRate}%</b><span>勝率</span></div>
+                  <div><b>{stock.backtest.maxDrawdown}%</b><span>最大回撤</span></div>
+                </div>
+              </>
+            ) : (
+              <p className="empty">尚無分析資料。</p>
+            )}
+          </div>
+        </section>
+      )}
+
+      {activeTab === "favorites" && (
+        <section className="panel">
+          <h2>⭐ 收藏股票</h2>
+          {favorites.length > 0 ? (
+            <table>
+              <thead>
+                <tr>
+                  <th>股票</th>
+                  <th>操作</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        ) : (
-          <p className="empty">可輸入幾支股票做比較，例如：2330,2317,2454,AAPL,NVDA,SPY</p>
-        )}
-      </section>
+              </thead>
+              <tbody>
+                {favorites.map((item) => (
+                  <tr key={item.symbol}>
+                    <td>{item.symbol}<br />{item.name}</td>
+                    <td>
+                      <button className="ghost small" onClick={() => searchOne(item.symbol)}>查看分析</button>{" "}
+                      <button className="danger small" onClick={() => removeFavorite(item.symbol)}>刪除</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <p className="empty">尚未收藏股票。查詢股票後，點「加入收藏」。</p>
+          )}
+        </section>
+      )}
+
+      <div className="mobile-bottom-nav">
+        <button className={activeTab === "home" ? "tab-btn active" : "tab-btn"} onClick={() => setActiveTab("home")}>首頁</button>
+        <button className={activeTab === "analysis" ? "tab-btn active" : "tab-btn"} onClick={() => setActiveTab("analysis")}>分析</button>
+        <button className={activeTab === "favorites" ? "tab-btn active" : "tab-btn"} onClick={() => setActiveTab("favorites")}>收藏</button>
+      </div>
     </div>
   );
 }
