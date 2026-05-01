@@ -64,8 +64,7 @@ app.get("/api/twse/list", async (req, res) => {
     if (cache && now - lastFetch < 3600000) {
       return res.json(cache);
     }
-
-    const url = "https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL";
+    const url = "https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_AVG_ALL";
     const response = await axios.get(url);
 
     const map = {};
