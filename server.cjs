@@ -60,16 +60,22 @@ app.get("/api/twse/list", async (req, res) => {
   try {
     const now = Date.now();
 
-    // 1 小時更新一次
     if (cache && now - lastFetch < 3600000) {
       return res.json(cache);
     }
-    const url = "https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_AVG_ALL";
-    const response = await axios.get(url);
+
+    const url = "https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL";
+
+    const response = await axios.get(url, {
+      timeout: 8000,
+    });
 
     const map = {};
+
     response.data.forEach((item) => {
-      map[item.Code] = item.Name;
+      if (item.Code && item.Name) {
+        map[item.Code] = item.Name;
+      }
     });
 
     cache = map;
@@ -77,7 +83,10 @@ app.get("/api/twse/list", async (req, res) => {
 
     res.json(map);
   } catch (err) {
-    res.status(500).json({ error: "TWSE failed" });
+    console.error("TWSE error:", err.message);
+
+    // ❗ 重點：不要回 500
+    res.json({});
   }
 });
 

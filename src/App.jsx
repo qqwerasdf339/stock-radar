@@ -1,20 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  createChart,
+  CandlestickSeries,
+  HistogramSeries,
+  LineSeries,
+} from "lightweight-charts";
 import "./App.css";
-
-/*
-  AI 台股單股查詢雷達｜Yahoo Finance Chart API 版
-
-  ✅ 這版解決：
-  1. 不再抓 TWSE，改抓 Yahoo Finance chart API
-  2. 不再一進網站就全市場掃描，速度快很多
-  3. 輸入 2330 / 2317 / 0050 會自動轉成 2330.TW / 2317.TW / 0050.TW
-  4. 可輸入常見中文名稱，例如 台積電、鴻海、聯發科
-  5. 顯示 K 棒、MA5、MA20、RSI、KD、MACD、AI 分數
-
-  注意：
-  - API_BASE 請改成你的 Render 後端網址
-  - 這是研究工具，不是投資建議
-*/
 
 const API_BASE = "https://stock-radar-api-os48.onrender.com";
 
@@ -24,22 +15,20 @@ const NAME_TO_CODE = {
   聯發科: "2454",
   台達電: "2308",
   廣達: "2382",
-  元大台灣50: "0050",
   台灣50: "0050",
+  元大台灣50: "0050",
 };
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
- function resolveSymbol(input) {
+function resolveSymbol(input) {
   const raw = String(input || "").trim();
   if (!raw) return "";
-
   if (NAME_TO_CODE[raw]) return NAME_TO_CODE[raw];
 
   const upper = raw.toUpperCase();
-
   if (upper.endsWith(".TW") || upper.endsWith(".TWO")) return upper;
 
   const code = upper.match(/\d{4}/)?.[0];
@@ -48,13 +37,12 @@ function sleep(ms) {
   return upper;
 }
 
-
 function cleanNumber(value) {
   const n = Number(value);
   return Number.isFinite(n) ? n : null;
 }
 
-async function fetchYahooHistory(input, range = "6mo", interval = "1d", twNameMap = {}) {
+async function fetchYahooHistory(input, range = "6mo", interval = "1d") {
   const symbol = resolveSymbol(input);
   if (!symbol) throw new Error("請輸入股票代碼或名稱");
 
@@ -72,21 +60,19 @@ async function fetchYahooHistory(input, range = "6mo", interval = "1d", twNameMa
 
   const history = timestamps
     .map((t, i) => ({
+      time: new Date(t * 1000).toISOString().slice(0, 10),
       date: new Date(t * 1000).toLocaleDateString("zh-TW"),
       open: cleanNumber(quote.open?.[i]),
       high: cleanNumber(quote.high?.[i]),
       low: cleanNumber(quote.low?.[i]),
       close: cleanNumber(quote.close?.[i]),
-      volume: cleanNumber(quote.volume?.[i]),
+      volume: cleanNumber(quote.volume?.[i]) || 0,
     }))
     .filter((x) => x.open && x.high && x.low && x.close);
 
-  const code = symbol.split(".")[0];
-
-
-return {
-  symbol,
-  name: twNameMap[code] || meta.longName || meta.shortName || symbol,
+  return {
+    symbol,
+    name: meta.longName || meta.shortName || symbol,
     currency: meta.currency || "TWD",
     regularMarketPrice: meta.regularMarketPrice || history.at(-1)?.close || null,
     history,
@@ -169,6 +155,59 @@ function calcVolumeRatio(history) {
   return avg20 ? latestVol / avg20 : null;
 }
 
+function backtestStrategy(history) {
+  if (history.length < 60) {
+    return { trades: 0, winRate: 0, totalReturn: 0, maxDrawdown: 0, equity: [] };
+  }
+
+  let inPosition = false;
+  let entry = 0;
+  let equity = 100;
+  let peak = 100;
+  let maxDrawdown = 0;
+  let wins = 0;
+  let trades = 0;
+  const equityCurve = [];
+
+  for (let i = 35; i < history.length; i++) {
+    const slice = history.slice(0, i + 1);
+    const closes = slice.map((x) => x.close);
+    const ma5 = sma(closes, 5);
+    const ma20 = sma(closes, 20);
+    const rsi = calcRSI(closes);
+    const macd = calcMACD(closes);
+    const price = history[i].close;
+
+    const buy = !inPosition && ma5 > ma20 && macd.hist > 0 && rsi > 45 && rsi < 72;
+    const sell = inPosition && (ma5 < ma20 || rsi > 78 || macd.hist < 0);
+
+    if (buy) {
+      inPosition = true;
+      entry = price;
+    }
+
+    if (sell) {
+      const ret = ((price - entry) / entry) * 100;
+      equity *= 1 + ret / 100;
+      trades += 1;
+      if (ret > 0) wins += 1;
+      inPosition = false;
+    }
+
+    peak = Math.max(peak, equity);
+    maxDrawdown = Math.min(maxDrawdown, ((equity - peak) / peak) * 100);
+    equityCurve.push({ time: history[i].time, value: Number(equity.toFixed(2)) });
+  }
+
+  return {
+    trades,
+    winRate: trades ? Math.round((wins / trades) * 100) : 0,
+    totalReturn: Number((equity - 100).toFixed(2)),
+    maxDrawdown: Number(maxDrawdown.toFixed(2)),
+    equity: equityCurve,
+  };
+}
+
 function analyzeStock(stock) {
   const { history } = stock;
   const closes = history.map((x) => x.close).filter(Boolean);
@@ -182,38 +221,49 @@ function analyzeStock(stock) {
   const kd = calcKD(history);
   const ma5 = sma(closes, 5);
   const ma20 = sma(closes, 20);
+  const ma60 = sma(closes, 60);
   const volumeRatio = calcVolumeRatio(history);
+  const backtest = backtestStrategy(history);
 
+  const high20 = Math.max(...history.slice(-20).map((x) => x.high));
+  const low20 = Math.min(...history.slice(-20).map((x) => x.low));
+  const breakout = close >= high20 * 0.98;
+  const nearLow = close <= low20 * 1.05;
   const trendUp = ma5 !== null && ma20 !== null && ma5 > ma20;
+  const longTrendUp = ma20 !== null && ma60 !== null && ma20 > ma60;
   const macdBull = macd.hist !== null && macd.hist > 0 && macd.dif > macd.dea;
-  const rsiHealthy = rsi !== null && rsi >= 45 && rsi <= 72;
-  const rsiRebound = rsi !== null && rsi >= 35 && rsi < 45 && changePct > 0;
+  const rsiHealthy = rsi !== null && rsi >= 48 && rsi <= 70;
   const volumeHot = volumeRatio !== null && volumeRatio >= 1.25;
   const momentum = changePct > 0.5;
 
   let score = 0;
-  if (trendUp) score += 20;
-  if (macdBull) score += 20;
-  if (kd.golden) score += 15;
-  if (rsiHealthy) score += 15;
-  if (rsiRebound) score += 10;
-  if (volumeHot) score += 20;
-  if (momentum) score += 10;
-  if (changePct > 3) score -= 8;
-  if (rsi !== null && rsi > 78) score -= 15;
+  if (trendUp) score += 16;
+  if (longTrendUp) score += 12;
+  if (macdBull) score += 16;
+  if (kd.golden) score += 12;
+  if (rsiHealthy) score += 12;
+  if (volumeHot) score += 12;
+  if (momentum) score += 8;
+  if (breakout) score += 12;
+  if (backtest.totalReturn > 5) score += 6;
+  if (backtest.winRate >= 55) score += 4;
+  if (changePct > 4) score -= 8;
+  if (nearLow) score -= 6;
+  if (rsi !== null && rsi > 78) score -= 14;
 
   const tags = [];
-  if (trendUp) tags.push("MA多頭");
+  if (trendUp) tags.push("短線多頭");
+  if (longTrendUp) tags.push("中線多頭");
   if (macdBull) tags.push("MACD翻紅");
   if (kd.golden) tags.push("KD金叉");
   if (volumeHot) tags.push("放量");
-  if (rsiRebound) tags.push("RSI反彈");
-  if (momentum) tags.push("動能轉強");
+  if (breakout) tags.push("接近突破");
+  if (backtest.totalReturn > 0) tags.push("回測正報酬");
 
   let level = "偏弱";
-  if (score >= 75) level = "強勢命中";
-  else if (score >= 55) level = "可追蹤";
-  else if (score >= 35) level = "普通";
+  if (score >= 80) level = "強勢命中";
+  else if (score >= 60) level = "可追蹤";
+  else if (score >= 40) level = "普通";
 
   return {
     ...stock,
@@ -227,105 +277,138 @@ function analyzeStock(stock) {
     macdHist: macd.hist,
     ma5,
     ma20,
+    ma60,
     score: Math.max(0, Math.min(100, Math.round(score))),
     level,
     tags,
+    backtest,
   };
 }
 
-function CandleChart({ history }) {
-  const data = history.slice(-60).filter((x) => x.open && x.high && x.low && x.close);
-  if (data.length < 2) return <div className="empty">K 棒資料不足</div>;
+function TradingChart({ stock }) {
+  const containerRef = useRef(null);
 
-  const w = 760;
-  const h = 340;
-  const pad = 32;
-  const max = Math.max(...data.map((x) => x.high));
-  const min = Math.min(...data.map((x) => x.low));
-  const range = max - min || 1;
-  const step = (w - pad * 2) / data.length;
-  const candleWidth = Math.max(4, Math.min(10, step * 0.55));
-  const y = (price) => pad + ((max - price) / range) * (h - pad * 2);
+  useEffect(() => {
+    if (!containerRef.current || !stock?.history?.length) return;
 
-  const ma5Values = data.map((_, i) => {
-    const part = data.slice(0, i + 1).map((x) => x.close);
-    return part.length >= 5 ? sma(part, 5) : null;
-  });
+    const chart = createChart(containerRef.current, {
+      height: 520,
+      layout: {
+        background: { color: "#020617" },
+        textColor: "#cbd5e1",
+      },
+      grid: {
+        vertLines: { color: "rgba(148,163,184,.12)" },
+        horzLines: { color: "rgba(148,163,184,.12)" },
+      },
+      rightPriceScale: { borderColor: "rgba(148,163,184,.25)" },
+      timeScale: {
+        borderColor: "rgba(148,163,184,.25)",
+        timeVisible: true,
+        secondsVisible: false,
+      },
+      crosshair: { mode: 1 },
+    });
 
-  const ma20Values = data.map((_, i) => {
-    const part = data.slice(0, i + 1).map((x) => x.close);
-    return part.length >= 20 ? sma(part, 20) : null;
-  });
+    const candleSeries = chart.addSeries(CandlestickSeries, {
+      upColor: "#22c55e",
+      downColor: "#ef4444",
+      borderUpColor: "#22c55e",
+      borderDownColor: "#ef4444",
+      wickUpColor: "#22c55e",
+      wickDownColor: "#ef4444",
+    });
 
-  const linePath = (values) =>
-    values
-      .map((v, i) => {
-        if (v === null) return null;
-        const x = pad + i * step + step / 2;
-        const first = values.slice(0, i).every((x) => x === null);
-        return `${i === 0 || first ? "M" : "L"}${x.toFixed(1)},${y(v).toFixed(1)}`;
+    const ma5Series = chart.addSeries(LineSeries, {
+      color: "#facc15",
+      lineWidth: 2,
+      priceLineVisible: false,
+    });
+
+    const ma20Series = chart.addSeries(LineSeries, {
+      color: "#60a5fa",
+      lineWidth: 2,
+      priceLineVisible: false,
+    });
+
+    const volumeSeries = chart.addSeries(HistogramSeries, {
+      priceFormat: { type: "volume" },
+      priceScaleId: "volume",
+    });
+
+    chart.priceScale("volume").applyOptions({
+      scaleMargins: { top: 0.82, bottom: 0 },
+    });
+
+    const candles = stock.history.map((d) => ({
+      time: d.time,
+      open: d.open,
+      high: d.high,
+      low: d.low,
+      close: d.close,
+    }));
+
+    const closes = stock.history.map((x) => x.close);
+    const ma5 = stock.history
+      .map((d, i) => {
+        const part = closes.slice(0, i + 1);
+        const value = sma(part, 5);
+        return value ? { time: d.time, value } : null;
       })
-      .filter(Boolean)
-      .join(" ");
+      .filter(Boolean);
 
-  return (
-    <svg viewBox={`0 0 ${w} ${h}`} className="candle-chart">
-      {[0, 0.25, 0.5, 0.75, 1].map((p) => {
-        const yy = pad + p * (h - pad * 2);
-        const price = max - p * range;
-        return (
-          <g key={p}>
-            <line x1={pad} y1={yy} x2={w - pad} y2={yy} className="soft-grid" />
-            <text x={w - pad + 6} y={yy + 4} className="axis-text">{price.toFixed(1)}</text>
-          </g>
-        );
-      })}
+    const ma20 = stock.history
+      .map((d, i) => {
+        const part = closes.slice(0, i + 1);
+        const value = sma(part, 20);
+        return value ? { time: d.time, value } : null;
+      })
+      .filter(Boolean);
 
-      {data.map((d, i) => {
-        const x = pad + i * step + step / 2;
-        const up = d.close >= d.open;
-        const bodyTop = y(Math.max(d.open, d.close));
-        const bodyBottom = y(Math.min(d.open, d.close));
-        const bodyHeight = Math.max(2, bodyBottom - bodyTop);
-        return (
-          <g key={`${d.date}-${i}`} className={up ? "candle-up" : "candle-down"}>
-            <line x1={x} y1={y(d.high)} x2={x} y2={y(d.low)} stroke="currentColor" strokeWidth="1.4" />
-            <rect x={x - candleWidth / 2} y={bodyTop} width={candleWidth} height={bodyHeight} rx="1" fill="currentColor" />
-          </g>
-        );
-      })}
+    const volume = stock.history.map((d) => ({
+      time: d.time,
+      value: d.volume,
+      color: d.close >= d.open ? "rgba(34,197,94,.38)" : "rgba(239,68,68,.38)",
+    }));
 
-      <path d={linePath(ma5Values)} className="ma ma5" />
-      <path d={linePath(ma20Values)} className="ma ma20" />
-      <text x={pad} y={20} className="legend ma5-text">MA5</text>
-      <text x={pad + 48} y={20} className="legend ma20-text">MA20</text>
-    </svg>
-  );
+    candleSeries.setData(candles);
+    ma5Series.setData(ma5);
+    ma20Series.setData(ma20);
+    volumeSeries.setData(volume);
+    chart.timeScale().fitContent();
+
+    const resizeObserver = new ResizeObserver(() => {
+      if (containerRef.current) {
+        chart.applyOptions({ width: containerRef.current.clientWidth });
+      }
+    });
+    resizeObserver.observe(containerRef.current);
+
+    return () => {
+      resizeObserver.disconnect();
+      chart.remove();
+    };
+  }, [stock]);
+
+  return <div ref={containerRef} className="trading-chart" />;
 }
 
 export default function App() {
   const [query, setQuery] = useState("2330");
-  const [watchText, setWatchText] = useState("2330,2317,2454,2308,2382,0050");
+  const [watchText, setWatchText] = useState("2330,2317,2454,2308,2382,0050,AAPL,NVDA,TSLA,SPY,QQQ");
   const [range, setRange] = useState("6mo");
   const [stock, setStock] = useState(null);
   const [watchList, setWatchList] = useState([]);
   const [loading, setLoading] = useState(false);
   const [scanning, setScanning] = useState(false);
+  const [autoScan, setAutoScan] = useState(false);
   const [error, setError] = useState("");
-  const [twNameMap, setTwNameMap] = useState({});
-
-useEffect(() => {
-  fetch(`${API_BASE}/api/twse/list`)
-    .then((res) => res.json())
-    .then((data) => setTwNameMap(data))
-    .catch((err) => console.error("TWSE name list failed", err));
-}, []);
 
   async function searchOne(input = query) {
     setLoading(true);
     setError("");
     try {
-      const data = await fetchYahooHistory(input, range, "1d", twNameMap);
+      const data = await fetchYahooHistory(input, range, "1d");
       const analyzed = analyzeStock(data);
       setStock(analyzed);
     } catch (err) {
@@ -349,9 +432,9 @@ useEffect(() => {
       const result = [];
       for (const item of items) {
         try {
-          const data = await fetchYahooHistory(item, range, "1d", twNameMap);
+          const data = await fetchYahooHistory(item, range, "1d");
           result.push(analyzeStock(data));
-          await sleep(150);
+          await sleep(120);
         } catch (err) {
           console.warn("watch scan failed", item, err);
         }
@@ -365,6 +448,14 @@ useEffect(() => {
       setScanning(false);
     }
   }
+
+  useEffect(() => {
+    if (!autoScan) return;
+    scanWatchList();
+    const timer = setInterval(scanWatchList, 5000);
+    return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoScan, watchText, range]);
 
   const suggestion = useMemo(() => {
     const q = query.trim();
@@ -394,10 +485,11 @@ useEffect(() => {
         button { border: 0; border-radius: 12px; padding: 11px 15px; background: #38bdf8; color: #082f49; font-weight: 800; cursor: pointer; }
         button:disabled { opacity: .55; cursor: not-allowed; }
         button.ghost { background: #1e293b; color: #e5e7eb; border: 1px solid #334155; }
+        button.danger { background: #fb7185; color: #450a0a; }
         .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
         .chips button { padding: 8px 10px; background: #172554; color: #bfdbfe; font-size: 13px; }
         .error { color: #fecaca; background: rgba(127,29,29,.4); padding: 10px; border-radius: 12px; margin-top: 12px; }
-        .dashboard { display: grid; grid-template-columns: minmax(520px, 1.15fr) minmax(420px, .85fr); gap: 16px; }
+        .dashboard { display: grid; grid-template-columns: minmax(640px, 1.2fr) minmax(420px, .8fr); gap: 16px; }
         .stock-head { display: flex; justify-content: space-between; gap: 16px; align-items: start; margin-bottom: 14px; }
         .stock-head p { color: #94a3b8; margin: 6px 0 0; }
         .price { font-size: 30px; font-weight: 900; text-align: right; }
@@ -408,17 +500,7 @@ useEffect(() => {
         .score-card div, .metric-grid div { background: #020617; border: 1px solid rgba(148,163,184,.18); border-radius: 14px; padding: 14px; text-align: center; }
         .score-card b, .metric-grid b { display: block; font-size: 22px; }
         .score-card span, .metric-grid span { color: #94a3b8; font-size: 12px; }
-        .candle-chart { width: 100%; height: auto; background: #020617; border-radius: 16px; padding: 8px; box-sizing: border-box; }
-        .soft-grid { stroke: rgba(148,163,184,.14); }
-        .axis-text { fill: #94a3b8; font-size: 11px; }
-        .candle-up { color: #f87171; }
-        .candle-down { color: #4ade80; }
-        .ma { fill: none; stroke-width: 2; }
-        .ma5 { stroke: #facc15; }
-        .ma20 { stroke: #60a5fa; }
-        .legend { font-size: 12px; font-weight: 700; }
-        .ma5-text { fill: #facc15; }
-        .ma20-text { fill: #60a5fa; }
+        .trading-chart { width: 100%; min-height: 520px; border-radius: 16px; overflow: hidden; background: #020617; }
         .tag-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0; }
         .tag-row span { background: #172554; color: #bfdbfe; padding: 7px 10px; border-radius: 999px; font-size: 13px; }
         .metric-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 14px; }
@@ -434,9 +516,9 @@ useEffect(() => {
 
       <header className="hero">
         <div>
-          <p className="eyebrow">Yahoo Finance Chart API</p>
-          <h1>🤖 AI 台股快速查詢雷達</h1>
-          <p className="subtitle">輸入股票代碼或名稱，只抓單支股票，不再全市場慢慢掃。</p>
+          <p className="eyebrow">Yahoo Finance + Lightweight Charts</p>
+          <h1>🤖 AI 股票快速查詢雷達 Pro</h1>
+          <p className="subtitle">互動K線、5秒自選掃描、AI分數升級、策略回測。</p>
         </div>
       </header>
 
@@ -444,13 +526,14 @@ useEffect(() => {
         <div className="panel">
           <h2>單股快速查詢</h2>
           <label>股票代碼或名稱</label>
-          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="例如 2330、台積電、0050" onKeyDown={(e) => e.key === "Enter" && searchOne()} />
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="例如 2330、台積電、AAPL、SPY" onKeyDown={(e) => e.key === "Enter" && searchOne()} />
           <label>資料區間</label>
           <select value={range} onChange={(e) => setRange(e.target.value)}>
             <option value="3mo">3個月</option>
             <option value="6mo">6個月</option>
             <option value="1y">1年</option>
             <option value="2y">2年</option>
+            <option value="5y">5年</option>
           </select>
           <div className="btn-row">
             <button onClick={() => searchOne()} disabled={loading}>{loading ? "查詢中..." : "查詢股票"}</button>
@@ -471,14 +554,17 @@ useEffect(() => {
           <textarea rows={4} value={watchText} onChange={(e) => setWatchText(e.target.value)} />
           <div className="btn-row">
             <button className="ghost" onClick={scanWatchList} disabled={scanning}>{scanning ? "掃描中..." : "掃描自選清單"}</button>
+            <button className={autoScan ? "danger" : "ghost"} onClick={() => setAutoScan((v) => !v)}>
+              {autoScan ? "停止5秒刷新" : "啟動5秒刷新"}
+            </button>
           </div>
-          <p className="note">想快就用單股查詢；想比較幾支股票才用自選清單掃描。</p>
+          <p className="note">5秒刷新會持續呼叫 Yahoo API，自選清單建議控制在 5～10 檔。</p>
         </div>
       </section>
 
       <section className="dashboard">
         <div className="panel">
-          <h2>📈 K 棒與 AI 分析</h2>
+          <h2>📊 互動 K 線圖</h2>
           {stock ? (
             <>
               <div className="stock-head">
@@ -491,7 +577,7 @@ useEffect(() => {
                   <small>{stock.changePct.toFixed(2)}%</small>
                 </div>
               </div>
-              <CandleChart history={stock.history} />
+              <TradingChart stock={stock} />
               <div className="tag-row">
                 {stock.tags.length ? stock.tags.map((t) => <span key={t}>{t}</span>) : <span>暫無強勢訊號</span>}
               </div>
@@ -502,7 +588,7 @@ useEffect(() => {
         </div>
 
         <div className="panel">
-          <h2>🧠 指標分數</h2>
+          <h2>🧠 AI 分數 + 回測</h2>
           {stock ? (
             <>
               <div className="score-card">
@@ -517,6 +603,9 @@ useEffect(() => {
                 <div><b>{stock.macdHist?.toFixed(2) ?? "--"}</b><span>MACD</span></div>
                 <div><b>{stock.ma5?.toFixed(2) ?? "--"}</b><span>MA5</span></div>
                 <div><b>{stock.ma20?.toFixed(2) ?? "--"}</b><span>MA20</span></div>
+                <div><b>{stock.backtest.totalReturn}%</b><span>回測報酬</span></div>
+                <div><b>{stock.backtest.winRate}%</b><span>勝率</span></div>
+                <div><b>{stock.backtest.maxDrawdown}%</b><span>最大回撤</span></div>
               </div>
             </>
           ) : (
@@ -536,6 +625,7 @@ useEffect(() => {
                 <th>漲跌%</th>
                 <th>RSI</th>
                 <th>AI</th>
+                <th>回測</th>
                 <th>狀態</th>
               </tr>
             </thead>
@@ -547,13 +637,14 @@ useEffect(() => {
                   <td className={s.changePct >= 0 ? "up" : "down"}>{s.changePct.toFixed(2)}%</td>
                   <td>{s.rsi?.toFixed(1) ?? "--"}</td>
                   <td><span className="score">{s.score}</span></td>
+                  <td>{s.backtest.totalReturn}%</td>
                   <td>{s.level}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         ) : (
-          <p className="empty">可輸入幾支股票做比較，例如：2330,2317,2454,0050</p>
+          <p className="empty">可輸入幾支股票做比較，例如：2330,2317,2454,AAPL,NVDA,SPY</p>
         )}
       </section>
     </div>
