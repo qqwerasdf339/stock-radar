@@ -32,7 +32,7 @@ function resolveSymbol(input) {
   const upper = raw.toUpperCase();
   if (upper.endsWith(".TW") || upper.endsWith(".TWO")) return upper;
 
-  const code = upper.match(/\d{4,6}[A-Z]/)?.[0];
+  const code = upper.match(/\d{4,6}/)?.[0];
   if (code) return code;
 
   return upper;
@@ -548,6 +548,7 @@ export default function Stock() {
   const [scanning, setScanning] = useState(false);
   const [autoScan, setAutoScan] = useState(false);
   const [error, setError] = useState("");
+  const [rightView, setRightView] = useState("ai");
   const [showMA5, setShowMA5] = useState(true);
   const [showMA20, setShowMA20] = useState(true);
   const [showMA60, setShowMA60] = useState(true);
@@ -673,6 +674,15 @@ export default function Stock() {
         .side-panel, .right-panel { padding: 16px; height: calc(100vh - 96px); overflow: auto; position: sticky; top: 80px; }
         .main-panel { padding: 16px; min-height: calc(100vh - 96px); }
         .section-title { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+        .view-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 14px; }
+        .view-tabs button { background: #020617; color: #cbd5e1; border: 1px solid rgba(148,163,184,.2); padding: 9px 8px; font-size: 13px; }
+        .view-tabs button.active { background: #38bdf8; color: #082f49; border-color: #38bdf8; }
+        .institution-grid { display: grid; grid-template-columns: 1fr; gap: 10px; }
+        .institution-card { background: #020617; border: 1px solid rgba(148,163,184,.18); border-radius: 14px; padding: 14px; }
+        .institution-card .row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+        .institution-card b { font-size: 18px; }
+        .institution-card span { color: #94a3b8; font-size: 12px; }
+        .placeholder-box { background: rgba(15,23,42,.8); border: 1px dashed rgba(148,163,184,.35); border-radius: 14px; padding: 14px; color: #94a3b8; font-size: 13px; line-height: 1.6; }
         .section-title h2 { font-size: 18px; }
         .muted { color: #94a3b8; font-size: 13px; }
         .btn-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
@@ -900,64 +910,129 @@ export default function Stock() {
         </section>
 
         <aside className="right-panel">
-          <div className="section-title">
-            <h2>🧠 AI 分析</h2>
+          <div className="view-tabs">
+            <button className={rightView === "ai" ? "active" : ""} onClick={() => setRightView("ai")}>AI分析</button>
+            <button className={rightView === "signals" ? "active" : ""} onClick={() => setRightView("signals")}>指標訊號</button>
+            <button className={rightView === "institution" ? "active" : ""} onClick={() => setRightView("institution")}>法人</button>
           </div>
 
-          {stock ? (
+          {rightView === "ai" && (
             <>
-              <div className="score-hero">
-                <div className="score-main">
-                  <b>{stock.score}</b>
-                  <span>{stock.level}</span>
+              <div className="section-title">
+                <h2>🧠 AI 分析</h2>
+              </div>
+
+              {stock ? (
+                <>
+                  <div className="score-hero">
+                    <div className="score-main">
+                      <b>{stock.score}</b>
+                      <span>{stock.level}</span>
+                    </div>
+                  </div>
+
+                  <div className="metric-grid">
+                    <div className="metric-card"><b>{stock.rsi?.toFixed(1) ?? "--"}</b><span>RSI｜{stock.rsiLabel}</span></div>
+                    <div className="metric-card"><b>{stock.k?.toFixed(1) ?? "--"}</b><span>K 值</span></div>
+                    <div className="metric-card"><b>{stock.d?.toFixed(1) ?? "--"}</b><span>D 值</span></div>
+                    <div className="metric-card"><b>{stock.macdHist?.toFixed(2) ?? "--"}</b><span>MACD</span></div>
+                    <div className="metric-card"><b>{stock.ma5?.toFixed(2) ?? "--"}</b><span>MA5</span></div>
+                    <div className="metric-card"><b>{stock.ma20?.toFixed(2) ?? "--"}</b><span>MA20</span></div>
+                    <div className="metric-card"><b>{stock.volumeRatio?.toFixed(2) ?? "--"}</b><span>量比</span></div>
+                    <div className="metric-card"><b>{stock.backtest.trades}</b><span>交易次數</span></div>
+                  </div>
+
+                  <div className="divider" />
+
+                  <div className="section-title">
+                    <h2>📈 回測</h2>
+                  </div>
+                  <div className="metric-grid">
+                    <div className="metric-card"><b>{stock.backtest.totalReturn}%</b><span>策略報酬</span></div>
+                    <div className="metric-card"><b>{stock.backtest.winRate}%</b><span>勝率</span></div>
+                    <div className="metric-card"><b>{stock.backtest.maxDrawdown}%</b><span>最大回撤</span></div>
+                    <div className="metric-card"><b>{stock.backtest.trades}</b><span>交易數</span></div>
+                  </div>
+                </>
+              ) : (
+                <p className="empty">尚無分析資料。</p>
+              )}
+            </>
+          )}
+
+          {rightView === "signals" && (
+            <>
+              <div className="section-title">
+                <h2>📊 指標訊號</h2>
+              </div>
+
+              {stock ? (
+                <>
+                  <div className="signal-card">
+                    <b>{stock.volumeSignal.title}</b>
+                    <p>{stock.volumeSignal.detail}</p>
+                  </div>
+
+                  <div className="signal-card">
+                    <b>{stock.candlePattern.title}</b>
+                    <p>{stock.candlePattern.detail}</p>
+                  </div>
+
+                  <div className="signal-card">
+                    <b>RSI｜{stock.rsiLabel}</b>
+                    <p>RSI 目前為 {stock.rsi?.toFixed(1) ?? "--"}。55 以上偏多，45 以下偏弱，70 以上需留意過熱。</p>
+                  </div>
+
+                  <div className="signal-card">
+                    <b>布林通道</b>
+                    <p>布林通道已加入圖表開關。價格靠近上緣代表偏強但可能震盪，靠近下緣代表偏弱或反彈觀察。</p>
+                  </div>
+                </>
+              ) : (
+                <p className="empty">尚無指標資料。</p>
+              )}
+            </>
+          )}
+
+          {rightView === "institution" && (
+            <>
+              <div className="section-title">
+                <h2>🏦 法人籌碼</h2>
+              </div>
+
+              <div className="placeholder-box">
+                法人資料頁面已建立。外資、投信、自營商資料不屬於 Yahoo K 線資料，下一步需要另外接法人資料來源後，這裡就能顯示每日買賣超。
+              </div>
+
+              <div className="divider" />
+
+              <div className="institution-grid">
+                <div className="institution-card">
+                  <div className="row"><b>外資</b><span>Foreign Investors</span></div>
+                  <p className="muted">待接 API：今日買賣超、連續買賣天數、5日合計。</p>
+                </div>
+                <div className="institution-card">
+                  <div className="row"><b>投信</b><span>Investment Trust</span></div>
+                  <p className="muted">待接 API：投信買賣超、是否連買、波段法人動向。</p>
+                </div>
+                <div className="institution-card">
+                  <div className="row"><b>自營商</b><span>Dealer</span></div>
+                  <p className="muted">待接 API：自營商買賣超、避險或方向單變化。</p>
                 </div>
               </div>
 
-              <div className="metric-grid">
-                <div className="metric-card"><b>{stock.rsi?.toFixed(1) ?? "--"}</b><span>RSI｜{stock.rsiLabel}</span></div>
-                <div className="metric-card"><b>{stock.k?.toFixed(1) ?? "--"}</b><span>K 值</span></div>
-                <div className="metric-card"><b>{stock.d?.toFixed(1) ?? "--"}</b><span>D 值</span></div>
-                <div className="metric-card"><b>{stock.macdHist?.toFixed(2) ?? "--"}</b><span>MACD</span></div>
-                <div className="metric-card"><b>{stock.ma5?.toFixed(2) ?? "--"}</b><span>MA5</span></div>
-                <div className="metric-card"><b>{stock.ma20?.toFixed(2) ?? "--"}</b><span>MA20</span></div>
-                <div className="metric-card"><b>{stock.volumeRatio?.toFixed(2) ?? "--"}</b><span>量比</span></div>
-                <div className="metric-card"><b>{stock.backtest.trades}</b><span>交易次數</span></div>
-              </div>
-
               <div className="divider" />
 
-              <div className="section-title">
-                <h2>📊 量價判斷</h2>
-              </div>
               <div className="signal-card">
-                <b>{stock.volumeSignal.title}</b>
-                <p>{stock.volumeSignal.detail}</p>
-              </div>
-
-              <div className="divider" />
-
-              <div className="section-title">
-                <h2>🕯️ K線解讀</h2>
-              </div>
-              <div className="signal-card">
-                <b>{stock.candlePattern.title}</b>
-                <p>{stock.candlePattern.detail}</p>
-              </div>
-
-              <div className="divider" />
-
-              <div className="section-title">
-                <h2>📈 回測</h2>
-              </div>
-              <div className="metric-grid">
-                <div className="metric-card"><b>{stock.backtest.totalReturn}%</b><span>策略報酬</span></div>
-                <div className="metric-card"><b>{stock.backtest.winRate}%</b><span>勝率</span></div>
-                <div className="metric-card"><b>{stock.backtest.maxDrawdown}%</b><span>最大回撤</span></div>
-                <div className="metric-card"><b>{stock.backtest.trades}</b><span>交易數</span></div>
+                <b>法人解讀規則</b>
+                <p>
+                  外資連買 + 投信同步買超：偏多。<br />
+                  股價上漲但法人賣超：追價需保守。<br />
+                  三大法人同步買超：籌碼偏強。<br />
+                  投信連買通常代表中線題材較明確。
+                </p>
               </div>
             </>
-          ) : (
-            <p className="empty">尚無分析資料。</p>
           )}
         </aside>
       </main>
