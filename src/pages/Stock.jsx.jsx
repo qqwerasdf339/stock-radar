@@ -32,7 +32,7 @@ function resolveSymbol(input) {
   const upper = raw.toUpperCase();
   if (upper.endsWith(".TW") || upper.endsWith(".TWO")) return upper;
 
-  const code = upper.match(/\d{4}/)?.[0];
+  const code = upper.match(/\d{4,6}/)?.[0];
   if (code) return code;
 
   return upper;
@@ -156,6 +156,85 @@ function calcVolumeRatio(history) {
   return avg20 ? latestVol / avg20 : null;
 }
 
+function stddev(values) {
+  if (!values.length) return null;
+  const avg = values.reduce((a, b) => a + b, 0) / values.length;
+  const variance = values.reduce((sum, v) => sum + Math.pow(v - avg, 2), 0) / values.length;
+  return Math.sqrt(variance);
+}
+
+function rsiText(rsi) {
+  if (rsi === null || rsi === undefined) return "資料不足";
+  if (rsi >= 80) return "過熱，追高風險";
+  if (rsi >= 70) return "偏強但過熱";
+  if (rsi >= 55) return "多方偏強";
+  if (rsi >= 45) return "中性整理";
+  if (rsi >= 30) return "弱勢修正";
+  return "超賣反彈觀察";
+}
+
+function analyzeVolumeSignal(history, changePct, volumeRatio) {
+  if (!history.length || volumeRatio === null) {
+    return { title: "量能不足", detail: "成交量資料不足，暫不判斷。" };
+  }
+
+  const latest = history.at(-1);
+  const bodyPct = latest.open ? ((latest.close - latest.open) / latest.open) * 100 : 0;
+  const isUp = changePct > 0.3 || bodyPct > 0.3;
+  const isFlat = Math.abs(changePct) <= 0.6;
+  const isHighVolume = volumeRatio >= 1.35;
+  const isLowVolume = volumeRatio <= 0.8;
+
+  if (isHighVolume && isUp) {
+    return { title: "爆量上漲｜強勢", detail: "價格上漲且量能明顯放大，代表買盤積極。" };
+  }
+  if (isHighVolume && !isUp) {
+    return { title: "爆量不漲｜出貨疑慮", detail: "成交量放大但價格沒有跟上，可能有上方賣壓。" };
+  }
+  if (isLowVolume && isUp) {
+    return { title: "縮量上漲｜偏虛", detail: "價格上漲但量能不足，動能可靠度較低。" };
+  }
+  if (isLowVolume && isFlat) {
+    return { title: "縮量整理｜醞釀", detail: "量縮且價格整理，可能在等待方向表態。" };
+  }
+  return { title: "量價中性", detail: "量價沒有明顯極端訊號，需搭配趨勢與型態。" };
+}
+
+function analyzeCandlePattern(history) {
+  if (history.length < 2) return { title: "資料不足", detail: "K線資料不足。" };
+
+  const latest = history.at(-1);
+  const prev = history.at(-2);
+  const range = latest.high - latest.low || 1;
+  const body = Math.abs(latest.close - latest.open);
+  const upperShadow = latest.high - Math.max(latest.open, latest.close);
+  const lowerShadow = Math.min(latest.open, latest.close) - latest.low;
+  const bodyRatio = body / range;
+  const upperRatio = upperShadow / range;
+  const lowerRatio = lowerShadow / range;
+  const isUp = latest.close >= latest.open;
+
+  if (bodyRatio <= 0.15) {
+    return { title: "十字線｜多空觀望", detail: "開收盤接近，代表多空拉鋸，常出現在轉折或整理區。" };
+  }
+  if (upperRatio >= 0.45 && upperShadow > body * 1.5) {
+    return { title: "長上影線｜壓力大", detail: "盤中衝高後回落，上方賣壓明顯。" };
+  }
+  if (lowerRatio >= 0.45 && lowerShadow > body * 1.5) {
+    return { title: "長下影線｜有支撐", detail: "盤中下殺後拉回，下方承接力道出現。" };
+  }
+  if (isUp && latest.close > prev.high) {
+    return { title: "突破K｜偏強", detail: "收盤突破前一根高點，短線動能較強。" };
+  }
+  if (!isUp && latest.close < prev.low) {
+    return { title: "跌破K｜偏弱", detail: "收盤跌破前一根低點，短線賣壓較重。" };
+  }
+  if (isUp) {
+    return { title: "紅K｜買盤較強", detail: "收盤高於開盤，多方略占優勢。" };
+  }
+  return { title: "黑K｜賣壓較強", detail: "收盤低於開盤，空方略占優勢。" };
+}
+
 function backtestStrategy(history) {
   if (history.length < 60) {
     return { trades: 0, winRate: 0, totalReturn: 0, maxDrawdown: 0, equity: [] };
@@ -225,6 +304,8 @@ function analyzeStock(stock) {
   const ma60 = sma(closes, 60);
   const volumeRatio = calcVolumeRatio(history);
   const backtest = backtestStrategy(history);
+  const volumeSignal = analyzeVolumeSignal(history, changePct, volumeRatio);
+  const candlePattern = analyzeCandlePattern(history);
 
   const high20 = Math.max(...history.slice(-20).map((x) => x.high));
   const low20 = Math.min(...history.slice(-20).map((x) => x.low));
@@ -283,10 +364,13 @@ function analyzeStock(stock) {
     level,
     tags,
     backtest,
+    volumeSignal,
+    candlePattern,
+    rsiLabel: rsiText(rsi),
   };
 }
 
-function TradingChart({ stock }) {
+function TradingChart({ stock, showMA5, showMA20, showMA60, showBollinger }) {
   const containerRef = useRef(null);
 
   useEffect(() => {
@@ -332,6 +416,30 @@ function TradingChart({ stock }) {
       priceLineVisible: false,
     });
 
+    const ma60Series = chart.addSeries(LineSeries, {
+      color: "#a78bfa",
+      lineWidth: 2,
+      priceLineVisible: false,
+    });
+
+    const bollUpperSeries = chart.addSeries(LineSeries, {
+      color: "rgba(45,212,191,.9)",
+      lineWidth: 1,
+      priceLineVisible: false,
+    });
+
+    const bollMidSeries = chart.addSeries(LineSeries, {
+      color: "rgba(45,212,191,.55)",
+      lineWidth: 1,
+      priceLineVisible: false,
+    });
+
+    const bollLowerSeries = chart.addSeries(LineSeries, {
+      color: "rgba(45,212,191,.9)",
+      lineWidth: 1,
+      priceLineVisible: false,
+    });
+
     const volumeSeries = chart.addSeries(HistogramSeries, {
       priceFormat: { type: "volume" },
       priceScaleId: "volume",
@@ -366,6 +474,29 @@ function TradingChart({ stock }) {
       })
       .filter(Boolean);
 
+    const ma60 = stock.history
+      .map((d, i) => {
+        const part = closes.slice(0, i + 1);
+        const value = sma(part, 60);
+        return value ? { time: d.time, value } : null;
+      })
+      .filter(Boolean);
+
+    const boll = stock.history
+      .map((d, i) => {
+        const part = closes.slice(Math.max(0, i - 19), i + 1);
+        if (part.length < 20) return null;
+        const mid = sma(part, 20);
+        const sd = stddev(part);
+        return {
+          time: d.time,
+          upper: mid + sd * 2,
+          mid,
+          lower: mid - sd * 2,
+        };
+      })
+      .filter(Boolean);
+
     const volume = stock.history.map((d) => ({
       time: d.time,
       value: d.volume,
@@ -373,8 +504,12 @@ function TradingChart({ stock }) {
     }));
 
     candleSeries.setData(candles);
-    ma5Series.setData(ma5);
-    ma20Series.setData(ma20);
+    ma5Series.setData(showMA5 ? ma5 : []);
+    ma20Series.setData(showMA20 ? ma20 : []);
+    ma60Series.setData(showMA60 ? ma60 : []);
+    bollUpperSeries.setData(showBollinger ? boll.map((x) => ({ time: x.time, value: x.upper })) : []);
+    bollMidSeries.setData(showBollinger ? boll.map((x) => ({ time: x.time, value: x.mid })) : []);
+    bollLowerSeries.setData(showBollinger ? boll.map((x) => ({ time: x.time, value: x.lower })) : []);
     volumeSeries.setData(volume);
     chart.timeScale().fitContent();
 
@@ -389,7 +524,7 @@ function TradingChart({ stock }) {
       resizeObserver.disconnect();
       chart.remove();
     };
-  }, [stock]);
+  }, [stock, showMA5, showMA20, showMA60, showBollinger]);
 
   return <div ref={containerRef} className="trading-chart" />;
 }
@@ -413,6 +548,10 @@ export default function Stock() {
   const [scanning, setScanning] = useState(false);
   const [autoScan, setAutoScan] = useState(false);
   const [error, setError] = useState("");
+  const [showMA5, setShowMA5] = useState(true);
+  const [showMA20, setShowMA20] = useState(true);
+  const [showMA60, setShowMA60] = useState(true);
+  const [showBollinger, setShowBollinger] = useState(true);
 
   useEffect(() => {
     localStorage.setItem("stockRadarFavorites", JSON.stringify(favorites));
@@ -540,6 +679,12 @@ export default function Stock() {
         .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
         .chips button { padding: 7px 9px; background: #172554; color: #bfdbfe; font-size: 12px; }
         .divider { height: 1px; background: rgba(148,163,184,.18); margin: 18px 0; }
+        .indicator-toggle { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 10px; }
+        .toggle-card { display: flex; align-items: center; gap: 8px; background: #020617; border: 1px solid rgba(148,163,184,.18); border-radius: 12px; padding: 10px; color: #cbd5e1; font-size: 13px; cursor: pointer; }
+        .toggle-card input { width: auto; accent-color: #38bdf8; }
+        .signal-card { background: #020617; border: 1px solid rgba(148,163,184,.18); border-radius: 14px; padding: 14px; margin-top: 10px; }
+        .signal-card b { display: block; font-size: 16px; margin-bottom: 6px; }
+        .signal-card p { color: #94a3b8; font-size: 13px; line-height: 1.55; margin: 0; }
         .error { color: #fecaca; background: rgba(127,29,29,.4); padding: 10px; border-radius: 12px; margin-top: 12px; }
         .watch-box { max-height: 280px; overflow: auto; border: 1px solid rgba(148,163,184,.16); border-radius: 14px; }
         table { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -635,6 +780,18 @@ export default function Stock() {
           <div className="divider" />
 
           <div className="section-title">
+            <h2>📐 指標開關</h2>
+          </div>
+          <div className="indicator-toggle">
+            <label className="toggle-card"><input type="checkbox" checked={showMA5} onChange={(e) => setShowMA5(e.target.checked)} /> MA5 日線</label>
+            <label className="toggle-card"><input type="checkbox" checked={showMA20} onChange={(e) => setShowMA20(e.target.checked)} /> MA20 月線</label>
+            <label className="toggle-card"><input type="checkbox" checked={showMA60} onChange={(e) => setShowMA60(e.target.checked)} /> MA60 季線</label>
+            <label className="toggle-card"><input type="checkbox" checked={showBollinger} onChange={(e) => setShowBollinger(e.target.checked)} /> 布林通道</label>
+          </div>
+
+          <div className="divider" />
+
+          <div className="section-title">
             <h2>⭐ 收藏</h2>
           </div>
           {favorites.length > 0 ? (
@@ -688,7 +845,7 @@ export default function Stock() {
 
           {stock ? (
             <>
-              <TradingChart stock={stock} />
+              <TradingChart stock={stock} showMA5={showMA5} showMA20={showMA20} showMA60={showMA60} showBollinger={showBollinger} />
               <div className="tag-row">
                 {stock.tags.length ? stock.tags.map((t) => <span key={t}>{t}</span>) : <span>暫無強勢訊號</span>}
               </div>
@@ -757,7 +914,7 @@ export default function Stock() {
               </div>
 
               <div className="metric-grid">
-                <div className="metric-card"><b>{stock.rsi?.toFixed(1) ?? "--"}</b><span>RSI</span></div>
+                <div className="metric-card"><b>{stock.rsi?.toFixed(1) ?? "--"}</b><span>RSI｜{stock.rsiLabel}</span></div>
                 <div className="metric-card"><b>{stock.k?.toFixed(1) ?? "--"}</b><span>K 值</span></div>
                 <div className="metric-card"><b>{stock.d?.toFixed(1) ?? "--"}</b><span>D 值</span></div>
                 <div className="metric-card"><b>{stock.macdHist?.toFixed(2) ?? "--"}</b><span>MACD</span></div>
@@ -765,6 +922,26 @@ export default function Stock() {
                 <div className="metric-card"><b>{stock.ma20?.toFixed(2) ?? "--"}</b><span>MA20</span></div>
                 <div className="metric-card"><b>{stock.volumeRatio?.toFixed(2) ?? "--"}</b><span>量比</span></div>
                 <div className="metric-card"><b>{stock.backtest.trades}</b><span>交易次數</span></div>
+              </div>
+
+              <div className="divider" />
+
+              <div className="section-title">
+                <h2>📊 量價判斷</h2>
+              </div>
+              <div className="signal-card">
+                <b>{stock.volumeSignal.title}</b>
+                <p>{stock.volumeSignal.detail}</p>
+              </div>
+
+              <div className="divider" />
+
+              <div className="section-title">
+                <h2>🕯️ K線解讀</h2>
+              </div>
+              <div className="signal-card">
+                <b>{stock.candlePattern.title}</b>
+                <p>{stock.candlePattern.detail}</p>
               </div>
 
               <div className="divider" />

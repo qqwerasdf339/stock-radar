@@ -40,7 +40,7 @@ app.get("/api/yahoo/chart/:symbol", async (req, res) => {
     }
 
     // 台股：4位數字，先上市 .TW，再上櫃 .TWO
-    if (/^\d{4}$/.test(raw)) {
+    if (/^\d{4,6}$/.test(raw)) {
       try {
         return res.json(await fetchYahoo(`${raw}.TW`));
       } catch {
