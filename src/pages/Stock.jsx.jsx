@@ -32,7 +32,7 @@ function resolveSymbol(input) {
   const upper = raw.toUpperCase();
   if (upper.endsWith(".TW") || upper.endsWith(".TWO")) return upper;
 
-  const code = upper.match(/\d{4,6}/)?.[0];
+  const code = upper.match(/\d{4,6}[A-Z]/)?.[0];
   if (code) return code;
 
   return upper;
