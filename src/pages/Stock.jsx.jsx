@@ -293,7 +293,7 @@ function TradingChart({ stock }) {
     if (!containerRef.current || !stock?.history?.length) return;
 
     const chart = createChart(containerRef.current, {
-      height: 520,
+      height: 620,
       layout: {
         background: { color: "#020617" },
         textColor: "#cbd5e1",
@@ -397,7 +397,6 @@ function TradingChart({ stock }) {
 export default function Stock() {
   const navigate = useNavigate();
   const { symbol } = useParams();
-  const [activeTab, setActiveTab] = useState("analysis");
   const [query, setQuery] = useState(symbol || "2330");
   const [favorites, setFavorites] = useState(() => {
     try {
@@ -444,7 +443,6 @@ export default function Stock() {
     const target = String(input || "").trim();
     if (!target) return;
     setQuery(target);
-    setActiveTab("analysis");
     setLoading(true);
     setError("");
     try {
@@ -511,268 +509,281 @@ export default function Stock() {
   }, [query]);
 
   return (
-    <div className="radar-page has-fixed-nav">
+    <div className="desktop-shell">
       <style>{`
-        body { margin: 0; background: #0f172a; color: #e5e7eb; font-family: Arial, 'Microsoft JhengHei', sans-serif; }
+        body { margin: 0; background: #020617; color: #e5e7eb; font-family: Arial, 'Microsoft JhengHei', sans-serif; }
         button, input, select, textarea { font-family: inherit; }
-        .radar-page { min-height: 100vh; padding: 84px 28px 96px; background: radial-gradient(circle at top left, #1e293b, #020617 55%); }
-        .top-nav { position: fixed; top: 0; left: 0; right: 0; height: 60px; z-index: 999; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 18px; background: rgba(2, 6, 23, 0.82); backdrop-filter: blur(12px); border-bottom: 1px solid rgba(148,163,184,.18); box-sizing: border-box; }
-        .nav-left, .nav-tabs { display: flex; align-items: center; gap: 8px; }
-        .nav-title { color: #cbd5e1; font-size: 14px; font-weight: 800; letter-spacing: .3px; }
-        .tab-btn { background: transparent; color: #cbd5e1; border: 1px solid rgba(148,163,184,.25); padding: 8px 12px; border-radius: 999px; }
-        .tab-btn.active { background: #38bdf8; color: #082f49; border-color: #38bdf8; }
-        .hero { display: flex; justify-content: space-between; gap: 20px; align-items: stretch; margin-bottom: 20px; }
-        .eyebrow { color: #38bdf8; font-size: 13px; letter-spacing: 1px; text-transform: uppercase; }
-        h1 { font-size: 36px; margin: 8px 0; }
-        h2 { margin: 0 0 12px; font-size: 20px; }
-        h3 { margin: 0; font-size: 24px; }
-        .subtitle, .note, .status { color: #94a3b8; }
-        .panel { background: rgba(15,23,42,0.84); border: 1px solid rgba(148,163,184,0.25); border-radius: 18px; box-shadow: 0 18px 50px rgba(0,0,0,.35); padding: 18px; }
-        .control-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
-        label { display: block; color: #cbd5e1; margin: 12px 0 8px; font-size: 14px; }
-        input, textarea, select { width: 100%; box-sizing: border-box; background: #020617; color: #e5e7eb; border: 1px solid #334155; border-radius: 12px; padding: 12px; outline: none; }
-        .btn-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
-        button { border: 0; border-radius: 12px; padding: 11px 15px; background: #38bdf8; color: #082f49; font-weight: 800; cursor: pointer; }
+        button { border: 0; border-radius: 12px; padding: 10px 13px; background: #38bdf8; color: #082f49; font-weight: 800; cursor: pointer; }
         button:disabled { opacity: .55; cursor: not-allowed; }
         button.ghost { background: #1e293b; color: #e5e7eb; border: 1px solid #334155; }
         button.danger { background: #fb7185; color: #450a0a; }
-        button.small { padding: 8px 10px; font-size: 13px; }
-        .stock-actions { display: flex; flex-direction: column; gap: 10px; align-items: flex-end; }
+        button.small { padding: 7px 9px; font-size: 12px; }
+        input, textarea, select { width: 100%; box-sizing: border-box; background: #020617; color: #e5e7eb; border: 1px solid #334155; border-radius: 12px; padding: 11px; outline: none; }
+        label { display: block; color: #cbd5e1; margin: 12px 0 8px; font-size: 13px; }
+        h1, h2, h3 { margin: 0; }
+        .desktop-shell { min-height: 100vh; background: radial-gradient(circle at top left, #1e293b, #020617 55%); padding-top: 64px; }
+        .top-bar { position: fixed; top: 0; left: 0; right: 0; z-index: 999; height: 64px; display: flex; align-items: center; justify-content: space-between; padding: 0 18px; box-sizing: border-box; background: rgba(2, 6, 23, .88); border-bottom: 1px solid rgba(148,163,184,.18); backdrop-filter: blur(14px); }
+        .top-left { display: flex; align-items: center; gap: 14px; }
+        .brand-title { font-size: 15px; font-weight: 900; color: #e2e8f0; }
+        .brand-subtitle { font-size: 12px; color: #94a3b8; margin-top: 2px; }
+        .top-symbol { text-align: right; }
+        .top-symbol b { font-size: 16px; }
+        .top-symbol span { display: block; color: #94a3b8; font-size: 12px; margin-top: 3px; }
+        .dashboard-layout { display: grid; grid-template-columns: 320px minmax(620px, 1fr) 360px; gap: 16px; padding: 16px; box-sizing: border-box; }
+        .side-panel, .main-panel, .right-panel { background: rgba(15,23,42,.84); border: 1px solid rgba(148,163,184,.22); border-radius: 18px; box-shadow: 0 18px 50px rgba(0,0,0,.32); }
+        .side-panel, .right-panel { padding: 16px; height: calc(100vh - 96px); overflow: auto; position: sticky; top: 80px; }
+        .main-panel { padding: 16px; min-height: calc(100vh - 96px); }
+        .section-title { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+        .section-title h2 { font-size: 18px; }
+        .muted { color: #94a3b8; font-size: 13px; }
+        .btn-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
         .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
-        .chips button { padding: 8px 10px; background: #172554; color: #bfdbfe; font-size: 13px; }
+        .chips button { padding: 7px 9px; background: #172554; color: #bfdbfe; font-size: 12px; }
+        .divider { height: 1px; background: rgba(148,163,184,.18); margin: 18px 0; }
         .error { color: #fecaca; background: rgba(127,29,29,.4); padding: 10px; border-radius: 12px; margin-top: 12px; }
-        .dashboard { display: grid; grid-template-columns: minmax(640px, 1.2fr) minmax(420px, .8fr); gap: 16px; }
-        .stock-head { display: flex; justify-content: space-between; gap: 16px; align-items: start; margin-bottom: 14px; }
-        .stock-head p { color: #94a3b8; margin: 6px 0 0; }
+        .watch-box { max-height: 280px; overflow: auto; border: 1px solid rgba(148,163,184,.16); border-radius: 14px; }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        th, td { padding: 10px 9px; border-bottom: 1px solid rgba(148,163,184,.14); text-align: left; white-space: nowrap; }
+        th { color: #93c5fd; font-size: 12px; position: sticky; top: 0; background: rgba(15,23,42,.96); }
+        tr { cursor: pointer; }
+        tr:hover { background: rgba(56,189,248,.08); }
+        .stock-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 14px; }
+        .stock-title h1 { font-size: 28px; margin-bottom: 6px; }
+        .tag-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+        .tag-row span { background: #172554; color: #bfdbfe; padding: 7px 10px; border-radius: 999px; font-size: 12px; }
         .price { font-size: 30px; font-weight: 900; text-align: right; }
         .price small { display: block; font-size: 14px; margin-top: 4px; }
         .up { color: #f87171; }
         .down { color: #4ade80; }
-        .score-card { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 14px 0; }
-        .score-card div, .metric-grid div { background: #020617; border: 1px solid rgba(148,163,184,.18); border-radius: 14px; padding: 14px; text-align: center; }
-        .score-card b, .metric-grid b { display: block; font-size: 22px; }
-        .score-card span, .metric-grid span { color: #94a3b8; font-size: 12px; }
-        .trading-chart { width: 100%; min-height: 520px; border-radius: 16px; overflow: hidden; background: #020617; }
-        .tag-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0; }
-        .tag-row span { background: #172554; color: #bfdbfe; padding: 7px 10px; border-radius: 999px; font-size: 13px; }
-        .metric-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 14px; }
-        table { width: 100%; border-collapse: collapse; font-size: 14px; }
-        th, td { padding: 12px 10px; border-bottom: 1px solid rgba(148,163,184,.16); text-align: left; white-space: nowrap; }
-        th { color: #93c5fd; }
-        tr { cursor: pointer; }
-        tr:hover { background: rgba(56,189,248,.09); }
-        .score { display: inline-flex; align-items: center; justify-content: center; min-width: 38px; height: 28px; border-radius: 999px; background: #1d4ed8; color: white; font-weight: 800; }
+        .trading-chart { width: 100%; min-height: 620px; border-radius: 16px; overflow: hidden; background: #020617; }
+        .score-hero { display: grid; grid-template-columns: 1fr; gap: 10px; margin-bottom: 14px; }
+        .score-main { background: linear-gradient(135deg, rgba(56,189,248,.22), rgba(37,99,235,.18)); border: 1px solid rgba(56,189,248,.28); border-radius: 18px; padding: 18px; text-align: center; }
+        .score-main b { display: block; font-size: 48px; line-height: 1; }
+        .score-main span { color: #bfdbfe; font-size: 13px; }
+        .metric-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+        .metric-card { background: #020617; border: 1px solid rgba(148,163,184,.18); border-radius: 14px; padding: 13px; }
+        .metric-card b { display: block; font-size: 20px; margin-bottom: 4px; }
+        .metric-card span { color: #94a3b8; font-size: 12px; }
         .empty { color: #94a3b8; padding: 18px; }
-        .mobile-bottom-nav { display: none; }
-        @media (max-width: 1100px) { .hero, .control-grid, .dashboard { grid-template-columns: 1fr; display: grid; } }
-        @media (max-width: 720px) {
-          .radar-page { padding: 78px 14px 92px; }
-          .nav-title { display: none; }
-          .nav-tabs { display: none; }
-          h1 { font-size: 28px; }
-          .dashboard { grid-template-columns: 1fr; }
-          .mobile-bottom-nav { position: fixed; left: 12px; right: 12px; bottom: 12px; z-index: 999; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 8px; border-radius: 18px; background: rgba(2, 6, 23, 0.88); backdrop-filter: blur(12px); border: 1px solid rgba(148,163,184,.2); }
-          .mobile-bottom-nav button { padding: 10px 6px; font-size: 13px; }
+        .favorite-list { display: grid; gap: 8px; }
+        .favorite-item { display: flex; justify-content: space-between; gap: 8px; align-items: center; background: #020617; border: 1px solid rgba(148,163,184,.16); border-radius: 14px; padding: 10px; }
+        .favorite-item b { display: block; }
+        .favorite-item span { color: #94a3b8; font-size: 12px; }
+        @media (max-width: 1280px) {
+          .dashboard-layout { grid-template-columns: 300px minmax(520px, 1fr); }
+          .right-panel { grid-column: 1 / -1; height: auto; position: static; }
+          .metric-grid { grid-template-columns: repeat(4, 1fr); }
         }
       `}</style>
 
-      <nav className="top-nav">
-        <div className="nav-left">
-          <button className="ghost small" onClick={() => navigate("/")}>← 返回</button>
-          <span className="nav-title">AI 股票雷達 Pro</span>
+      <header className="top-bar">
+        <div className="top-left">
+          <button className="ghost small" onClick={() => navigate("/")}>← 返回首頁</button>
+          <div>
+            <div className="brand-title">AI 股票雷達 Pro</div>
+            <div className="brand-subtitle">Desktop Dashboard</div>
+          </div>
         </div>
-        <div className="nav-tabs">
-          <button className={`tab-btn ${activeTab === "home" ? "active" : ""}`} onClick={() => setActiveTab("home")}>首頁</button>
-          <button className={`tab-btn ${activeTab === "analysis" ? "active" : ""}`} onClick={() => setActiveTab("analysis")}>分析</button>
-          <button className={`tab-btn ${activeTab === "favorites" ? "active" : ""}`} onClick={() => setActiveTab("favorites")}>收藏</button>
-        </div>
-      </nav>
-
-      <header className="hero">
-        <div>
-          <p className="eyebrow">Yahoo Finance + Lightweight Charts</p>
-          <h1>🤖 AI 股票快速查詢雷達 Pro</h1>
-          <p className="subtitle">互動K線、5秒自選掃描、AI分數升級、策略回測。</p>
+        <div className="top-symbol">
+          <b>{stock?.symbol || query}</b>
+          <span>{stock?.name || "尚未載入股票資料"}</span>
         </div>
       </header>
 
-      {activeTab === "home" && (
-        <section className="control-grid">
-          <div className="panel">
-            <h2>單股快速查詢</h2>
-            <label>股票代碼或名稱</label>
-            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="例如 2330、台積電、AAPL、SPY" onKeyDown={(e) => e.key === "Enter" && searchOne()} />
-            <label>資料區間</label>
-            <select value={range} onChange={(e) => setRange(e.target.value)}>
-              <option value="3mo">3個月</option>
-              <option value="6mo">6個月</option>
-              <option value="1y">1年</option>
-              <option value="2y">2年</option>
-              <option value="5y">5年</option>
-            </select>
-            <div className="btn-row">
-              <button onClick={() => searchOne()} disabled={loading}>{loading ? "查詢中..." : "搜尋並前往分析"}</button>
+      <main className="dashboard-layout">
+        <aside className="side-panel">
+          <div className="section-title">
+            <h2>🔎 搜尋</h2>
+          </div>
+
+          <label>股票代碼或名稱</label>
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="例如 2330、AAPL、SPY"
+            onKeyDown={(e) => e.key === "Enter" && searchOne()}
+          />
+
+          <label>資料區間</label>
+          <select value={range} onChange={(e) => setRange(e.target.value)}>
+            <option value="3mo">3個月</option>
+            <option value="6mo">6個月</option>
+            <option value="1y">1年</option>
+            <option value="2y">2年</option>
+            <option value="5y">5年</option>
+          </select>
+
+          <div className="btn-row">
+            <button onClick={() => searchOne()} disabled={loading}>{loading ? "查詢中..." : "查詢股票"}</button>
+            {stock && favorites.some((item) => item.symbol === stock.symbol) ? (
+              <button className="danger" onClick={() => removeFavorite(stock.symbol)}>取消收藏</button>
+            ) : (
+              <button className="ghost" onClick={() => addFavorite(stock)}>收藏</button>
+            )}
+          </div>
+
+          {suggestion.length > 0 && (
+            <div className="chips">
+              {suggestion.map(([name, code]) => (
+                <button key={name} onClick={() => searchOne(code)}>{code} {name}</button>
+              ))}
             </div>
-            {suggestion.length > 0 && (
-              <div className="chips">
-                {suggestion.map(([name, code]) => (
-                  <button key={name} onClick={() => { setQuery(code); searchOne(code); }}>{code} {name}</button>
-                ))}
+          )}
+
+          {error && <p className="error">{error}</p>}
+
+          <div className="divider" />
+
+          <div className="section-title">
+            <h2>⭐ 收藏</h2>
+          </div>
+          {favorites.length > 0 ? (
+            <div className="favorite-list">
+              {favorites.map((item) => (
+                <div className="favorite-item" key={item.symbol}>
+                  <div>
+                    <b>{item.symbol}</b>
+                    <span>{item.name}</span>
+                  </div>
+                  <div className="btn-row" style={{ marginTop: 0 }}>
+                    <button className="ghost small" onClick={() => searchOne(item.symbol)}>查看</button>
+                    <button className="danger small" onClick={() => removeFavorite(item.symbol)}>刪除</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="empty">尚未收藏股票。</p>
+          )}
+
+          <div className="divider" />
+
+          <div className="section-title">
+            <h2>⚡ 掃描</h2>
+          </div>
+          <label>自選清單，最多 20 檔</label>
+          <textarea rows={4} value={watchText} onChange={(e) => setWatchText(e.target.value)} />
+          <div className="btn-row">
+            <button className="ghost" onClick={scanWatchList} disabled={scanning}>{scanning ? "掃描中..." : "掃描"}</button>
+            <button className={autoScan ? "danger" : "ghost"} onClick={() => setAutoScan((v) => !v)}>
+              {autoScan ? "停止5秒" : "5秒刷新"}
+            </button>
+          </div>
+          <p className="muted">自動刷新建議控制在 5～10 檔，避免 API 太慢。</p>
+        </aside>
+
+        <section className="main-panel">
+          <div className="stock-head">
+            <div className="stock-title">
+              <h1>{stock ? `${stock.symbol} ${stock.name}` : "請搜尋股票"}</h1>
+              <p className="muted">互動 K 線、MA5 / MA20、成交量</p>
+            </div>
+            {stock && (
+              <div className={stock.changePct >= 0 ? "price up" : "price down"}>
+                {stock.close?.toFixed?.(2)}
+                <small>{stock.changePct.toFixed(2)}%</small>
               </div>
             )}
-            {error && <p className="error">{error}</p>}
           </div>
 
-          <div className="panel">
-            <h2>自選清單掃描</h2>
-            <label>輸入股票，最多 20 檔</label>
-            <textarea rows={4} value={watchText} onChange={(e) => setWatchText(e.target.value)} />
-            <div className="btn-row">
-              <button className="ghost" onClick={scanWatchList} disabled={scanning}>{scanning ? "掃描中..." : "掃描自選清單"}</button>
-              <button className={autoScan ? "danger" : "ghost"} onClick={() => setAutoScan((v) => !v)}>
-                {autoScan ? "停止5秒刷新" : "啟動5秒刷新"}
-              </button>
-            </div>
-            <p className="note">5秒刷新會持續呼叫 Yahoo API，自選清單建議控制在 5～10 檔。</p>
-          </div>
+          {stock ? (
+            <>
+              <TradingChart stock={stock} />
+              <div className="tag-row">
+                {stock.tags.length ? stock.tags.map((t) => <span key={t}>{t}</span>) : <span>暫無強勢訊號</span>}
+              </div>
+            </>
+          ) : (
+            <p className="empty">請從左側搜尋股票，或使用網址 /stock/2330。</p>
+          )}
 
           {watchList.length > 0 && (
-            <div className="panel" style={{ gridColumn: "1 / -1" }}>
-              <h2>🔥 自選清單排行榜</h2>
-              <table>
-                <thead>
-                  <tr>
-                    <th>股票</th>
-                    <th>價格</th>
-                    <th>漲跌%</th>
-                    <th>RSI</th>
-                    <th>AI</th>
-                    <th>回測</th>
-                    <th>狀態</th>
-                    <th>收藏</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {watchList.map((s) => (
-                    <tr key={s.symbol} onClick={() => { setStock(s); setActiveTab("analysis"); }}>
-                      <td>{s.symbol}<br />{s.name}</td>
-                      <td>{s.close?.toFixed?.(2)}</td>
-                      <td className={s.changePct >= 0 ? "up" : "down"}>{s.changePct.toFixed(2)}%</td>
-                      <td>{s.rsi?.toFixed(1) ?? "--"}</td>
-                      <td><span className="score">{s.score}</span></td>
-                      <td>{s.backtest.totalReturn}%</td>
-                      <td>{s.level}</td>
-                      <td>
-                        {favorites.some((item) => item.symbol === s.symbol) ? (
-                          <button className="danger small" onClick={(e) => { e.stopPropagation(); removeFavorite(s.symbol); }}>取消</button>
-                        ) : (
-                          <button className="ghost small" onClick={(e) => { e.stopPropagation(); addFavorite(s); }}>收藏</button>
-                        )}
-                      </td>
+            <div style={{ marginTop: 16 }}>
+              <div className="section-title">
+                <h2>🔥 自選排行榜</h2>
+              </div>
+              <div className="watch-box">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>股票</th>
+                      <th>價格</th>
+                      <th>漲跌%</th>
+                      <th>RSI</th>
+                      <th>AI</th>
+                      <th>回測</th>
+                      <th>狀態</th>
+                      <th>收藏</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {watchList.map((s) => (
+                      <tr key={s.symbol} onClick={() => setStock(s)}>
+                        <td>{s.symbol}<br />{s.name}</td>
+                        <td>{s.close?.toFixed?.(2)}</td>
+                        <td className={s.changePct >= 0 ? "up" : "down"}>{s.changePct.toFixed(2)}%</td>
+                        <td>{s.rsi?.toFixed(1) ?? "--"}</td>
+                        <td><span className="score">{s.score}</span></td>
+                        <td>{s.backtest.totalReturn}%</td>
+                        <td>{s.level}</td>
+                        <td>
+                          {favorites.some((item) => item.symbol === s.symbol) ? (
+                            <button className="danger small" onClick={(e) => { e.stopPropagation(); removeFavorite(s.symbol); }}>取消</button>
+                          ) : (
+                            <button className="ghost small" onClick={(e) => { e.stopPropagation(); addFavorite(s); }}>收藏</button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </section>
-      )}
 
-      {activeTab === "analysis" && (
-        <section className="dashboard">
-          <div className="panel">
-            <h2>📊 互動 K 線圖</h2>
-            {stock ? (
-              <>
-                <div className="stock-head">
-                  <div>
-                    <h3>{stock.symbol} {stock.name}</h3>
-                    <p>{stock.level}・{stock.currency}</p>
-                  </div>
-                  <div className="stock-actions">
-                    <div className={stock.changePct >= 0 ? "price up" : "price down"}>
-                      {stock.close?.toFixed?.(2)}
-                      <small>{stock.changePct.toFixed(2)}%</small>
-                    </div>
-                    {favorites.some((item) => item.symbol === stock.symbol) ? (
-                      <button className="danger small" onClick={() => removeFavorite(stock.symbol)}>取消收藏</button>
-                    ) : (
-                      <button className="ghost small" onClick={() => addFavorite(stock)}>加入收藏</button>
-                    )}
-                  </div>
-                </div>
-                <TradingChart stock={stock} />
-                <div className="tag-row">
-                  {stock.tags.length ? stock.tags.map((t) => <span key={t}>{t}</span>) : <span>暫無強勢訊號</span>}
-                </div>
-              </>
-            ) : (
-              <p className="empty">請先到「首頁」搜尋股票，或使用網址 /stock/2330。</p>
-            )}
+        <aside className="right-panel">
+          <div className="section-title">
+            <h2>🧠 AI 分析</h2>
           </div>
 
-          <div className="panel">
-            <h2>🧠 AI 分數 + 回測</h2>
-            {stock ? (
-              <>
-                <div className="score-card">
-                  <div><b>{stock.score}</b><span>AI分數</span></div>
-                  <div><b>{stock.level}</b><span>狀態</span></div>
-                  <div><b>{stock.volumeRatio?.toFixed(2) ?? "--"}</b><span>量比</span></div>
+          {stock ? (
+            <>
+              <div className="score-hero">
+                <div className="score-main">
+                  <b>{stock.score}</b>
+                  <span>{stock.level}</span>
                 </div>
-                <div className="metric-grid">
-                  <div><b>{stock.rsi?.toFixed(1) ?? "--"}</b><span>RSI</span></div>
-                  <div><b>{stock.k?.toFixed(1) ?? "--"}</b><span>K 值</span></div>
-                  <div><b>{stock.d?.toFixed(1) ?? "--"}</b><span>D 值</span></div>
-                  <div><b>{stock.macdHist?.toFixed(2) ?? "--"}</b><span>MACD</span></div>
-                  <div><b>{stock.ma5?.toFixed(2) ?? "--"}</b><span>MA5</span></div>
-                  <div><b>{stock.ma20?.toFixed(2) ?? "--"}</b><span>MA20</span></div>
-                  <div><b>{stock.backtest.totalReturn}%</b><span>回測報酬</span></div>
-                  <div><b>{stock.backtest.winRate}%</b><span>勝率</span></div>
-                  <div><b>{stock.backtest.maxDrawdown}%</b><span>最大回撤</span></div>
-                </div>
-              </>
-            ) : (
-              <p className="empty">尚無分析資料。</p>
-            )}
-          </div>
-        </section>
-      )}
+              </div>
 
-      {activeTab === "favorites" && (
-        <section className="panel">
-          <h2>⭐ 收藏股票</h2>
-          {favorites.length > 0 ? (
-            <table>
-              <thead>
-                <tr>
-                  <th>股票</th>
-                  <th>操作</th>
-                </tr>
-              </thead>
-              <tbody>
-                {favorites.map((item) => (
-                  <tr key={item.symbol}>
-                    <td>{item.symbol}<br />{item.name}</td>
-                    <td>
-                      <button className="ghost small" onClick={() => searchOne(item.symbol)}>查看分析</button>{" "}
-                      <button className="danger small" onClick={() => removeFavorite(item.symbol)}>刪除</button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+              <div className="metric-grid">
+                <div className="metric-card"><b>{stock.rsi?.toFixed(1) ?? "--"}</b><span>RSI</span></div>
+                <div className="metric-card"><b>{stock.k?.toFixed(1) ?? "--"}</b><span>K 值</span></div>
+                <div className="metric-card"><b>{stock.d?.toFixed(1) ?? "--"}</b><span>D 值</span></div>
+                <div className="metric-card"><b>{stock.macdHist?.toFixed(2) ?? "--"}</b><span>MACD</span></div>
+                <div className="metric-card"><b>{stock.ma5?.toFixed(2) ?? "--"}</b><span>MA5</span></div>
+                <div className="metric-card"><b>{stock.ma20?.toFixed(2) ?? "--"}</b><span>MA20</span></div>
+                <div className="metric-card"><b>{stock.volumeRatio?.toFixed(2) ?? "--"}</b><span>量比</span></div>
+                <div className="metric-card"><b>{stock.backtest.trades}</b><span>交易次數</span></div>
+              </div>
+
+              <div className="divider" />
+
+              <div className="section-title">
+                <h2>📈 回測</h2>
+              </div>
+              <div className="metric-grid">
+                <div className="metric-card"><b>{stock.backtest.totalReturn}%</b><span>策略報酬</span></div>
+                <div className="metric-card"><b>{stock.backtest.winRate}%</b><span>勝率</span></div>
+                <div className="metric-card"><b>{stock.backtest.maxDrawdown}%</b><span>最大回撤</span></div>
+                <div className="metric-card"><b>{stock.backtest.trades}</b><span>交易數</span></div>
+              </div>
+            </>
           ) : (
-            <p className="empty">尚未收藏股票。查詢股票後，點「加入收藏」。</p>
+            <p className="empty">尚無分析資料。</p>
           )}
-        </section>
-      )}
-
-      <div className="mobile-bottom-nav">
-        <button className={activeTab === "home" ? "tab-btn active" : "tab-btn"} onClick={() => setActiveTab("home")}>首頁</button>
-        <button className={activeTab === "analysis" ? "tab-btn active" : "tab-btn"} onClick={() => setActiveTab("analysis")}>分析</button>
-        <button className={activeTab === "favorites" ? "tab-btn active" : "tab-btn"} onClick={() => setActiveTab("favorites")}>收藏</button>
-      </div>
+        </aside>
+      </main>
     </div>
   );
 }
