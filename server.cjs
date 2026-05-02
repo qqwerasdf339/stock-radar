@@ -34,22 +34,30 @@ app.get("/api/yahoo/chart/:symbol", async (req, res) => {
       return response.data;
     };
 
-    // 已經有 .TW / .TWO 就直接查
-    if (raw.endsWith(".TW") || raw.endsWith(".TWO")) {
+    // 已經完整輸入：2330.TW / 00981A.TW / 5483.TWO / AAPL
+    if (raw.includes(".")) {
       return res.json(await fetchYahoo(raw));
     }
 
-    // 台股：4位數字，先上市 .TW，再上櫃 .TWO
-    if (/^\d{4,6}$/.test(raw)) {
+    // 全市場自動嘗試順序
+    const candidates = [
+      `${raw}.TW`,    // 台股上市、ETF
+      `${raw}.TWO`,   // 台股上櫃
+      raw,            // 美股、美股ETF、指數代碼
+    ];
+
+    let lastError = null;
+
+    for (const symbol of candidates) {
       try {
-        return res.json(await fetchYahoo(`${raw}.TW`));
-      } catch {
-        return res.json(await fetchYahoo(`${raw}.TWO`));
+        const data = await fetchYahoo(symbol);
+        return res.json(data);
+      } catch (err) {
+        lastError = err;
       }
     }
 
-    // 美股 / 美股ETF：AAPL、TSLA、NVDA、SPY、QQQ 直接查
-    return res.json(await fetchYahoo(raw));
+    throw lastError || new Error(`No data for ${raw}`);
   } catch (error) {
     console.error("Yahoo error:", error.message);
     res.status(500).json({ error: "Yahoo API failed" });
