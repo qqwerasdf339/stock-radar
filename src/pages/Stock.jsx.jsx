@@ -579,7 +579,7 @@ export default function Stock() {
     }
   });
   const [watchText, setWatchText] = useState("2330,2317,2454,2308,2382,0050,AAPL,NVDA,TSLA,SPY,QQQ");
-  const [range, setRange] = useState("6mo");
+  const [range, setRange] = useState("1y");
   const [stock, setStock] = useState(null);
   const [watchList, setWatchList] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -587,6 +587,9 @@ export default function Stock() {
   const [autoScan, setAutoScan] = useState(false);
   const [error, setError] = useState("");
   const [rightView, setRightView] = useState("ai");
+  const [watchMenuOpen, setWatchMenuOpen] = useState(false);
+  const [newWatchSymbol, setNewWatchSymbol] = useState("");
+  const [favoriteNotice, setFavoriteNotice] = useState("");
   const [activeMenu, setActiveMenu] = useState("analysis");
   const [sortMode, setSortMode] = useState("score");
   const [showMA5, setShowMA5] = useState(true);
@@ -599,16 +602,55 @@ export default function Stock() {
   }, [favorites]);
 
   function addFavorite(targetStock = stock) {
-    if (!targetStock?.symbol) return;
+    if (!targetStock?.symbol) {
+      setFavoriteNotice("請先查詢股票，再加入收藏");
+      return;
+    }
+
     setFavorites((prev) => {
       const exists = prev.some((item) => item.symbol === targetStock.symbol);
-      if (exists) return prev;
+      if (exists) {
+        setFavoriteNotice(`${targetStock.symbol} 已在收藏清單`);
+        return prev;
+      }
+
+      setFavoriteNotice(`已收藏 ${targetStock.symbol}`);
       return [...prev, { symbol: targetStock.symbol, name: targetStock.name }];
     });
   }
 
   function removeFavorite(symbol) {
     setFavorites((prev) => prev.filter((item) => item.symbol !== symbol));
+    setFavoriteNotice(`已移除 ${symbol}`);
+  }
+
+  function addWatchSymbol() {
+    const value = newWatchSymbol.trim().toUpperCase();
+    if (!value) return;
+    const items = watchText
+      .split(/[ ,，]+/)
+      .map((x) => x.trim().toUpperCase())
+      .filter(Boolean);
+
+    if (!items.includes(value)) {
+      setWatchText([...items, value].join(","));
+    }
+    setNewWatchSymbol("");
+    setWatchMenuOpen(false);
+  }
+
+  function removeSelectedWatchSymbol() {
+    const value = newWatchSymbol.trim().toUpperCase();
+    if (!value) return;
+    const items = watchText
+      .split(/[ ,，]+/)
+      .map((x) => x.trim().toUpperCase())
+      .filter(Boolean)
+      .filter((item) => item !== value);
+
+    setWatchText(items.join(","));
+    setNewWatchSymbol("");
+    setWatchMenuOpen(false);
   }
 
   async function searchOne(input = query) {
@@ -714,15 +756,18 @@ export default function Stock() {
         label { display: block; color: #cbd5e1; margin: 12px 0 8px; font-size: 13px; }
         h1, h2, h3 { margin: 0; }
         .terminal-shell { min-height: 100vh; background: radial-gradient(circle at top left, #1e293b, #050914 50%); }
-        .app-frame { display: grid; grid-template-columns: 150px 1fr; min-height: 100vh; }
-        .left-nav { background: rgba(2,6,23,.92); border-right: 1px solid rgba(148,163,184,.16); padding: 14px 10px; position: sticky; top: 0; height: 100vh; box-sizing: border-box; }
+        #root { width: 100vw; min-height: 100vh; margin: 0; padding: 0; }
+        .app-frame { min-height: 100vh; }
+        .left-nav { position: fixed !important; left: 0; top: 0; bottom: 0; width: 170px; z-index: 1000; }
+        .content { margin-left: 170px; min-height: 100vh; }
+        .left-nav { background: rgba(2,6,23,.92); border-right: 1px solid rgba(148,163,184,.16); padding: 14px 10px; height: 100vh; box-sizing: border-box; }
         .logo { display: flex; gap: 10px; align-items: center; padding: 8px 8px 18px; border-bottom: 1px solid rgba(148,163,184,.14); margin-bottom: 12px; }
         .logo-icon { width: 34px; height: 34px; border-radius: 10px; background: linear-gradient(135deg,#38bdf8,#8b5cf6); display: grid; place-items: center; font-weight: 900; }
         .logo b { display: block; font-size: 14px; }
         .logo span { color: #64748b; font-size: 11px; }
         .nav-btn { width: 100%; display: flex; align-items: center; gap: 8px; margin-bottom: 7px; background: transparent; color: #94a3b8; border: 1px solid transparent; justify-content: flex-start; padding: 10px; }
         .nav-btn.active { color: #67e8f9; background: rgba(34,211,238,.12); border-color: rgba(34,211,238,.35); }
-        .content { padding: 16px; }
+        .content { padding: 16px; margin-left: 170px; }
         .top-bar { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
         .top-title h1 { font-size: 28px; }
         .top-title p { color: #94a3b8; font-size: 13px; margin: 6px 0 0; }
@@ -731,6 +776,13 @@ export default function Stock() {
         .mini-stat span { color: #94a3b8; font-size: 11px; }
         .mini-stat b { display: block; font-size: 17px; margin-top: 3px; }
         .card { background: rgba(15,23,42,.84); border: 1px solid rgba(148,163,184,.18); border-radius: 18px; box-shadow: 0 18px 50px rgba(0,0,0,.32); padding: 16px; }
+        .favorite-action { background: linear-gradient(135deg, #facc15, #fb923c); color: #1f1300; }
+        .favorite-action.saved { background: #14532d; color: #bbf7d0; border: 1px solid rgba(34,197,94,.45); }
+        .favorite-notice { margin-top: 8px; color: #facc15; font-size: 13px; }
+        .watch-actions { position: relative; display: inline-block; }
+        .watch-menu { position: absolute; right: 0; top: 44px; z-index: 20; width: 280px; background: #020617; border: 1px solid rgba(148,163,184,.25); border-radius: 16px; padding: 12px; box-shadow: 0 18px 50px rgba(0,0,0,.45); }
+        .chart-tools { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+        .chart-tools .indicator-toggle { margin-top: 0; min-width: 440px; }
         .summary-grid { display: grid; grid-template-columns: 1.1fr 1fr .8fr 1fr; gap: 12px; margin-bottom: 12px; }
         .main-grid { display: grid; grid-template-columns: minmax(680px, 1fr) 390px; gap: 12px; align-items: start; }
         .section-title { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
@@ -789,7 +841,7 @@ export default function Stock() {
         .favorite-item { display: flex; justify-content: space-between; gap: 8px; align-items: center; background: #020617; border: 1px solid rgba(148,163,184,.16); border-radius: 14px; padding: 10px; }
         .empty { color: #94a3b8; padding: 18px; }
         .error { color: #fecaca; background: rgba(127,29,29,.4); padding: 10px; border-radius: 12px; margin-top: 12px; }
-        @media (max-width: 1300px) { .summary-grid, .main-grid { grid-template-columns: 1fr; } .app-frame { grid-template-columns: 130px 1fr; } }
+        @media (max-width: 1300px) { .summary-grid, .main-grid { grid-template-columns: 1fr; } .left-nav { width: 150px; } .content { margin-left: 150px; } .chart-tools { align-items: stretch; flex-direction: column; } .chart-tools .indicator-toggle { min-width: 0; width: 100%; } }
       `}</style>
 
       <div className="app-frame">
@@ -833,12 +885,20 @@ export default function Stock() {
                     <option value="1y">1年</option>
                     <option value="2y">2年</option>
                     <option value="5y">5年</option>
+                    <option value="10y">10年</option>
+                    <option value="max">最長</option>
                   </select>
                   <div className="btn-row">
                     <button onClick={() => searchOne()} disabled={loading}>{loading ? "查詢中..." : "查詢股票"}</button>
-                    <button className="ghost" onClick={() => addFavorite(stock)}>加入收藏</button>
+                    <button
+                      className={`favorite-action ${stock && favorites.some((item) => item.symbol === stock.symbol) ? "saved" : ""}`}
+                      onClick={() => addFavorite(stock)}
+                    >
+                      {stock && favorites.some((item) => item.symbol === stock.symbol) ? "已收藏" : "加入收藏"}
+                    </button>
                   </div>
                   {suggestion.length > 0 && <div className="chips">{suggestion.map(([name, code]) => <button key={name} onClick={() => searchOne(code)}>{code} {name}</button>)}</div>}
+                  {favoriteNotice && <p className="favorite-notice">{favoriteNotice}</p>}
                   {error && <p className="error">{error}</p>}
                 </div>
 
@@ -874,6 +934,17 @@ export default function Stock() {
                     </div>
                     {stock && <div className={stock.changePct >= 0 ? "price up" : "price down"}>{stock.close?.toFixed?.(2)}<small>{stock.changePct.toFixed(2)}%</small></div>}
                   </div>
+
+                  <div className="chart-tools">
+                    <div className="muted">圖表指標</div>
+                    <div className="indicator-toggle">
+                      <label className="toggle-card"><input type="checkbox" checked={showMA5} onChange={(e) => setShowMA5(e.target.checked)} /> MA5 日線</label>
+                      <label className="toggle-card"><input type="checkbox" checked={showMA20} onChange={(e) => setShowMA20(e.target.checked)} /> MA20 月線</label>
+                      <label className="toggle-card"><input type="checkbox" checked={showMA60} onChange={(e) => setShowMA60(e.target.checked)} /> MA60 季線</label>
+                      <label className="toggle-card"><input type="checkbox" checked={showBollinger} onChange={(e) => setShowBollinger(e.target.checked)} /> 布林通道</label>
+                    </div>
+                  </div>
+
                   {stock ? <TradingChart stock={stock} showMA5={showMA5} showMA20={showMA20} showMA60={showMA60} showBollinger={showBollinger} /> : <p className="empty">請從上方搜尋股票，或使用網址 /stock/2330。</p>}
                   {stock && <div className="tag-row">{stock.tags.length ? stock.tags.map((t) => <span key={t}>{t}</span>) : <span>暫無強勢訊號</span>}</div>}
                 </div>
@@ -941,7 +1012,26 @@ export default function Stock() {
 
           {activeMenu === "watchlist" && (
             <div className="card">
-              <div className="section-title"><h2>自選股，即時台股與美股標的</h2><span className="muted">更新 {new Date().toLocaleString("zh-TW")}</span></div>
+              <div className="section-title">
+                <h2>自選股，即時台股與美股標的</h2>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <span className="muted">更新 {new Date().toLocaleString("zh-TW")}</span>
+                  <div className="watch-actions">
+                    <button className="ghost" onClick={() => setWatchMenuOpen((v) => !v)}>管理標的 ▾</button>
+                    {watchMenuOpen && (
+                      <div className="watch-menu">
+                        <label>新增 / 刪除代碼</label>
+                        <input value={newWatchSymbol} onChange={(e) => setNewWatchSymbol(e.target.value)} placeholder="例如 00919、2330、AAPL" />
+                        <div className="btn-row">
+                          <button onClick={addWatchSymbol}>新增</button>
+                          <button className="danger" onClick={removeSelectedWatchSymbol}>刪除</button>
+                        </div>
+                        <p className="muted">輸入代碼後可加入或從自選清單移除。</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
               <div className="btn-row" style={{ marginBottom: 12 }}>
                 <button onClick={scanWatchList} disabled={scanning}>{scanning ? "掃描中..." : "更新自選資料"}</button>
                 <button className={autoScan ? "danger" : "ghost"} onClick={() => setAutoScan((v) => !v)}>{autoScan ? "停止5秒刷新" : "啟動5秒刷新"}</button>
