@@ -28,13 +28,10 @@ function resolveSymbol(input) {
   const raw = String(input || "").trim();
   if (!raw) return "";
   if (NAME_TO_CODE[raw]) return NAME_TO_CODE[raw];
-
   const upper = raw.toUpperCase();
   if (upper.endsWith(".TW") || upper.endsWith(".TWO")) return upper;
-
-  const code = upper.match(/\d{4,6}/)?.[0];
+  const code = upper.match(/\d{4,6}[A-Z]?/)?.[0];
   if (code) return code;
-
   return upper;
 }
 
@@ -94,6 +91,13 @@ function ema(values, period) {
     current = values[i] * k + current * (1 - k);
   }
   return current;
+}
+
+function stddev(values) {
+  if (!values.length) return null;
+  const avg = values.reduce((a, b) => a + b, 0) / values.length;
+  const variance = values.reduce((sum, v) => sum + Math.pow(v - avg, 2), 0) / values.length;
+  return Math.sqrt(variance);
 }
 
 function calcRSI(closes, period = 14) {
@@ -156,13 +160,6 @@ function calcVolumeRatio(history) {
   return avg20 ? latestVol / avg20 : null;
 }
 
-function stddev(values) {
-  if (!values.length) return null;
-  const avg = values.reduce((a, b) => a + b, 0) / values.length;
-  const variance = values.reduce((sum, v) => sum + Math.pow(v - avg, 2), 0) / values.length;
-  return Math.sqrt(variance);
-}
-
 function rsiText(rsi) {
   if (rsi === null || rsi === undefined) return "資料不足";
   if (rsi >= 80) return "過熱，追高風險";
@@ -214,24 +211,12 @@ function analyzeCandlePattern(history) {
   const lowerRatio = lowerShadow / range;
   const isUp = latest.close >= latest.open;
 
-  if (bodyRatio <= 0.15) {
-    return { title: "十字線｜多空觀望", detail: "開收盤接近，代表多空拉鋸，常出現在轉折或整理區。" };
-  }
-  if (upperRatio >= 0.45 && upperShadow > body * 1.5) {
-    return { title: "長上影線｜壓力大", detail: "盤中衝高後回落，上方賣壓明顯。" };
-  }
-  if (lowerRatio >= 0.45 && lowerShadow > body * 1.5) {
-    return { title: "長下影線｜有支撐", detail: "盤中下殺後拉回，下方承接力道出現。" };
-  }
-  if (isUp && latest.close > prev.high) {
-    return { title: "突破K｜偏強", detail: "收盤突破前一根高點，短線動能較強。" };
-  }
-  if (!isUp && latest.close < prev.low) {
-    return { title: "跌破K｜偏弱", detail: "收盤跌破前一根低點，短線賣壓較重。" };
-  }
-  if (isUp) {
-    return { title: "紅K｜買盤較強", detail: "收盤高於開盤，多方略占優勢。" };
-  }
+  if (bodyRatio <= 0.15) return { title: "十字線｜多空觀望", detail: "開收盤接近，代表多空拉鋸，常出現在轉折或整理區。" };
+  if (upperRatio >= 0.45 && upperShadow > body * 1.5) return { title: "長上影線｜壓力大", detail: "盤中衝高後回落，上方賣壓明顯。" };
+  if (lowerRatio >= 0.45 && lowerShadow > body * 1.5) return { title: "長下影線｜有支撐", detail: "盤中下殺後拉回，下方承接力道出現。" };
+  if (isUp && latest.close > prev.high) return { title: "突破K｜偏強", detail: "收盤突破前一根高點，短線動能較強。" };
+  if (!isUp && latest.close < prev.low) return { title: "跌破K｜偏弱", detail: "收盤跌破前一根低點，短線賣壓較重。" };
+  if (isUp) return { title: "紅K｜買盤較強", detail: "收盤高於開盤，多方略占優勢。" };
   return { title: "黑K｜賣壓較強", detail: "收盤低於開盤，空方略占優勢。" };
 }
 
@@ -288,6 +273,83 @@ function backtestStrategy(history) {
   };
 }
 
+function createTradeSignal({ score, rsi, macd, trendUp, longTrendUp, volumeRatio, changePct, volumeSignal, candlePattern, close, atr }) {
+  const reasons = [];
+  const risk = [];
+
+  if (trendUp) reasons.push("短線均線偏多");
+  else risk.push("短線均線尚未轉強");
+
+  if (longTrendUp) reasons.push("中線趨勢偏多");
+  else risk.push("中線趨勢仍需確認");
+
+  if (macd?.hist > 0) reasons.push("MACD 動能翻正");
+  else risk.push("MACD 動能偏弱");
+
+  if (volumeRatio !== null && volumeRatio >= 1.25) reasons.push("成交量放大");
+  if (volumeSignal?.title?.includes("出貨")) risk.push("爆量不漲，有出貨疑慮");
+  if (candlePattern?.title?.includes("長上影")) risk.push("長上影線，上方賣壓大");
+  if (rsi !== null && rsi >= 75) risk.push("RSI 過熱，追高風險較高");
+  if (changePct > 5) risk.push("短線漲幅過大，容易震盪");
+
+  let action = "HOLD";
+  let label = "觀望";
+  let tone = "neutral";
+
+  if (score >= 78 && trendUp && macd?.hist > 0 && rsi < 75 && !volumeSignal?.title?.includes("出貨")) {
+    action = "BUY";
+    label = "偏多買進觀察";
+    tone = "buy";
+  } else if (score >= 60 && trendUp) {
+    action = "HOLD";
+    label = "偏多續抱";
+    tone = "hold";
+  } else if (score <= 35 || (!trendUp && macd?.hist < 0)) {
+    action = "SELL";
+    label = "偏弱避開";
+    tone = "sell";
+  }
+
+  const safeAtr = atr || close * 0.025;
+  const stopLoss = action === "BUY" ? close - safeAtr * 1.5 : close + safeAtr * 1.5;
+  const takeProfit = action === "BUY" ? close + safeAtr * 2.5 : close - safeAtr * 2.0;
+
+  return {
+    action,
+    label,
+    tone,
+    stopLoss,
+    takeProfit,
+    reasons: reasons.length ? reasons : ["尚未出現明確多方訊號"],
+    risk: risk.length ? risk : ["目前未偵測到明顯風險，但仍需控管停損"],
+  };
+}
+
+function calcATR(history, period = 14) {
+  if (history.length <= period) return null;
+  const trs = [];
+  for (let i = 1; i < history.length; i++) {
+    const highLow = history[i].high - history[i].low;
+    const highClose = Math.abs(history[i].high - history[i - 1].close);
+    const lowClose = Math.abs(history[i].low - history[i - 1].close);
+    trs.push(Math.max(highLow, highClose, lowClose));
+  }
+  return sma(trs, period);
+}
+
+function predictWinRate({ score, rsi, trendUp, longTrendUp, volumeRatio, backtest }) {
+  let rate = 45;
+  if (score >= 80) rate += 14;
+  else if (score >= 60) rate += 8;
+  else if (score <= 35) rate -= 8;
+  if (trendUp) rate += 6;
+  if (longTrendUp) rate += 5;
+  if (volumeRatio !== null && volumeRatio >= 1.25) rate += 5;
+  if (rsi !== null && rsi > 70) rate -= 6;
+  if (backtest?.winRate) rate = rate * 0.65 + backtest.winRate * 0.35;
+  return Math.max(15, Math.min(85, Math.round(rate)));
+}
+
 function analyzeStock(stock) {
   const { history } = stock;
   const closes = history.map((x) => x.close).filter(Boolean);
@@ -306,6 +368,7 @@ function analyzeStock(stock) {
   const backtest = backtestStrategy(history);
   const volumeSignal = analyzeVolumeSignal(history, changePct, volumeRatio);
   const candlePattern = analyzeCandlePattern(history);
+  const atr = calcATR(history);
 
   const high20 = Math.max(...history.slice(-20).map((x) => x.high));
   const low20 = Math.min(...history.slice(-20).map((x) => x.low));
@@ -318,20 +381,41 @@ function analyzeStock(stock) {
   const volumeHot = volumeRatio !== null && volumeRatio >= 1.25;
   const momentum = changePct > 0.5;
 
-  let score = 0;
-  if (trendUp) score += 16;
-  if (longTrendUp) score += 12;
-  if (macdBull) score += 16;
-  if (kd.golden) score += 12;
-  if (rsiHealthy) score += 12;
-  if (volumeHot) score += 12;
-  if (momentum) score += 8;
-  if (breakout) score += 12;
-  if (backtest.totalReturn > 5) score += 6;
-  if (backtest.winRate >= 55) score += 4;
-  if (changePct > 4) score -= 8;
+  // 多因子 AI 評分：技術面 + 量能 + 趨勢 + 波動 + 回測
+  let techScore = 0;
+  if (rsi !== null && rsi > 55) techScore += 50;
+  if (macd?.hist > 0) techScore += 50;
+
+  let volumeScore = 30;
+  if (volumeRatio !== null) {
+    if (volumeRatio > 1.35) volumeScore = 100;
+    else if (volumeRatio > 1) volumeScore = 60;
+  }
+
+  let trendScore = 30;
+  if (trendUp && longTrendUp) trendScore = 100;
+  else if (trendUp) trendScore = 70;
+
+  let volatilityScore = Math.min(Math.abs(changePct) * 10, 100);
+  if (changePct < 0) volatilityScore *= 0.55;
+
+  let backtestScore = 40;
+  if (backtest.totalReturn > 10 && backtest.winRate >= 55) backtestScore = 90;
+  else if (backtest.totalReturn > 0) backtestScore = 65;
+
+  let score =
+    techScore * 0.35 +
+    volumeScore * 0.2 +
+    trendScore * 0.25 +
+    volatilityScore * 0.1 +
+    backtestScore * 0.1;
+
+  if (breakout) score += 6;
+  if (kd.golden) score += 5;
   if (nearLow) score -= 6;
-  if (rsi !== null && rsi > 78) score -= 14;
+  if (rsi !== null && rsi > 78) score -= 10;
+
+  const scoreClamped = Math.max(0, Math.min(100, Math.round(score)));
 
   const tags = [];
   if (trendUp) tags.push("短線多頭");
@@ -342,10 +426,33 @@ function analyzeStock(stock) {
   if (breakout) tags.push("接近突破");
   if (backtest.totalReturn > 0) tags.push("回測正報酬");
 
-  let level = "偏弱";
-  if (score >= 80) level = "強勢命中";
-  else if (score >= 60) level = "可追蹤";
-  else if (score >= 40) level = "普通";
+  let level = "📉 偏弱";
+  if (scoreClamped >= 80) level = "🔥 強勢";
+  else if (scoreClamped >= 60) level = "📈 偏多";
+  else if (scoreClamped >= 40) level = "⚖️ 中性";
+
+  const winRatePredict = predictWinRate({
+    score: scoreClamped,
+    rsi,
+    trendUp,
+    longTrendUp,
+    volumeRatio,
+    backtest,
+  });
+
+  const tradeSignal = createTradeSignal({
+    score: scoreClamped,
+    rsi,
+    macd,
+    trendUp,
+    longTrendUp,
+    volumeRatio,
+    changePct,
+    volumeSignal,
+    candlePattern,
+    close,
+    atr,
+  });
 
   return {
     ...stock,
@@ -360,13 +467,15 @@ function analyzeStock(stock) {
     ma5,
     ma20,
     ma60,
-    score: Math.max(0, Math.min(100, Math.round(score))),
+    score: scoreClamped,
     level,
     tags,
     backtest,
     volumeSignal,
     candlePattern,
     rsiLabel: rsiText(rsi),
+    tradeSignal,
+    winRatePredict,
   };
 }
 
@@ -377,21 +486,14 @@ function TradingChart({ stock, showMA5, showMA20, showMA60, showBollinger }) {
     if (!containerRef.current || !stock?.history?.length) return;
 
     const chart = createChart(containerRef.current, {
-      height: 620,
-      layout: {
-        background: { color: "#020617" },
-        textColor: "#cbd5e1",
-      },
+      height: 560,
+      layout: { background: { color: "#020617" }, textColor: "#cbd5e1" },
       grid: {
         vertLines: { color: "rgba(148,163,184,.12)" },
         horzLines: { color: "rgba(148,163,184,.12)" },
       },
       rightPriceScale: { borderColor: "rgba(148,163,184,.25)" },
-      timeScale: {
-        borderColor: "rgba(148,163,184,.25)",
-        timeVisible: true,
-        secondsVisible: false,
-      },
+      timeScale: { borderColor: "rgba(148,163,184,.25)", timeVisible: true, secondsVisible: false },
       crosshair: { mode: 1 },
     });
 
@@ -404,83 +506,26 @@ function TradingChart({ stock, showMA5, showMA20, showMA60, showBollinger }) {
       wickDownColor: "#ef4444",
     });
 
-    const ma5Series = chart.addSeries(LineSeries, {
-      color: "#facc15",
-      lineWidth: 2,
-      priceLineVisible: false,
-    });
+    const ma5Series = chart.addSeries(LineSeries, { color: "#facc15", lineWidth: 2, priceLineVisible: false });
+    const ma20Series = chart.addSeries(LineSeries, { color: "#60a5fa", lineWidth: 2, priceLineVisible: false });
+    const ma60Series = chart.addSeries(LineSeries, { color: "#a78bfa", lineWidth: 2, priceLineVisible: false });
+    const bollUpperSeries = chart.addSeries(LineSeries, { color: "rgba(45,212,191,.9)", lineWidth: 1, priceLineVisible: false });
+    const bollMidSeries = chart.addSeries(LineSeries, { color: "rgba(45,212,191,.55)", lineWidth: 1, priceLineVisible: false });
+    const bollLowerSeries = chart.addSeries(LineSeries, { color: "rgba(45,212,191,.9)", lineWidth: 1, priceLineVisible: false });
+    const volumeSeries = chart.addSeries(HistogramSeries, { priceFormat: { type: "volume" }, priceScaleId: "volume" });
 
-    const ma20Series = chart.addSeries(LineSeries, {
-      color: "#60a5fa",
-      lineWidth: 2,
-      priceLineVisible: false,
-    });
+    chart.priceScale("volume").applyOptions({ scaleMargins: { top: 0.82, bottom: 0 } });
 
-    const ma60Series = chart.addSeries(LineSeries, {
-      color: "#a78bfa",
-      lineWidth: 2,
-      priceLineVisible: false,
-    });
-
-    const bollUpperSeries = chart.addSeries(LineSeries, {
-      color: "rgba(45,212,191,.9)",
-      lineWidth: 1,
-      priceLineVisible: false,
-    });
-
-    const bollMidSeries = chart.addSeries(LineSeries, {
-      color: "rgba(45,212,191,.55)",
-      lineWidth: 1,
-      priceLineVisible: false,
-    });
-
-    const bollLowerSeries = chart.addSeries(LineSeries, {
-      color: "rgba(45,212,191,.9)",
-      lineWidth: 1,
-      priceLineVisible: false,
-    });
-
-    const volumeSeries = chart.addSeries(HistogramSeries, {
-      priceFormat: { type: "volume" },
-      priceScaleId: "volume",
-    });
-
-    chart.priceScale("volume").applyOptions({
-      scaleMargins: { top: 0.82, bottom: 0 },
-    });
-
-    const candles = stock.history.map((d) => ({
-      time: d.time,
-      open: d.open,
-      high: d.high,
-      low: d.low,
-      close: d.close,
-    }));
-
+    const candles = stock.history.map((d) => ({ time: d.time, open: d.open, high: d.high, low: d.low, close: d.close }));
     const closes = stock.history.map((x) => x.close);
-    const ma5 = stock.history
-      .map((d, i) => {
-        const part = closes.slice(0, i + 1);
-        const value = sma(part, 5);
-        return value ? { time: d.time, value } : null;
-      })
-      .filter(Boolean);
 
-    const ma20 = stock.history
-      .map((d, i) => {
-        const part = closes.slice(0, i + 1);
-        const value = sma(part, 20);
-        return value ? { time: d.time, value } : null;
-      })
-      .filter(Boolean);
-
-    const ma60 = stock.history
-      .map((d, i) => {
-        const part = closes.slice(0, i + 1);
-        const value = sma(part, 60);
-        return value ? { time: d.time, value } : null;
-      })
-      .filter(Boolean);
+    const buildMA = (period) =>
+      stock.history
+        .map((d, i) => {
+          const value = sma(closes.slice(0, i + 1), period);
+          return value ? { time: d.time, value } : null;
+        })
+        .filter(Boolean);
 
     const boll = stock.history
       .map((d, i) => {
@@ -488,12 +533,7 @@ function TradingChart({ stock, showMA5, showMA20, showMA60, showBollinger }) {
         if (part.length < 20) return null;
         const mid = sma(part, 20);
         const sd = stddev(part);
-        return {
-          time: d.time,
-          upper: mid + sd * 2,
-          mid,
-          lower: mid - sd * 2,
-        };
+        return { time: d.time, upper: mid + sd * 2, mid, lower: mid - sd * 2 };
       })
       .filter(Boolean);
 
@@ -504,9 +544,9 @@ function TradingChart({ stock, showMA5, showMA20, showMA60, showBollinger }) {
     }));
 
     candleSeries.setData(candles);
-    ma5Series.setData(showMA5 ? ma5 : []);
-    ma20Series.setData(showMA20 ? ma20 : []);
-    ma60Series.setData(showMA60 ? ma60 : []);
+    ma5Series.setData(showMA5 ? buildMA(5) : []);
+    ma20Series.setData(showMA20 ? buildMA(20) : []);
+    ma60Series.setData(showMA60 ? buildMA(60) : []);
     bollUpperSeries.setData(showBollinger ? boll.map((x) => ({ time: x.time, value: x.upper })) : []);
     bollMidSeries.setData(showBollinger ? boll.map((x) => ({ time: x.time, value: x.mid })) : []);
     bollLowerSeries.setData(showBollinger ? boll.map((x) => ({ time: x.time, value: x.lower })) : []);
@@ -514,9 +554,7 @@ function TradingChart({ stock, showMA5, showMA20, showMA60, showBollinger }) {
     chart.timeScale().fitContent();
 
     const resizeObserver = new ResizeObserver(() => {
-      if (containerRef.current) {
-        chart.applyOptions({ width: containerRef.current.clientWidth });
-      }
+      if (containerRef.current) chart.applyOptions({ width: containerRef.current.clientWidth });
     });
     resizeObserver.observe(containerRef.current);
 
@@ -549,6 +587,8 @@ export default function Stock() {
   const [autoScan, setAutoScan] = useState(false);
   const [error, setError] = useState("");
   const [rightView, setRightView] = useState("ai");
+  const [activeMenu, setActiveMenu] = useState("analysis");
+  const [sortMode, setSortMode] = useState("score");
   const [showMA5, setShowMA5] = useState(true);
   const [showMA20, setShowMA20] = useState(true);
   const [showMA60, setShowMA60] = useState(true);
@@ -560,18 +600,10 @@ export default function Stock() {
 
   function addFavorite(targetStock = stock) {
     if (!targetStock?.symbol) return;
-
     setFavorites((prev) => {
       const exists = prev.some((item) => item.symbol === targetStock.symbol);
       if (exists) return prev;
-
-      return [
-        ...prev,
-        {
-          symbol: targetStock.symbol,
-          name: targetStock.name,
-        },
-      ];
+      return [...prev, { symbol: targetStock.symbol, name: targetStock.name }];
     });
   }
 
@@ -589,6 +621,7 @@ export default function Stock() {
       const data = await fetchYahooHistory(target, range, "1d");
       const analyzed = analyzeStock(data);
       setStock(analyzed);
+      setActiveMenu("analysis");
     } catch (err) {
       console.error(err);
       setError(err.message || "查詢失敗");
@@ -605,7 +638,7 @@ export default function Stock() {
         .split(/[ ,，\n]+/)
         .map((x) => x.trim())
         .filter(Boolean)
-        .slice(0, 20);
+        .slice(0, 30);
 
       const result = [];
       for (const item of items) {
@@ -617,9 +650,9 @@ export default function Stock() {
           console.warn("watch scan failed", item, err);
         }
       }
-      result.sort((a, b) => b.score - a.score);
       setWatchList(result);
       if (!stock && result[0]) setStock(result[0]);
+      setActiveMenu("watchlist");
     } catch (err) {
       setError(err.message || "自選清單掃描失敗");
     } finally {
@@ -640,6 +673,25 @@ export default function Stock() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoScan, watchText, range]);
 
+  const sortedWatchList = useMemo(() => {
+    const list = [...watchList];
+    const sorters = {
+      score: (a, b) => b.score - a.score,
+      change: (a, b) => b.changePct - a.changePct,
+      volume: (a, b) => (b.volumeRatio || 0) - (a.volumeRatio || 0),
+      rsi: (a, b) => (b.rsi || 0) - (a.rsi || 0),
+      win: (a, b) => (b.winRatePredict || 0) - (a.winRatePredict || 0),
+    };
+    return list.sort(sorters[sortMode] || sorters.score);
+  }, [watchList, sortMode]);
+
+  const marketStats = useMemo(() => {
+    const up = watchList.filter((s) => s.changePct > 0).length;
+    const down = watchList.filter((s) => s.changePct < 0).length;
+    const avg = watchList.length ? watchList.reduce((sum, s) => sum + s.changePct, 0) / watchList.length : 0;
+    return { up, down, avg };
+  }, [watchList]);
+
   const suggestion = useMemo(() => {
     const q = query.trim();
     if (!q) return [];
@@ -649,257 +701,273 @@ export default function Stock() {
   }, [query]);
 
   return (
-    <div className="desktop-shell">
+    <div className="terminal-shell">
       <style>{`
-        body { margin: 0; background: #020617; color: #e5e7eb; font-family: Arial, 'Microsoft JhengHei', sans-serif; }
+        body { margin: 0; background: #050914; color: #e5e7eb; font-family: Arial, 'Microsoft JhengHei', sans-serif; }
         button, input, select, textarea { font-family: inherit; }
-        button { border: 0; border-radius: 12px; padding: 10px 13px; background: #38bdf8; color: #082f49; font-weight: 800; cursor: pointer; }
+        button { border: 0; border-radius: 12px; padding: 10px 13px; background: #22d3ee; color: #06202a; font-weight: 900; cursor: pointer; }
         button:disabled { opacity: .55; cursor: not-allowed; }
-        button.ghost { background: #1e293b; color: #e5e7eb; border: 1px solid #334155; }
+        button.ghost { background: #111827; color: #e5e7eb; border: 1px solid #334155; }
         button.danger { background: #fb7185; color: #450a0a; }
         button.small { padding: 7px 9px; font-size: 12px; }
         input, textarea, select { width: 100%; box-sizing: border-box; background: #020617; color: #e5e7eb; border: 1px solid #334155; border-radius: 12px; padding: 11px; outline: none; }
         label { display: block; color: #cbd5e1; margin: 12px 0 8px; font-size: 13px; }
         h1, h2, h3 { margin: 0; }
-        .desktop-shell { min-height: 100vh; background: radial-gradient(circle at top left, #1e293b, #020617 55%); padding-top: 64px; }
-        .top-bar { position: fixed; top: 0; left: 0; right: 0; z-index: 999; height: 64px; display: flex; align-items: center; justify-content: space-between; padding: 0 18px; box-sizing: border-box; background: rgba(2, 6, 23, .88); border-bottom: 1px solid rgba(148,163,184,.18); backdrop-filter: blur(14px); }
-        .top-left { display: flex; align-items: center; gap: 14px; }
-        .brand-title { font-size: 15px; font-weight: 900; color: #e2e8f0; }
-        .brand-subtitle { font-size: 12px; color: #94a3b8; margin-top: 2px; }
-        .top-symbol { text-align: right; }
-        .top-symbol b { font-size: 16px; }
-        .top-symbol span { display: block; color: #94a3b8; font-size: 12px; margin-top: 3px; }
-        .dashboard-layout { display: grid; grid-template-columns: 320px minmax(620px, 1fr) 360px; gap: 16px; padding: 16px; box-sizing: border-box; }
-        .side-panel, .main-panel, .right-panel { background: rgba(15,23,42,.84); border: 1px solid rgba(148,163,184,.22); border-radius: 18px; box-shadow: 0 18px 50px rgba(0,0,0,.32); }
-        .side-panel, .right-panel { padding: 16px; height: calc(100vh - 96px); overflow: auto; position: sticky; top: 80px; }
-        .main-panel { padding: 16px; min-height: calc(100vh - 96px); }
+        .terminal-shell { min-height: 100vh; background: radial-gradient(circle at top left, #1e293b, #050914 50%); }
+        .app-frame { display: grid; grid-template-columns: 150px 1fr; min-height: 100vh; }
+        .left-nav { background: rgba(2,6,23,.92); border-right: 1px solid rgba(148,163,184,.16); padding: 14px 10px; position: sticky; top: 0; height: 100vh; box-sizing: border-box; }
+        .logo { display: flex; gap: 10px; align-items: center; padding: 8px 8px 18px; border-bottom: 1px solid rgba(148,163,184,.14); margin-bottom: 12px; }
+        .logo-icon { width: 34px; height: 34px; border-radius: 10px; background: linear-gradient(135deg,#38bdf8,#8b5cf6); display: grid; place-items: center; font-weight: 900; }
+        .logo b { display: block; font-size: 14px; }
+        .logo span { color: #64748b; font-size: 11px; }
+        .nav-btn { width: 100%; display: flex; align-items: center; gap: 8px; margin-bottom: 7px; background: transparent; color: #94a3b8; border: 1px solid transparent; justify-content: flex-start; padding: 10px; }
+        .nav-btn.active { color: #67e8f9; background: rgba(34,211,238,.12); border-color: rgba(34,211,238,.35); }
+        .content { padding: 16px; }
+        .top-bar { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
+        .top-title h1 { font-size: 28px; }
+        .top-title p { color: #94a3b8; font-size: 13px; margin: 6px 0 0; }
+        .top-stats { display: flex; gap: 12px; align-items: center; }
+        .mini-stat { min-width: 92px; background: rgba(15,23,42,.86); border: 1px solid rgba(148,163,184,.18); border-radius: 14px; padding: 10px 12px; }
+        .mini-stat span { color: #94a3b8; font-size: 11px; }
+        .mini-stat b { display: block; font-size: 17px; margin-top: 3px; }
+        .card { background: rgba(15,23,42,.84); border: 1px solid rgba(148,163,184,.18); border-radius: 18px; box-shadow: 0 18px 50px rgba(0,0,0,.32); padding: 16px; }
+        .summary-grid { display: grid; grid-template-columns: 1.1fr 1fr .8fr 1fr; gap: 12px; margin-bottom: 12px; }
+        .main-grid { display: grid; grid-template-columns: minmax(680px, 1fr) 390px; gap: 12px; align-items: start; }
         .section-title { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
-        .view-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 14px; }
-        .view-tabs button { background: #020617; color: #cbd5e1; border: 1px solid rgba(148,163,184,.2); padding: 9px 8px; font-size: 13px; }
-        .view-tabs button.active { background: #38bdf8; color: #082f49; border-color: #38bdf8; }
-        .institution-grid { display: grid; grid-template-columns: 1fr; gap: 10px; }
-        .institution-card { background: #020617; border: 1px solid rgba(148,163,184,.18); border-radius: 14px; padding: 14px; }
-        .institution-card .row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-        .institution-card b { font-size: 18px; }
-        .institution-card span { color: #94a3b8; font-size: 12px; }
-        .placeholder-box { background: rgba(15,23,42,.8); border: 1px dashed rgba(148,163,184,.35); border-radius: 14px; padding: 14px; color: #94a3b8; font-size: 13px; line-height: 1.6; }
         .section-title h2 { font-size: 18px; }
         .muted { color: #94a3b8; font-size: 13px; }
         .btn-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
         .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
         .chips button { padding: 7px 9px; background: #172554; color: #bfdbfe; font-size: 12px; }
-        .divider { height: 1px; background: rgba(148,163,184,.18); margin: 18px 0; }
+        .divider { height: 1px; background: rgba(148,163,184,.16); margin: 14px 0; }
+        .market-card { display: grid; grid-template-columns: repeat(3,1fr); gap: 8px; }
+        .market-box { background: #020617; border: 1px solid rgba(148,163,184,.14); border-radius: 14px; padding: 12px; }
+        .market-box b { display: block; font-size: 22px; }
+        .up { color: #34d399; }
+        .down { color: #fb7185; }
+        .neutral { color: #facc15; }
+        .stock-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 12px; }
+        .stock-title h1 { font-size: 24px; margin-bottom: 5px; }
+        .price { font-size: 30px; font-weight: 900; text-align: right; }
+        .price small { display: block; font-size: 14px; margin-top: 4px; }
+        .trading-chart { width: 100%; min-height: 560px; border-radius: 16px; overflow: hidden; background: #020617; }
+        .tag-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+        .tag-row span { background: #172554; color: #bfdbfe; padding: 7px 10px; border-radius: 999px; font-size: 12px; }
         .indicator-toggle { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 10px; }
         .toggle-card { display: flex; align-items: center; gap: 8px; background: #020617; border: 1px solid rgba(148,163,184,.18); border-radius: 12px; padding: 10px; color: #cbd5e1; font-size: 13px; cursor: pointer; }
         .toggle-card input { width: auto; accent-color: #38bdf8; }
-        .signal-card { background: #020617; border: 1px solid rgba(148,163,184,.18); border-radius: 14px; padding: 14px; margin-top: 10px; }
-        .signal-card b { display: block; font-size: 16px; margin-bottom: 6px; }
-        .signal-card p { color: #94a3b8; font-size: 13px; line-height: 1.55; margin: 0; }
-        .error { color: #fecaca; background: rgba(127,29,29,.4); padding: 10px; border-radius: 12px; margin-top: 12px; }
-        .watch-box { max-height: 280px; overflow: auto; border: 1px solid rgba(148,163,184,.16); border-radius: 14px; }
-        table { width: 100%; border-collapse: collapse; font-size: 13px; }
-        th, td { padding: 10px 9px; border-bottom: 1px solid rgba(148,163,184,.14); text-align: left; white-space: nowrap; }
-        th { color: #93c5fd; font-size: 12px; position: sticky; top: 0; background: rgba(15,23,42,.96); }
-        tr { cursor: pointer; }
-        tr:hover { background: rgba(56,189,248,.08); }
-        .stock-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 14px; }
-        .stock-title h1 { font-size: 28px; margin-bottom: 6px; }
-        .tag-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
-        .tag-row span { background: #172554; color: #bfdbfe; padding: 7px 10px; border-radius: 999px; font-size: 12px; }
-        .price { font-size: 30px; font-weight: 900; text-align: right; }
-        .price small { display: block; font-size: 14px; margin-top: 4px; }
-        .up { color: #f87171; }
-        .down { color: #4ade80; }
-        .trading-chart { width: 100%; min-height: 620px; border-radius: 16px; overflow: hidden; background: #020617; }
-        .score-hero { display: grid; grid-template-columns: 1fr; gap: 10px; margin-bottom: 14px; }
-        .score-main { background: linear-gradient(135deg, rgba(56,189,248,.22), rgba(37,99,235,.18)); border: 1px solid rgba(56,189,248,.28); border-radius: 18px; padding: 18px; text-align: center; }
+        .view-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 14px; }
+        .view-tabs button { background: #020617; color: #cbd5e1; border: 1px solid rgba(148,163,184,.2); padding: 9px 8px; font-size: 13px; }
+        .view-tabs button.active { background: #38bdf8; color: #082f49; border-color: #38bdf8; }
+        .score-main { background: linear-gradient(135deg, rgba(56,189,248,.22), rgba(37,99,235,.18)); border: 1px solid rgba(56,189,248,.28); border-radius: 18px; padding: 18px; text-align: center; margin-bottom: 12px; }
         .score-main b { display: block; font-size: 48px; line-height: 1; }
         .score-main span { color: #bfdbfe; font-size: 13px; }
         .metric-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
         .metric-card { background: #020617; border: 1px solid rgba(148,163,184,.18); border-radius: 14px; padding: 13px; }
         .metric-card b { display: block; font-size: 20px; margin-bottom: 4px; }
         .metric-card span { color: #94a3b8; font-size: 12px; }
-        .empty { color: #94a3b8; padding: 18px; }
+        .trade-signal { border-radius: 18px; padding: 16px; margin-bottom: 14px; border: 1px solid rgba(148,163,184,.22); background: #020617; }
+        .trade-signal.buy { border-color: rgba(34,197,94,.45); background: rgba(20,83,45,.2); }
+        .trade-signal.hold { border-color: rgba(250,204,21,.42); background: rgba(113,63,18,.18); }
+        .trade-signal.sell { border-color: rgba(248,113,113,.42); background: rgba(127,29,29,.18); }
+        .signal-action { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+        .signal-action b { font-size: 30px; letter-spacing: 1px; }
+        .signal-action span { display: block; color: #cbd5e1; font-size: 13px; margin-top: 4px; }
+        .signal-list { margin: 8px 0 0; padding-left: 18px; color: #94a3b8; font-size: 13px; line-height: 1.65; }
+        .signal-card { background: #020617; border: 1px solid rgba(148,163,184,.18); border-radius: 14px; padding: 14px; margin-top: 10px; }
+        .signal-card b { display: block; font-size: 16px; margin-bottom: 6px; }
+        .signal-card p { color: #94a3b8; font-size: 13px; line-height: 1.55; margin: 0; }
+        .watch-table-card { margin-top: 12px; }
+        .table-wrap { overflow: auto; border: 1px solid rgba(148,163,184,.16); border-radius: 16px; }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        th, td { padding: 12px 10px; border-bottom: 1px solid rgba(148,163,184,.14); text-align: left; white-space: nowrap; }
+        th { color: #93c5fd; font-size: 12px; background: rgba(15,23,42,.96); }
+        tr { cursor: pointer; }
+        tr:hover { background: rgba(56,189,248,.08); }
+        .badge { display: inline-flex; align-items: center; border-radius: 999px; padding: 4px 8px; font-size: 12px; background: #020617; border: 1px solid rgba(148,163,184,.2); color: #cbd5e1; }
         .favorite-list { display: grid; gap: 8px; }
         .favorite-item { display: flex; justify-content: space-between; gap: 8px; align-items: center; background: #020617; border: 1px solid rgba(148,163,184,.16); border-radius: 14px; padding: 10px; }
-        .favorite-item b { display: block; }
-        .favorite-item span { color: #94a3b8; font-size: 12px; }
-        @media (max-width: 1280px) {
-          .dashboard-layout { grid-template-columns: 300px minmax(520px, 1fr); }
-          .right-panel { grid-column: 1 / -1; height: auto; position: static; }
-          .metric-grid { grid-template-columns: repeat(4, 1fr); }
-        }
+        .empty { color: #94a3b8; padding: 18px; }
+        .error { color: #fecaca; background: rgba(127,29,29,.4); padding: 10px; border-radius: 12px; margin-top: 12px; }
+        @media (max-width: 1300px) { .summary-grid, .main-grid { grid-template-columns: 1fr; } .app-frame { grid-template-columns: 130px 1fr; } }
       `}</style>
 
-      <header className="top-bar">
-        <div className="top-left">
-          <button className="ghost small" onClick={() => navigate("/")}>← 返回首頁</button>
-          <div>
-            <div className="brand-title">AI 股票雷達 Pro</div>
-            <div className="brand-subtitle">Desktop Dashboard</div>
+      <div className="app-frame">
+        <aside className="left-nav">
+          <div className="logo">
+            <div className="logo-icon">↗</div>
+            <div><b>股市雷達</b><span>Quant Terminal</span></div>
           </div>
-        </div>
-        <div className="top-symbol">
-          <b>{stock?.symbol || query}</b>
-          <span>{stock?.name || "尚未載入股票資料"}</span>
-        </div>
-      </header>
-
-      <main className="dashboard-layout">
-        <aside className="side-panel">
-          <div className="section-title">
-            <h2>🔎 搜尋</h2>
-          </div>
-
-          <label>股票代碼或名稱</label>
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="例如 2330、AAPL、SPY"
-            onKeyDown={(e) => e.key === "Enter" && searchOne()}
-          />
-
-          <label>資料區間</label>
-          <select value={range} onChange={(e) => setRange(e.target.value)}>
-            <option value="3mo">3個月</option>
-            <option value="6mo">6個月</option>
-            <option value="1y">1年</option>
-            <option value="2y">2年</option>
-            <option value="5y">5年</option>
-          </select>
-
-          <div className="btn-row">
-            <button onClick={() => searchOne()} disabled={loading}>{loading ? "查詢中..." : "查詢股票"}</button>
-            {stock && favorites.some((item) => item.symbol === stock.symbol) ? (
-              <button className="danger" onClick={() => removeFavorite(stock.symbol)}>取消收藏</button>
-            ) : (
-              <button className="ghost" onClick={() => addFavorite(stock)}>收藏</button>
-            )}
-          </div>
-
-          {suggestion.length > 0 && (
-            <div className="chips">
-              {suggestion.map(([name, code]) => (
-                <button key={name} onClick={() => searchOne(code)}>{code} {name}</button>
-              ))}
-            </div>
-          )}
-
-          {error && <p className="error">{error}</p>}
-
-          <div className="divider" />
-
-          <div className="section-title">
-            <h2>📐 指標開關</h2>
-          </div>
-          <div className="indicator-toggle">
-            <label className="toggle-card"><input type="checkbox" checked={showMA5} onChange={(e) => setShowMA5(e.target.checked)} /> MA5 日線</label>
-            <label className="toggle-card"><input type="checkbox" checked={showMA20} onChange={(e) => setShowMA20(e.target.checked)} /> MA20 月線</label>
-            <label className="toggle-card"><input type="checkbox" checked={showMA60} onChange={(e) => setShowMA60(e.target.checked)} /> MA60 季線</label>
-            <label className="toggle-card"><input type="checkbox" checked={showBollinger} onChange={(e) => setShowBollinger(e.target.checked)} /> 布林通道</label>
-          </div>
-
-          <div className="divider" />
-
-          <div className="section-title">
-            <h2>⭐ 收藏</h2>
-          </div>
-          {favorites.length > 0 ? (
-            <div className="favorite-list">
-              {favorites.map((item) => (
-                <div className="favorite-item" key={item.symbol}>
-                  <div>
-                    <b>{item.symbol}</b>
-                    <span>{item.name}</span>
-                  </div>
-                  <div className="btn-row" style={{ marginTop: 0 }}>
-                    <button className="ghost small" onClick={() => searchOne(item.symbol)}>查看</button>
-                    <button className="danger small" onClick={() => removeFavorite(item.symbol)}>刪除</button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="empty">尚未收藏股票。</p>
-          )}
-
-          <div className="divider" />
-
-          <div className="section-title">
-            <h2>⚡ 掃描</h2>
-          </div>
-          <label>自選清單，最多 20 檔</label>
-          <textarea rows={4} value={watchText} onChange={(e) => setWatchText(e.target.value)} />
-          <div className="btn-row">
-            <button className="ghost" onClick={scanWatchList} disabled={scanning}>{scanning ? "掃描中..." : "掃描"}</button>
-            <button className={autoScan ? "danger" : "ghost"} onClick={() => setAutoScan((v) => !v)}>
-              {autoScan ? "停止5秒" : "5秒刷新"}
-            </button>
-          </div>
-          <p className="muted">自動刷新建議控制在 5～10 檔，避免 API 太慢。</p>
+          <button className={`nav-btn ${activeMenu === "analysis" ? "active" : ""}`} onClick={() => setActiveMenu("analysis")}>📊 分析看板</button>
+          <button className={`nav-btn ${activeMenu === "watchlist" ? "active" : ""}`} onClick={() => setActiveMenu("watchlist")}>⭐ 自選股票</button>
+          <button className={`nav-btn ${activeMenu === "signals" ? "active" : ""}`} onClick={() => setActiveMenu("signals")}>🚨 強勢掃描</button>
+          <button className={`nav-btn ${activeMenu === "report" ? "active" : ""}`} onClick={() => setActiveMenu("report")}>🧾 每日報告</button>
+          <button className={`nav-btn ${activeMenu === "settings" ? "active" : ""}`} onClick={() => setActiveMenu("settings")}>⚙️ 參數設定</button>
+          <button className="nav-btn" onClick={() => navigate("/")}>← 返回首頁</button>
         </aside>
 
-        <section className="main-panel">
-          <div className="stock-head">
-            <div className="stock-title">
-              <h1>{stock ? `${stock.symbol} ${stock.name}` : "請搜尋股票"}</h1>
-              <p className="muted">互動 K 線、MA5 / MA20、成交量</p>
+        <section className="content">
+          <header className="top-bar">
+            <div className="top-title">
+              <h1>股市分析</h1>
+              <p>追蹤台股、美股與 ETF，整合 AI 分數、K線、量價與進出場提示。</p>
             </div>
-            {stock && (
-              <div className={stock.changePct >= 0 ? "price up" : "price down"}>
-                {stock.close?.toFixed?.(2)}
-                <small>{stock.changePct.toFixed(2)}%</small>
-              </div>
-            )}
-          </div>
+            <div className="top-stats">
+              <div className="mini-stat"><span>目前標的</span><b>{stock?.symbol || query}</b></div>
+              <div className="mini-stat"><span>AI分數</span><b>{stock?.score ?? "--"}</b></div>
+              <div className="mini-stat"><span>勝率預測</span><b>{stock?.winRatePredict ? `${stock.winRatePredict}%` : "--"}</b></div>
+            </div>
+          </header>
 
-          {stock ? (
+          {activeMenu === "analysis" && (
             <>
-              <TradingChart stock={stock} showMA5={showMA5} showMA20={showMA20} showMA60={showMA60} showBollinger={showBollinger} />
-              <div className="tag-row">
-                {stock.tags.length ? stock.tags.map((t) => <span key={t}>{t}</span>) : <span>暫無強勢訊號</span>}
+              <div className="summary-grid">
+                <div className="card">
+                  <div className="section-title"><h2>加入自選或搜尋</h2></div>
+                  <label>股票代碼或名稱</label>
+                  <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="2330、00919、AAPL、SPY" onKeyDown={(e) => e.key === "Enter" && searchOne()} />
+                  <label>資料區間</label>
+                  <select value={range} onChange={(e) => setRange(e.target.value)}>
+                    <option value="3mo">3個月</option>
+                    <option value="6mo">6個月</option>
+                    <option value="1y">1年</option>
+                    <option value="2y">2年</option>
+                    <option value="5y">5年</option>
+                  </select>
+                  <div className="btn-row">
+                    <button onClick={() => searchOne()} disabled={loading}>{loading ? "查詢中..." : "查詢股票"}</button>
+                    <button className="ghost" onClick={() => addFavorite(stock)}>加入收藏</button>
+                  </div>
+                  {suggestion.length > 0 && <div className="chips">{suggestion.map(([name, code]) => <button key={name} onClick={() => searchOne(code)}>{code} {name}</button>)}</div>}
+                  {error && <p className="error">{error}</p>}
+                </div>
+
+                <div className="card">
+                  <div className="section-title"><h2>目前選股</h2></div>
+                  <h2>{stock?.symbol || query}</h2>
+                  <p className="muted">{stock?.name || "尚未載入資料"}</p>
+                  <div className={stock?.changePct >= 0 ? "price up" : "price down"}>{stock?.close?.toFixed?.(2) ?? "--"}<small>{stock?.changePct?.toFixed?.(2) ?? "--"}%</small></div>
+                </div>
+
+                <div className="card">
+                  <div className="section-title"><h2>市場寬度</h2></div>
+                  <div className="market-card">
+                    <div className="market-box"><span className="muted">上漲</span><b className="up">{marketStats.up}</b></div>
+                    <div className="market-box"><span className="muted">下跌</span><b className="down">{marketStats.down}</b></div>
+                    <div className="market-box"><span className="muted">平均</span><b className={marketStats.avg >= 0 ? "up" : "down"}>{marketStats.avg.toFixed(2)}%</b></div>
+                  </div>
+                </div>
+
+                <div className="card">
+                  <div className="section-title"><h2>AI 交易看板</h2></div>
+                  <button style={{ width: "100%" }} onClick={scanWatchList} disabled={scanning}>{scanning ? "掃描中..." : "執行強勢掃描"}</button>
+                  <p className="muted">用 AI 分數、勝率預測、量比與 RSI 進行排行。</p>
+                </div>
+              </div>
+
+              <div className="main-grid">
+                <div className="card">
+                  <div className="stock-head">
+                    <div className="stock-title">
+                      <h1>{stock ? `${stock.symbol} ${stock.name}` : "請搜尋股票"}</h1>
+                      <p className="muted">互動 K 線、MA5 / MA20 / MA60、布林通道、成交量</p>
+                    </div>
+                    {stock && <div className={stock.changePct >= 0 ? "price up" : "price down"}>{stock.close?.toFixed?.(2)}<small>{stock.changePct.toFixed(2)}%</small></div>}
+                  </div>
+                  {stock ? <TradingChart stock={stock} showMA5={showMA5} showMA20={showMA20} showMA60={showMA60} showBollinger={showBollinger} /> : <p className="empty">請從上方搜尋股票，或使用網址 /stock/2330。</p>}
+                  {stock && <div className="tag-row">{stock.tags.length ? stock.tags.map((t) => <span key={t}>{t}</span>) : <span>暫無強勢訊號</span>}</div>}
+                </div>
+
+                <div className="card">
+                  <div className="view-tabs">
+                    <button className={rightView === "ai" ? "active" : ""} onClick={() => setRightView("ai")}>AI</button>
+                    <button className={rightView === "signals" ? "active" : ""} onClick={() => setRightView("signals")}>訊號</button>
+                    <button className={rightView === "institution" ? "active" : ""} onClick={() => setRightView("institution")}>法人</button>
+                  </div>
+
+                  {rightView === "ai" && stock && (
+                    <>
+                      <div className={`trade-signal ${stock.tradeSignal.tone}`}>
+                        <div className="signal-action"><div><b>{stock.tradeSignal.action}</b><span>{stock.tradeSignal.label}</span></div><span className="badge">AI訊號</span></div>
+                        <div className="muted">主要理由</div>
+                        <ul className="signal-list">{stock.tradeSignal.reasons.map((r) => <li key={r}>{r}</li>)}</ul>
+                        <div className="muted" style={{ marginTop: 8 }}>風險提醒</div>
+                        <ul className="signal-list">{stock.tradeSignal.risk.map((r) => <li key={r}>{r}</li>)}</ul>
+                      </div>
+
+                      <div className="metric-grid">
+                        <div className="metric-card"><b>{stock.tradeSignal.stopLoss?.toFixed?.(2)}</b><span>停損 SL</span></div>
+                        <div className="metric-card"><b>{stock.tradeSignal.takeProfit?.toFixed?.(2)}</b><span>停利 TP</span></div>
+                        <div className="metric-card"><b>{stock.winRatePredict}%</b><span>勝率預測</span></div>
+                        <div className="metric-card"><b>{stock.score}</b><span>{stock.level}</span></div>
+                      </div>
+
+                      <div className="divider" />
+                      <div className="score-main"><b>{stock.score}</b><span>{stock.level}</span></div>
+                      <div className="metric-grid">
+                        <div className="metric-card"><b>{stock.rsi?.toFixed(1) ?? "--"}</b><span>RSI｜{stock.rsiLabel}</span></div>
+                        <div className="metric-card"><b>{stock.k?.toFixed(1) ?? "--"}</b><span>K 值</span></div>
+                        <div className="metric-card"><b>{stock.d?.toFixed(1) ?? "--"}</b><span>D 值</span></div>
+                        <div className="metric-card"><b>{stock.macdHist?.toFixed(2) ?? "--"}</b><span>MACD</span></div>
+                        <div className="metric-card"><b>{stock.ma5?.toFixed(2) ?? "--"}</b><span>MA5</span></div>
+                        <div className="metric-card"><b>{stock.ma20?.toFixed(2) ?? "--"}</b><span>MA20</span></div>
+                        <div className="metric-card"><b>{stock.volumeRatio?.toFixed(2) ?? "--"}</b><span>量比</span></div>
+                        <div className="metric-card"><b>{stock.backtest.trades}</b><span>交易次數</span></div>
+                      </div>
+                    </>
+                  )}
+
+                  {rightView === "signals" && stock && (
+                    <>
+                      <div className="signal-card"><b>{stock.volumeSignal.title}</b><p>{stock.volumeSignal.detail}</p></div>
+                      <div className="signal-card"><b>{stock.candlePattern.title}</b><p>{stock.candlePattern.detail}</p></div>
+                      <div className="signal-card"><b>RSI｜{stock.rsiLabel}</b><p>RSI 目前為 {stock.rsi?.toFixed(1) ?? "--"}。55 以上偏多，45 以下偏弱，70 以上需留意過熱。</p></div>
+                      <div className="signal-card"><b>布林通道</b><p>價格靠近上緣代表偏強但可能震盪，靠近下緣代表偏弱或反彈觀察。</p></div>
+                    </>
+                  )}
+
+                  {rightView === "institution" && (
+                    <>
+                      <div className="signal-card"><b>法人籌碼</b><p>法人資料頁面已建立。外資、投信、自營商資料需另接資料源後顯示每日買賣超。</p></div>
+                      <div className="signal-card"><b>法人解讀規則</b><p>外資連買 + 投信同步買超：偏多。三大法人同步買超：籌碼偏強。股價上漲但法人賣超：追價需保守。</p></div>
+                    </>
+                  )}
+
+                  {!stock && <p className="empty">尚無分析資料。</p>}
+                </div>
               </div>
             </>
-          ) : (
-            <p className="empty">請從左側搜尋股票，或使用網址 /stock/2330。</p>
           )}
 
-          {watchList.length > 0 && (
-            <div style={{ marginTop: 16 }}>
-              <div className="section-title">
-                <h2>🔥 自選排行榜</h2>
+          {activeMenu === "watchlist" && (
+            <div className="card">
+              <div className="section-title"><h2>自選股，即時台股與美股標的</h2><span className="muted">更新 {new Date().toLocaleString("zh-TW")}</span></div>
+              <div className="btn-row" style={{ marginBottom: 12 }}>
+                <button onClick={scanWatchList} disabled={scanning}>{scanning ? "掃描中..." : "更新自選資料"}</button>
+                <button className={autoScan ? "danger" : "ghost"} onClick={() => setAutoScan((v) => !v)}>{autoScan ? "停止5秒刷新" : "啟動5秒刷新"}</button>
+                <select value={sortMode} onChange={(e) => setSortMode(e.target.value)} style={{ width: 180 }}>
+                  <option value="score">AI分數排序</option>
+                  <option value="change">漲跌幅排序</option>
+                  <option value="volume">量比排序</option>
+                  <option value="rsi">RSI排序</option>
+                  <option value="win">勝率預測排序</option>
+                </select>
               </div>
-              <div className="watch-box">
+              <div className="table-wrap">
                 <table>
-                  <thead>
-                    <tr>
-                      <th>股票</th>
-                      <th>價格</th>
-                      <th>漲跌%</th>
-                      <th>RSI</th>
-                      <th>AI</th>
-                      <th>回測</th>
-                      <th>狀態</th>
-                      <th>收藏</th>
-                    </tr>
-                  </thead>
+                  <thead><tr><th>代號</th><th>市場</th><th>價格</th><th>漲跌</th><th>AI</th><th>勝率</th><th>量比</th><th>訊號</th><th>操作</th></tr></thead>
                   <tbody>
-                    {watchList.map((s) => (
-                      <tr key={s.symbol} onClick={() => setStock(s)}>
-                        <td>{s.symbol}<br />{s.name}</td>
-                        <td>{s.close?.toFixed?.(2)}</td>
+                    {sortedWatchList.map((s) => (
+                      <tr key={s.symbol} onClick={() => { setStock(s); setActiveMenu("analysis"); }}>
+                        <td><b>{s.symbol}</b><br /><span className="muted">{s.name}</span></td>
+                        <td><span className="badge">{s.currency === "USD" ? "美股" : "台股"}</span></td>
+                        <td>{s.currency} {s.close?.toFixed?.(2)}</td>
                         <td className={s.changePct >= 0 ? "up" : "down"}>{s.changePct.toFixed(2)}%</td>
-                        <td>{s.rsi?.toFixed(1) ?? "--"}</td>
-                        <td><span className="score">{s.score}</span></td>
-                        <td>{s.backtest.totalReturn}%</td>
-                        <td>{s.level}</td>
-                        <td>
-                          {favorites.some((item) => item.symbol === s.symbol) ? (
-                            <button className="danger small" onClick={(e) => { e.stopPropagation(); removeFavorite(s.symbol); }}>取消</button>
-                          ) : (
-                            <button className="ghost small" onClick={(e) => { e.stopPropagation(); addFavorite(s); }}>收藏</button>
-                          )}
-                        </td>
+                        <td>{s.score}</td>
+                        <td>{s.winRatePredict}%</td>
+                        <td>{s.volumeRatio?.toFixed(2) ?? "--"}</td>
+                        <td><span className="badge">{s.tradeSignal.action}</span></td>
+                        <td><button className="ghost small" onClick={(e) => { e.stopPropagation(); addFavorite(s); }}>收藏</button></td>
                       </tr>
                     ))}
                   </tbody>
@@ -907,135 +975,42 @@ export default function Stock() {
               </div>
             </div>
           )}
+
+          {activeMenu === "signals" && (
+            <div className="card">
+              <div className="section-title"><h2>🚨 即時強勢股掃描</h2></div>
+              <label>輸入股票清單，最多 30 檔</label>
+              <textarea rows={5} value={watchText} onChange={(e) => setWatchText(e.target.value)} />
+              <div className="btn-row"><button onClick={scanWatchList} disabled={scanning}>{scanning ? "掃描中..." : "開始掃描"}</button><button className="ghost" onClick={() => setSortMode("score")}>依 AI 排序</button><button className="ghost" onClick={() => setSortMode("win")}>依勝率排序</button></div>
+              {sortedWatchList.length > 0 && <div className="watch-table-card table-wrap"><table><thead><tr><th>排名</th><th>股票</th><th>AI</th><th>勝率</th><th>量比</th><th>訊號</th><th>理由</th></tr></thead><tbody>{sortedWatchList.map((s, i) => <tr key={s.symbol} onClick={() => { setStock(s); setActiveMenu("analysis"); }}><td>{i + 1}</td><td>{s.symbol}<br /><span className="muted">{s.name}</span></td><td>{s.score}</td><td>{s.winRatePredict}%</td><td>{s.volumeRatio?.toFixed(2) ?? "--"}</td><td><span className="badge">{s.tradeSignal.action}</span></td><td>{s.tradeSignal.reasons.slice(0,2).join("、")}</td></tr>)}</tbody></table></div>}
+            </div>
+          )}
+
+          {activeMenu === "report" && (
+            <div className="card">
+              <div className="section-title"><h2>🧾 每日交易報告</h2><span className="muted">Demo Report</span></div>
+              <div className="signal-card"><b>市場背景</b><p>目前依據自選清單統計，上漲 {marketStats.up} 檔，下跌 {marketStats.down} 檔，平均漲跌 {marketStats.avg.toFixed(2)}%。此報告可作為每日盤後觀察模板。</p></div>
+              <div className="signal-card"><b>AI摘要</b><p>{sortedWatchList.slice(0,3).map((s) => `${s.symbol}：${s.tradeSignal.action}，AI ${s.score} 分`).join("；") || "尚未掃描自選清單。"}</p></div>
+              <div className="signal-card"><b>操作提醒</b><p>BUY 僅代表進場觀察，不代表保證獲利；請搭配停損、停利與自身風險承受度。</p></div>
+            </div>
+          )}
+
+          {activeMenu === "settings" && (
+            <div className="card">
+              <div className="section-title"><h2>⚙️ 參數設定</h2></div>
+              <div className="indicator-toggle">
+                <label className="toggle-card"><input type="checkbox" checked={showMA5} onChange={(e) => setShowMA5(e.target.checked)} /> MA5 日線</label>
+                <label className="toggle-card"><input type="checkbox" checked={showMA20} onChange={(e) => setShowMA20(e.target.checked)} /> MA20 月線</label>
+                <label className="toggle-card"><input type="checkbox" checked={showMA60} onChange={(e) => setShowMA60(e.target.checked)} /> MA60 季線</label>
+                <label className="toggle-card"><input type="checkbox" checked={showBollinger} onChange={(e) => setShowBollinger(e.target.checked)} /> 布林通道</label>
+              </div>
+              <div className="divider" />
+              <label>自選清單</label>
+              <textarea rows={5} value={watchText} onChange={(e) => setWatchText(e.target.value)} />
+            </div>
+          )}
         </section>
-
-        <aside className="right-panel">
-          <div className="view-tabs">
-            <button className={rightView === "ai" ? "active" : ""} onClick={() => setRightView("ai")}>AI分析</button>
-            <button className={rightView === "signals" ? "active" : ""} onClick={() => setRightView("signals")}>指標訊號</button>
-            <button className={rightView === "institution" ? "active" : ""} onClick={() => setRightView("institution")}>法人</button>
-          </div>
-
-          {rightView === "ai" && (
-            <>
-              <div className="section-title">
-                <h2>🧠 AI 分析</h2>
-              </div>
-
-              {stock ? (
-                <>
-                  <div className="score-hero">
-                    <div className="score-main">
-                      <b>{stock.score}</b>
-                      <span>{stock.level}</span>
-                    </div>
-                  </div>
-
-                  <div className="metric-grid">
-                    <div className="metric-card"><b>{stock.rsi?.toFixed(1) ?? "--"}</b><span>RSI｜{stock.rsiLabel}</span></div>
-                    <div className="metric-card"><b>{stock.k?.toFixed(1) ?? "--"}</b><span>K 值</span></div>
-                    <div className="metric-card"><b>{stock.d?.toFixed(1) ?? "--"}</b><span>D 值</span></div>
-                    <div className="metric-card"><b>{stock.macdHist?.toFixed(2) ?? "--"}</b><span>MACD</span></div>
-                    <div className="metric-card"><b>{stock.ma5?.toFixed(2) ?? "--"}</b><span>MA5</span></div>
-                    <div className="metric-card"><b>{stock.ma20?.toFixed(2) ?? "--"}</b><span>MA20</span></div>
-                    <div className="metric-card"><b>{stock.volumeRatio?.toFixed(2) ?? "--"}</b><span>量比</span></div>
-                    <div className="metric-card"><b>{stock.backtest.trades}</b><span>交易次數</span></div>
-                  </div>
-
-                  <div className="divider" />
-
-                  <div className="section-title">
-                    <h2>📈 回測</h2>
-                  </div>
-                  <div className="metric-grid">
-                    <div className="metric-card"><b>{stock.backtest.totalReturn}%</b><span>策略報酬</span></div>
-                    <div className="metric-card"><b>{stock.backtest.winRate}%</b><span>勝率</span></div>
-                    <div className="metric-card"><b>{stock.backtest.maxDrawdown}%</b><span>最大回撤</span></div>
-                    <div className="metric-card"><b>{stock.backtest.trades}</b><span>交易數</span></div>
-                  </div>
-                </>
-              ) : (
-                <p className="empty">尚無分析資料。</p>
-              )}
-            </>
-          )}
-
-          {rightView === "signals" && (
-            <>
-              <div className="section-title">
-                <h2>📊 指標訊號</h2>
-              </div>
-
-              {stock ? (
-                <>
-                  <div className="signal-card">
-                    <b>{stock.volumeSignal.title}</b>
-                    <p>{stock.volumeSignal.detail}</p>
-                  </div>
-
-                  <div className="signal-card">
-                    <b>{stock.candlePattern.title}</b>
-                    <p>{stock.candlePattern.detail}</p>
-                  </div>
-
-                  <div className="signal-card">
-                    <b>RSI｜{stock.rsiLabel}</b>
-                    <p>RSI 目前為 {stock.rsi?.toFixed(1) ?? "--"}。55 以上偏多，45 以下偏弱，70 以上需留意過熱。</p>
-                  </div>
-
-                  <div className="signal-card">
-                    <b>布林通道</b>
-                    <p>布林通道已加入圖表開關。價格靠近上緣代表偏強但可能震盪，靠近下緣代表偏弱或反彈觀察。</p>
-                  </div>
-                </>
-              ) : (
-                <p className="empty">尚無指標資料。</p>
-              )}
-            </>
-          )}
-
-          {rightView === "institution" && (
-            <>
-              <div className="section-title">
-                <h2>🏦 法人籌碼</h2>
-              </div>
-
-              <div className="placeholder-box">
-                法人資料頁面已建立。外資、投信、自營商資料不屬於 Yahoo K 線資料，下一步需要另外接法人資料來源後，這裡就能顯示每日買賣超。
-              </div>
-
-              <div className="divider" />
-
-              <div className="institution-grid">
-                <div className="institution-card">
-                  <div className="row"><b>外資</b><span>Foreign Investors</span></div>
-                  <p className="muted">待接 API：今日買賣超、連續買賣天數、5日合計。</p>
-                </div>
-                <div className="institution-card">
-                  <div className="row"><b>投信</b><span>Investment Trust</span></div>
-                  <p className="muted">待接 API：投信買賣超、是否連買、波段法人動向。</p>
-                </div>
-                <div className="institution-card">
-                  <div className="row"><b>自營商</b><span>Dealer</span></div>
-                  <p className="muted">待接 API：自營商買賣超、避險或方向單變化。</p>
-                </div>
-              </div>
-
-              <div className="divider" />
-
-              <div className="signal-card">
-                <b>法人解讀規則</b>
-                <p>
-                  外資連買 + 投信同步買超：偏多。<br />
-                  股價上漲但法人賣超：追價需保守。<br />
-                  三大法人同步買超：籌碼偏強。<br />
-                  投信連買通常代表中線題材較明確。
-                </p>
-              </div>
-            </>
-          )}
-        </aside>
-      </main>
+      </div>
     </div>
   );
 }
