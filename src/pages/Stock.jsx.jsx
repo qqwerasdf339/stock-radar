@@ -596,6 +596,7 @@ export default function Stock() {
   const [showMA20, setShowMA20] = useState(true);
   const [showMA60, setShowMA60] = useState(true);
   const [showBollinger, setShowBollinger] = useState(true);
+  const [indicatorMenuOpen, setIndicatorMenuOpen] = useState(false);
 
   useEffect(() => {
     localStorage.setItem("stockRadarFavorites", JSON.stringify(favorites));
@@ -747,13 +748,13 @@ export default function Stock() {
       <style>{`
         body { margin: 0; background: #050914; color: #e5e7eb; font-family: Arial, 'Microsoft JhengHei', sans-serif; }
         button, input, select, textarea { font-family: inherit; }
-        button { border: 0; border-radius: 12px; padding: 10px 13px; background: #22d3ee; color: #06202a; font-weight: 900; cursor: pointer; }
+        button { border: 0; border-radius: 10px; padding: 8px 11px; background: #22d3ee; color: #06202a; font-weight: 900; cursor: pointer; font-size: 13px; }
         button:disabled { opacity: .55; cursor: not-allowed; }
         button.ghost { background: #111827; color: #e5e7eb; border: 1px solid #334155; }
         button.danger { background: #fb7185; color: #450a0a; }
         button.small { padding: 7px 9px; font-size: 12px; }
-        input, textarea, select { width: 100%; box-sizing: border-box; background: #020617; color: #e5e7eb; border: 1px solid #334155; border-radius: 12px; padding: 11px; outline: none; }
-        label { display: block; color: #cbd5e1; margin: 12px 0 8px; font-size: 13px; }
+        input, textarea, select { width: 100%; box-sizing: border-box; background: #020617; color: #e5e7eb; border: 1px solid #334155; border-radius: 10px; padding: 9px; outline: none; font-size: 13px; }
+        label { display: block; color: #cbd5e1; margin: 9px 0 6px; font-size: 12px; }
         h1, h2, h3 { margin: 0; }
         .terminal-shell { min-height: 100vh; background: radial-gradient(circle at top left, #1e293b, #050914 50%); }
         #root { width: 100vw; min-height: 100vh; margin: 0; padding: 0; }
@@ -769,24 +770,27 @@ export default function Stock() {
         .nav-btn.active { color: #67e8f9; background: rgba(34,211,238,.12); border-color: rgba(34,211,238,.35); }
         .content { padding: 16px; margin-left: 170px; }
         .top-bar { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
-        .top-title h1 { font-size: 28px; }
+        .top-title h1 { font-size: 24px; }
         .top-title p { color: #94a3b8; font-size: 13px; margin: 6px 0 0; }
         .top-stats { display: flex; gap: 12px; align-items: center; }
-        .mini-stat { min-width: 92px; background: rgba(15,23,42,.86); border: 1px solid rgba(148,163,184,.18); border-radius: 14px; padding: 10px 12px; }
+        .mini-stat { min-width: 82px; background: rgba(15,23,42,.86); border: 1px solid rgba(148,163,184,.18); border-radius: 12px; padding: 8px 10px; }
         .mini-stat span { color: #94a3b8; font-size: 11px; }
         .mini-stat b { display: block; font-size: 17px; margin-top: 3px; }
-        .card { background: rgba(15,23,42,.84); border: 1px solid rgba(148,163,184,.18); border-radius: 18px; box-shadow: 0 18px 50px rgba(0,0,0,.32); padding: 16px; }
+        .card { background: rgba(15,23,42,.84); border: 1px solid rgba(148,163,184,.18); border-radius: 14px; box-shadow: 0 14px 36px rgba(0,0,0,.28); padding: 12px; }
         .favorite-action { background: linear-gradient(135deg, #facc15, #fb923c); color: #1f1300; }
         .favorite-action.saved { background: #14532d; color: #bbf7d0; border: 1px solid rgba(34,197,94,.45); }
         .favorite-notice { margin-top: 8px; color: #facc15; font-size: 13px; }
         .watch-actions { position: relative; display: inline-block; }
         .watch-menu { position: absolute; right: 0; top: 44px; z-index: 20; width: 280px; background: #020617; border: 1px solid rgba(148,163,184,.25); border-radius: 16px; padding: 12px; box-shadow: 0 18px 50px rgba(0,0,0,.45); }
-        .chart-tools { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
-        .chart-tools .indicator-toggle { margin-top: 0; min-width: 440px; }
-        .summary-grid { display: grid; grid-template-columns: 1.1fr 1fr .8fr 1fr; gap: 12px; margin-bottom: 12px; }
-        .main-grid { display: grid; grid-template-columns: minmax(680px, 1fr) 390px; gap: 12px; align-items: start; }
+        .chart-tools { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+        .indicator-dropdown { position: relative; }
+        .indicator-menu { position: absolute; right: 0; top: 42px; z-index: 30; width: 230px; background: #020617; border: 1px solid rgba(148,163,184,.25); border-radius: 14px; padding: 10px; box-shadow: 0 18px 50px rgba(0,0,0,.45); }
+        .indicator-menu .toggle-card { margin-bottom: 8px; }
+        .indicator-menu .toggle-card:last-child { margin-bottom: 0; }
+        .summary-grid { display: grid; grid-template-columns: 1.1fr 1fr .8fr 1fr; gap: 10px; margin-bottom: 10px; }
+        .main-grid { display: grid; grid-template-columns: minmax(680px, 1fr) 370px; gap: 10px; align-items: start; }
         .section-title { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
-        .section-title h2 { font-size: 18px; }
+        .section-title h2 { font-size: 16px; }
         .muted { color: #94a3b8; font-size: 13px; }
         .btn-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
         .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
@@ -799,8 +803,8 @@ export default function Stock() {
         .down { color: #fb7185; }
         .neutral { color: #facc15; }
         .stock-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 12px; }
-        .stock-title h1 { font-size: 24px; margin-bottom: 5px; }
-        .price { font-size: 30px; font-weight: 900; text-align: right; }
+        .stock-title h1 { font-size: 21px; margin-bottom: 4px; }
+        .price { font-size: 26px; font-weight: 900; text-align: right; }
         .price small { display: block; font-size: 14px; margin-top: 4px; }
         .trading-chart { width: 100%; min-height: 560px; border-radius: 16px; overflow: hidden; background: #020617; }
         .tag-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
@@ -815,8 +819,8 @@ export default function Stock() {
         .score-main b { display: block; font-size: 48px; line-height: 1; }
         .score-main span { color: #bfdbfe; font-size: 13px; }
         .metric-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
-        .metric-card { background: #020617; border: 1px solid rgba(148,163,184,.18); border-radius: 14px; padding: 13px; }
-        .metric-card b { display: block; font-size: 20px; margin-bottom: 4px; }
+        .metric-card { background: #020617; border: 1px solid rgba(148,163,184,.18); border-radius: 12px; padding: 10px; }
+        .metric-card b { display: block; font-size: 17px; margin-bottom: 3px; }
         .metric-card span { color: #94a3b8; font-size: 12px; }
         .trade-signal { border-radius: 18px; padding: 16px; margin-bottom: 14px; border: 1px solid rgba(148,163,184,.22); background: #020617; }
         .trade-signal.buy { border-color: rgba(34,197,94,.45); background: rgba(20,83,45,.2); }
@@ -841,7 +845,7 @@ export default function Stock() {
         .favorite-item { display: flex; justify-content: space-between; gap: 8px; align-items: center; background: #020617; border: 1px solid rgba(148,163,184,.16); border-radius: 14px; padding: 10px; }
         .empty { color: #94a3b8; padding: 18px; }
         .error { color: #fecaca; background: rgba(127,29,29,.4); padding: 10px; border-radius: 12px; margin-top: 12px; }
-        @media (max-width: 1300px) { .summary-grid, .main-grid { grid-template-columns: 1fr; } .left-nav { width: 150px; } .content { margin-left: 150px; } .chart-tools { align-items: stretch; flex-direction: column; } .chart-tools .indicator-toggle { min-width: 0; width: 100%; } }
+        @media (max-width: 1300px) { .summary-grid, .main-grid { grid-template-columns: 1fr; } .left-nav { width: 150px; } .content { margin-left: 150px; } .chart-tools { align-items: stretch; } }
       `}</style>
 
       <div className="app-frame">
@@ -854,7 +858,6 @@ export default function Stock() {
           <button className={`nav-btn ${activeMenu === "watchlist" ? "active" : ""}`} onClick={() => setActiveMenu("watchlist")}>⭐ 自選股票</button>
           <button className={`nav-btn ${activeMenu === "signals" ? "active" : ""}`} onClick={() => setActiveMenu("signals")}>🚨 強勢掃描</button>
           <button className={`nav-btn ${activeMenu === "report" ? "active" : ""}`} onClick={() => setActiveMenu("report")}>🧾 每日報告</button>
-          <button className={`nav-btn ${activeMenu === "settings" ? "active" : ""}`} onClick={() => setActiveMenu("settings")}>⚙️ 參數設定</button>
           <button className="nav-btn" onClick={() => navigate("/")}>← 返回首頁</button>
         </aside>
 
@@ -937,11 +940,16 @@ export default function Stock() {
 
                   <div className="chart-tools">
                     <div className="muted">圖表指標</div>
-                    <div className="indicator-toggle">
-                      <label className="toggle-card"><input type="checkbox" checked={showMA5} onChange={(e) => setShowMA5(e.target.checked)} /> MA5 日線</label>
-                      <label className="toggle-card"><input type="checkbox" checked={showMA20} onChange={(e) => setShowMA20(e.target.checked)} /> MA20 月線</label>
-                      <label className="toggle-card"><input type="checkbox" checked={showMA60} onChange={(e) => setShowMA60(e.target.checked)} /> MA60 季線</label>
-                      <label className="toggle-card"><input type="checkbox" checked={showBollinger} onChange={(e) => setShowBollinger(e.target.checked)} /> 布林通道</label>
+                    <div className="indicator-dropdown">
+                      <button className="ghost" onClick={() => setIndicatorMenuOpen((v) => !v)}>技術指標 ▾</button>
+                      {indicatorMenuOpen && (
+                        <div className="indicator-menu">
+                          <label className="toggle-card"><input type="checkbox" checked={showMA5} onChange={(e) => setShowMA5(e.target.checked)} /> MA5 日線</label>
+                          <label className="toggle-card"><input type="checkbox" checked={showMA20} onChange={(e) => setShowMA20(e.target.checked)} /> MA20 月線</label>
+                          <label className="toggle-card"><input type="checkbox" checked={showMA60} onChange={(e) => setShowMA60(e.target.checked)} /> MA60 季線</label>
+                          <label className="toggle-card"><input type="checkbox" checked={showBollinger} onChange={(e) => setShowBollinger(e.target.checked)} /> 布林通道</label>
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -1057,7 +1065,26 @@ export default function Stock() {
                         <td>{s.winRatePredict}%</td>
                         <td>{s.volumeRatio?.toFixed(2) ?? "--"}</td>
                         <td><span className="badge">{s.tradeSignal.action}</span></td>
-                        <td><button className="ghost small" onClick={(e) => { e.stopPropagation(); addFavorite(s); }}>收藏</button></td>
+                        <td>
+                          <button className="ghost small" onClick={(e) => { e.stopPropagation(); addFavorite(s); }}>收藏</button>{" "}
+                          <button
+                        className="danger small"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                             setWatchText((prev) =>
+                                prev
+                                   .split(/[ ,，\n]+/)
+                             .map((x) => x.trim().toUpperCase())
+        .filter(Boolean)
+        .filter((item) => item !== s.symbol.toUpperCase())
+        .join(",")
+    );
+    setWatchList((prev) => prev.filter((item) => item.symbol !== s.symbol));
+  }}
+>
+  刪除
+</button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -1082,21 +1109,6 @@ export default function Stock() {
               <div className="signal-card"><b>市場背景</b><p>目前依據自選清單統計，上漲 {marketStats.up} 檔，下跌 {marketStats.down} 檔，平均漲跌 {marketStats.avg.toFixed(2)}%。此報告可作為每日盤後觀察模板。</p></div>
               <div className="signal-card"><b>AI摘要</b><p>{sortedWatchList.slice(0,3).map((s) => `${s.symbol}：${s.tradeSignal.action}，AI ${s.score} 分`).join("；") || "尚未掃描自選清單。"}</p></div>
               <div className="signal-card"><b>操作提醒</b><p>BUY 僅代表進場觀察，不代表保證獲利；請搭配停損、停利與自身風險承受度。</p></div>
-            </div>
-          )}
-
-          {activeMenu === "settings" && (
-            <div className="card">
-              <div className="section-title"><h2>⚙️ 參數設定</h2></div>
-              <div className="indicator-toggle">
-                <label className="toggle-card"><input type="checkbox" checked={showMA5} onChange={(e) => setShowMA5(e.target.checked)} /> MA5 日線</label>
-                <label className="toggle-card"><input type="checkbox" checked={showMA20} onChange={(e) => setShowMA20(e.target.checked)} /> MA20 月線</label>
-                <label className="toggle-card"><input type="checkbox" checked={showMA60} onChange={(e) => setShowMA60(e.target.checked)} /> MA60 季線</label>
-                <label className="toggle-card"><input type="checkbox" checked={showBollinger} onChange={(e) => setShowBollinger(e.target.checked)} /> 布林通道</label>
-              </div>
-              <div className="divider" />
-              <label>自選清單</label>
-              <textarea rows={5} value={watchText} onChange={(e) => setWatchText(e.target.value)} />
             </div>
           )}
         </section>
