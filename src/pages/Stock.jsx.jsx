@@ -350,6 +350,102 @@ function predictWinRate({ score, rsi, trendUp, longTrendUp, volumeRatio, backtes
   return Math.max(15, Math.min(85, Math.round(rate)));
 }
 
+function analyzeDayTrade(stock) {
+  if (!stock?.close) return null;
+
+  const reasons = [];
+  const risks = [];
+  let score = 0;
+
+  const volumeRatio = stock.volumeRatio ?? 0;
+  const rsi = stock.rsi ?? 50;
+  const macdHist = stock.macdHist ?? 0;
+  const changePct = stock.changePct ?? 0;
+  const close = stock.close;
+
+  if (volumeRatio >= 1.8) {
+    score += 30;
+    reasons.push("開盤或盤中明顯放量");
+  } else if (volumeRatio >= 1.3) {
+    score += 20;
+    reasons.push("量能放大");
+  } else {
+    risks.push("量能不足，容易假突破");
+  }
+
+  if (changePct >= 0.6 && changePct <= 4.5) {
+    score += 20;
+    reasons.push("漲幅有動能但尚未過熱");
+  } else if (changePct > 4.5) {
+    score += 6;
+    risks.push("漲幅過大，追高風險較高");
+  } else if (changePct < 0) {
+    risks.push("目前為下跌，當沖偏弱");
+  }
+
+  if (rsi >= 50 && rsi <= 70) {
+    score += 18;
+    reasons.push("RSI 位於健康偏多區");
+  } else if (rsi > 75) {
+    score -= 12;
+    risks.push("RSI 過熱，容易拉回");
+  } else if (rsi < 45) {
+    score -= 8;
+    risks.push("RSI 偏弱，買盤不足");
+  }
+
+  if (macdHist > 0) {
+    score += 16;
+    reasons.push("MACD 短線動能翻正");
+  } else {
+    risks.push("MACD 尚未轉強");
+  }
+
+  if (stock.ma5 && close > stock.ma5) score += 8;
+  else risks.push("價格尚未站上 MA5");
+
+  if (stock.ma20 && close > stock.ma20) score += 8;
+  else risks.push("價格尚未站上 MA20");
+
+  if (stock.candlePattern?.title?.includes("長上影")) {
+    score -= 14;
+    risks.push("長上影線，上方賣壓較大");
+  }
+
+  if (stock.volumeSignal?.title?.includes("出貨")) {
+    score -= 18;
+    risks.push("爆量不漲，有出貨疑慮");
+  }
+
+  const finalScore = Math.max(0, Math.min(100, Math.round(score)));
+  const canEnter = finalScore >= 72 && !stock.volumeSignal?.title?.includes("出貨") && rsi < 75;
+
+  let signal = "❌ 不建議當沖";
+  let tone = "sell";
+  if (canEnter) {
+    signal = "🔥 現在可進場觀察";
+    tone = "buy";
+  } else if (finalScore >= 55) {
+    signal = "⚡ 觀察，等突破再進";
+    tone = "hold";
+  }
+
+  const stopLoss = close * 0.985;
+  const takeProfit = close * 1.025;
+
+  return {
+    score: finalScore,
+    signal,
+    tone,
+    canEnter,
+    entry: close,
+    stopLoss,
+    takeProfit,
+    reasons: reasons.length ? reasons : ["尚未出現明確當沖優勢"],
+    risks: risks.length ? risks : ["仍需嚴格控管停損與成交量變化"],
+  };
+}
+
 function analyzeStock(stock) {
   const { history } = stock;
   const closes = history.map((x) => x.close).filter(Boolean);
@@ -454,6 +550,21 @@ function analyzeStock(stock) {
     atr,
   });
 
+  const dayTrade = analyzeDayTrade({
+    ...stock,
+    close,
+    changePct,
+    volume: latest?.volume || 0,
+    volumeRatio,
+    rsi,
+    macdHist: macd.hist,
+    ma5,
+    ma20,
+    ma60,
+    volumeSignal,
+    candlePattern,
+  });
+
   return {
     ...stock,
     close,
@@ -476,6 +587,7 @@ function analyzeStock(stock) {
     rsiLabel: rsiText(rsi),
     tradeSignal,
     winRatePredict,
+    dayTrade,
   };
 }
 
@@ -592,6 +704,10 @@ export default function Stock() {
   const [favoriteNotice, setFavoriteNotice] = useState("");
   const [activeMenu, setActiveMenu] = useState("analysis");
   const [sortMode, setSortMode] = useState("score");
+  const [intradayInterval, setIntradayInterval] = useState("5m");
+  const [intradayStock, setIntradayStock] = useState(null);
+  const [dayTradeList, setDayTradeList] = useState([]);
+  const [dayTradeLoading, setDayTradeLoading] = useState(false);
   const [showMA5, setShowMA5] = useState(true);
   const [showMA20, setShowMA20] = useState(true);
   const [showMA60, setShowMA60] = useState(true);
@@ -678,7 +794,7 @@ export default function Stock() {
     setError("");
     try {
       const items = watchText
-        .split(/[ ,，\n]+/)
+        .split(/[ ,，]+/)
         .map((x) => x.trim())
         .filter(Boolean)
         .slice(0, 30);
@@ -700,6 +816,60 @@ export default function Stock() {
       setError(err.message || "自選清單掃描失敗");
     } finally {
       setScanning(false);
+    }
+  }
+
+  async function searchIntraday(input = query) {
+    const target = String(input || "").trim();
+    if (!target) return;
+    setDayTradeLoading(true);
+    setError("");
+    try {
+      const data = await fetchYahooHistory(target, "1d", intradayInterval);
+      const analyzed = analyzeStock(data);
+      setIntradayStock(analyzed);
+      setStock(analyzed);
+      setQuery(target);
+    } catch (err) {
+      console.error(err);
+      setError(err.message || "分K資料抓取失敗");
+    } finally {
+      setDayTradeLoading(false);
+    }
+  }
+
+  async function scanDayTradeList() {
+    setDayTradeLoading(true);
+    setError("");
+    try {
+      const items = watchText
+        .split(/[ ,，]+/)
+        .map((x) => x.trim())
+        .filter(Boolean)
+        .slice(0, 30);
+
+      const result = [];
+      for (const item of items) {
+        try {
+          const data = await fetchYahooHistory(item, "1d", intradayInterval);
+          const analyzed = analyzeStock(data);
+          result.push(analyzed);
+          await sleep(120);
+        } catch (err) {
+          console.warn("daytrade scan failed", item, err);
+        }
+      }
+
+      result.sort((a, b) => (b.dayTrade?.score || 0) - (a.dayTrade?.score || 0));
+      setDayTradeList(result);
+      if (result[0]) {
+        setIntradayStock(result[0]);
+        setStock(result[0]);
+      }
+    } catch (err) {
+      setError(err.message || "當沖掃描失敗");
+    } finally {
+      setDayTradeLoading(false);
     }
   }
 
@@ -727,6 +897,10 @@ export default function Stock() {
     };
     return list.sort(sorters[sortMode] || sorters.score);
   }, [watchList, sortMode]);
+
+  const sortedDayTradeList = useMemo(() => {
+    return [...dayTradeList].sort((a, b) => (b.dayTrade?.score || 0) - (a.dayTrade?.score || 0));
+  }, [dayTradeList]);
 
   const marketStats = useMemo(() => {
     const up = watchList.filter((s) => s.changePct > 0).length;
@@ -833,6 +1007,16 @@ export default function Stock() {
         .signal-card { background: #020617; border: 1px solid rgba(148,163,184,.18); border-radius: 14px; padding: 14px; margin-top: 10px; }
         .signal-card b { display: block; font-size: 16px; margin-bottom: 6px; }
         .signal-card p { color: #94a3b8; font-size: 13px; line-height: 1.55; margin: 0; }
+        .daytrade-grid { display: grid; grid-template-columns: 1.1fr .9fr; gap: 12px; align-items: start; }
+        .daytrade-score { background: linear-gradient(135deg, rgba(34,211,238,.18), rgba(34,197,94,.14)); border: 1px solid rgba(34,211,238,.28); border-radius: 18px; padding: 18px; text-align: center; }
+        .daytrade-score b { display: block; font-size: 54px; line-height: 1; }
+        .daytrade-score span { color: #bae6fd; font-weight: 900; }
+        .entry-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 12px; }
+        .entry-box { background: #020617; border: 1px solid rgba(148,163,184,.18); border-radius: 14px; padding: 12px; text-align: center; }
+        .entry-box b { display: block; font-size: 20px; margin-top: 4px; }
+        .radar-alert { border-radius: 16px; padding: 14px; margin-bottom: 12px; border: 1px solid rgba(250,204,21,.35); background: rgba(113,63,18,.2); }
+        .radar-alert.good { border-color: rgba(34,197,94,.45); background: rgba(20,83,45,.24); }
+        .radar-alert.bad { border-color: rgba(248,113,113,.45); background: rgba(127,29,29,.2); }
         .watch-table-card { margin-top: 12px; }
         .table-wrap { overflow: auto; border: 1px solid rgba(148,163,184,.16); border-radius: 16px; }
         table { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -857,6 +1041,7 @@ export default function Stock() {
           <button className={`nav-btn ${activeMenu === "analysis" ? "active" : ""}`} onClick={() => setActiveMenu("analysis")}>📊 分析看板</button>
           <button className={`nav-btn ${activeMenu === "watchlist" ? "active" : ""}`} onClick={() => setActiveMenu("watchlist")}>⭐ 自選股票</button>
           <button className={`nav-btn ${activeMenu === "signals" ? "active" : ""}`} onClick={() => setActiveMenu("signals")}>🚨 強勢掃描</button>
+          <button className={`nav-btn ${activeMenu === "daytrade" ? "active" : ""}`} onClick={() => setActiveMenu("daytrade")}>⚡ 當沖模式</button>
           <button className={`nav-btn ${activeMenu === "report" ? "active" : ""}`} onClick={() => setActiveMenu("report")}>🧾 每日報告</button>
           <button className="nav-btn" onClick={() => navigate("/")}>← 返回首頁</button>
         </aside>
@@ -1067,23 +1252,7 @@ export default function Stock() {
                         <td><span className="badge">{s.tradeSignal.action}</span></td>
                         <td>
                           <button className="ghost small" onClick={(e) => { e.stopPropagation(); addFavorite(s); }}>收藏</button>{" "}
-                          <button
-                        className="danger small"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                             setWatchText((prev) =>
-                                prev
-                                   .split(/[ ,，\n]+/)
-                             .map((x) => x.trim().toUpperCase())
-        .filter(Boolean)
-        .filter((item) => item !== s.symbol.toUpperCase())
-        .join(",")
-    );
-    setWatchList((prev) => prev.filter((item) => item.symbol !== s.symbol));
-  }}
->
-  刪除
-</button>
+                          <button className="danger small" onClick={(e) => { e.stopPropagation(); removeFavorite(s.symbol); }}>刪除</button>
                         </td>
                       </tr>
                     ))}
@@ -1103,12 +1272,156 @@ export default function Stock() {
             </div>
           )}
 
+          {activeMenu === "daytrade" && (
+            <div className="card">
+              <div className="section-title">
+                <h2>⚡ 當沖模式</h2>
+                <span className="muted">1 / 5 / 15 分K、開盤爆量雷達、進出場提示</span>
+              </div>
+
+              <div className="btn-row" style={{ marginBottom: 12 }}>
+                <input
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="輸入 2330、00919、AAPL"
+                  style={{ width: 220 }}
+                  onKeyDown={(e) => e.key === "Enter" && searchIntraday()}
+                />
+                <select value={intradayInterval} onChange={(e) => setIntradayInterval(e.target.value)} style={{ width: 150 }}>
+                  <option value="1m">1分鐘K</option>
+                  <option value="5m">5分鐘K</option>
+                  <option value="15m">15分鐘K</option>
+                  <option value="30m">30分鐘K</option>
+                  <option value="60m">60分鐘K</option>
+                </select>
+                <button onClick={() => searchIntraday()} disabled={dayTradeLoading}>{dayTradeLoading ? "讀取中..." : "查詢分K"}</button>
+                <button className="ghost" onClick={scanDayTradeList} disabled={dayTradeLoading}>{dayTradeLoading ? "掃描中..." : "掃描當沖排行榜"}</button>
+              </div>
+
+              {error && <p className="error">{error}</p>}
+
+              <div className="daytrade-grid">
+                <div>
+                  <div className="card" style={{ marginBottom: 12 }}>
+                    <div className="stock-head">
+                      <div className="stock-title">
+                        <h1>{intradayStock ? `${intradayStock.symbol} ${intradayStock.name}` : "請查詢分K標的"}</h1>
+                        <p className="muted">目前使用 {intradayInterval}，資料來源為 Yahoo Finance 分K。</p>
+                      </div>
+                      {intradayStock && <div className={intradayStock.changePct >= 0 ? "price up" : "price down"}>{intradayStock.close?.toFixed?.(2)}<small>{intradayStock.changePct.toFixed(2)}%</small></div>}
+                    </div>
+
+                    {intradayStock ? (
+                      <TradingChart stock={intradayStock} showMA5={showMA5} showMA20={showMA20} showMA60={false} showBollinger={showBollinger} />
+                    ) : (
+                      <p className="empty">輸入股票後點「查詢分K」。</p>
+                    )}
+                  </div>
+
+                  {sortedDayTradeList.length > 0 && (
+                    <div className="table-wrap">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>排名</th>
+                            <th>股票</th>
+                            <th>當沖分</th>
+                            <th>量比</th>
+                            <th>漲跌</th>
+                            <th>提示</th>
+                            <th>進場</th>
+                            <th>停損</th>
+                            <th>停利</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {sortedDayTradeList.map((s, i) => (
+                            <tr key={s.symbol} onClick={() => { setIntradayStock(s); setStock(s); }}>
+                              <td>{i + 1}</td>
+                              <td><b>{s.symbol}</b><br /><span className="muted">{s.name}</span></td>
+                              <td>{s.dayTrade?.score ?? "--"}</td>
+                              <td>{s.volumeRatio?.toFixed(2) ?? "--"}</td>
+                              <td className={s.changePct >= 0 ? "up" : "down"}>{s.changePct.toFixed(2)}%</td>
+                              <td><span className="badge">{s.dayTrade?.signal}</span></td>
+                              <td>{s.dayTrade?.entry?.toFixed?.(2)}</td>
+                              <td className="down">{s.dayTrade?.stopLoss?.toFixed?.(2)}</td>
+                              <td className="up">{s.dayTrade?.takeProfit?.toFixed?.(2)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  {intradayStock?.dayTrade ? (
+                    <>
+                      <div className={`radar-alert ${intradayStock.dayTrade.canEnter ? "good" : intradayStock.dayTrade.score < 45 ? "bad" : ""}`}>
+                        <b>{intradayStock.dayTrade.signal}</b>
+                        <p className="muted" style={{ marginBottom: 0 }}>當沖分數 {intradayStock.dayTrade.score}，量比 {intradayStock.volumeRatio?.toFixed(2) ?? "--"}</p>
+                      </div>
+
+                      <div className="daytrade-score">
+                        <b>{intradayStock.dayTrade.score}</b>
+                        <span>{intradayStock.dayTrade.signal}</span>
+                      </div>
+
+                      <div className="entry-grid">
+                        <div className="entry-box"><span className="muted">進場</span><b>{intradayStock.dayTrade.entry?.toFixed?.(2)}</b></div>
+                        <div className="entry-box"><span className="muted">停損</span><b className="down">{intradayStock.dayTrade.stopLoss?.toFixed?.(2)}</b></div>
+                        <div className="entry-box"><span className="muted">停利</span><b className="up">{intradayStock.dayTrade.takeProfit?.toFixed?.(2)}</b></div>
+                      </div>
+
+                      <div className="signal-card">
+                        <b>🔥 開盤爆量雷達</b>
+                        <p>{intradayStock.volumeSignal.title}。{intradayStock.volumeSignal.detail}</p>
+                      </div>
+
+                      <div className="signal-card">
+                        <b>現在可進場判斷</b>
+                        <p>{intradayStock.dayTrade.canEnter ? "條件達標，可列入當沖進場觀察。" : "條件尚未完整達標，建議等待突破、量能或K線確認。"}</p>
+                      </div>
+
+                      <div className="signal-card">
+                        <b>主要理由</b>
+                        <p>{intradayStock.dayTrade.reasons.join("、")}</p>
+                      </div>
+
+                      <div className="signal-card">
+                        <b>風險提醒</b>
+                        <p>{intradayStock.dayTrade.risks.join("、")}</p>
+                      </div>
+                    </>
+                  ) : (
+                    <p className="empty">尚無當沖資料。</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
           {activeMenu === "report" && (
             <div className="card">
               <div className="section-title"><h2>🧾 每日交易報告</h2><span className="muted">Demo Report</span></div>
               <div className="signal-card"><b>市場背景</b><p>目前依據自選清單統計，上漲 {marketStats.up} 檔，下跌 {marketStats.down} 檔，平均漲跌 {marketStats.avg.toFixed(2)}%。此報告可作為每日盤後觀察模板。</p></div>
               <div className="signal-card"><b>AI摘要</b><p>{sortedWatchList.slice(0,3).map((s) => `${s.symbol}：${s.tradeSignal.action}，AI ${s.score} 分`).join("；") || "尚未掃描自選清單。"}</p></div>
               <div className="signal-card"><b>操作提醒</b><p>BUY 僅代表進場觀察，不代表保證獲利；請搭配停損、停利與自身風險承受度。</p></div>
+            </div>
+          )}
+
+          {activeMenu === "settings" && (
+            <div className="card">
+              <div className="section-title"><h2>⚙️ 參數設定</h2></div>
+              <div className="indicator-toggle">
+                <label className="toggle-card"><input type="checkbox" checked={showMA5} onChange={(e) => setShowMA5(e.target.checked)} /> MA5 日線</label>
+                <label className="toggle-card"><input type="checkbox" checked={showMA20} onChange={(e) => setShowMA20(e.target.checked)} /> MA20 月線</label>
+                <label className="toggle-card"><input type="checkbox" checked={showMA60} onChange={(e) => setShowMA60(e.target.checked)} /> MA60 季線</label>
+                <label className="toggle-card"><input type="checkbox" checked={showBollinger} onChange={(e) => setShowBollinger(e.target.checked)} /> 布林通道</label>
+              </div>
+              <div className="divider" />
+              <label>自選清單</label>
+              <textarea rows={5} value={watchText} onChange={(e) => setWatchText(e.target.value)} />
             </div>
           )}
         </section>
