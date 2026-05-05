@@ -9,7 +9,6 @@ export default function App() {
         <Route path="/" element={<Stock />} />
         <Route path="/stock/:symbol" element={<Stock />} />
         <Route path="/favorites" element={<Favorites />} />
-        <Route path="/daily" element={<DailyReport />} />
       </Routes>
     </BrowserRouter>
   );
