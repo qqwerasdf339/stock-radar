@@ -1,3 +1,4 @@
+import DailyReport from "./pages/DailyReport";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Stock from "./pages/Stock.jsx";
 import Favorites from "./pages/Favorites.jsx";
@@ -9,6 +10,7 @@ export default function App() {
         <Route path="/" element={<Stock />} />
         <Route path="/stock/:symbol" element={<Stock />} />
         <Route path="/favorites" element={<Favorites />} />
+        <Route path="/daily" element={<DailyReport />} />
       </Routes>
     </BrowserRouter>
   );

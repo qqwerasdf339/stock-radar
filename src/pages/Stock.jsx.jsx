@@ -1234,7 +1234,7 @@ export default function Stock() {
           <button className={`nav-btn ${activeMenu === "watchlist" ? "active" : ""}`} onClick={() => setActiveMenu("watchlist")}>⭐ 自選股票</button>
           <button className={`nav-btn ${activeMenu === "signals" ? "active" : ""}`} onClick={() => setActiveMenu("signals")}>🚨 強勢掃描</button>
           <button className={`nav-btn ${activeMenu === "daytrade" ? "active" : ""}`} onClick={() => setActiveMenu("daytrade")}>⚡ 當沖模式</button>
-          <button className={`nav-btn ${activeMenu === "report" ? "active" : ""}`} onClick={() => setActiveMenu("report")}>🧾 每日報告</button>
+          <button className={`nav-btn ${activeMenu === "report" ? "active" : ""}`} onClick={() => navigate("/daily")}>🧾 每日報告</button>
           <button className="nav-btn" onClick={() => navigate("/")}>← 返回首頁</button>
         </aside>
 
