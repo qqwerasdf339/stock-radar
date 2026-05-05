@@ -1,4 +1,3 @@
-import DailyReport from "./pages/DailyReport";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Stock from "./pages/Stock.jsx";
 import Favorites from "./pages/Favorites.jsx";
