@@ -20,6 +20,34 @@ const NAME_TO_CODE = {
   元大台灣50: "0050",
 };
 
+const MARKET_STRONG_POOL = [
+  { symbol: "2330", baseType: "權值強勢" },
+  { symbol: "2317", baseType: "電子權值" },
+  { symbol: "2454", baseType: "IC設計" },
+  { symbol: "2308", baseType: "電源強勢" },
+  { symbol: "2382", baseType: "AI伺服器" },
+  { symbol: "3234", baseType: "中小型強勢" },
+  { symbol: "2344", baseType: "記憶體族群" },
+  { symbol: "0050", baseType: "ETF權值" },
+  { symbol: "00919", baseType: "高股息ETF" },
+  { symbol: "00940", baseType: "高股息ETF" },
+  { symbol: "AAPL", baseType: "美股科技" },
+  { symbol: "NVDA", baseType: "AI美股" },
+  { symbol: "TSLA", baseType: "高波動美股" },
+  { symbol: "SPY", baseType: "美股ETF" },
+  { symbol: "QQQ", baseType: "科技ETF" },
+];
+
+function classifyStrongStock(stock) {
+  if (!stock) return "待觀察";
+  if ((stock.volumeRatio || 0) >= 1.5 && stock.changePct > 0) return "爆量上漲";
+  if (stock.score >= 80) return "AI強勢";
+  if (stock.changePct >= 2) return "漲幅強勢";
+  if ((stock.volumeRatio || 0) >= 1.3) return "量能強勢";
+  if (stock.tradeSignal?.action === "BUY") return "買進訊號";
+  return stock.baseType || "系統候選";
+}
+
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -57,15 +85,30 @@ async function fetchYahooHistory(input, range = "6mo", interval = "1d") {
   const meta = result.meta || {};
 
   const history = timestamps
-    .map((t, i) => ({
-      time: new Date(t * 1000).toISOString().slice(0, 10),
-      date: new Date(t * 1000).toLocaleDateString("zh-TW"),
-      open: cleanNumber(quote.open?.[i]),
-      high: cleanNumber(quote.high?.[i]),
-      low: cleanNumber(quote.low?.[i]),
-      close: cleanNumber(quote.close?.[i]),
-      volume: cleanNumber(quote.volume?.[i]) || 0,
-    }))
+    .map((t, i) => {
+      const dt = new Date(t * 1000);
+      return {
+        time:
+          interval === "1d"
+            ? dt.toISOString().slice(0, 10)
+            : t,
+        date:
+          interval === "1d"
+            ? dt.toLocaleDateString("zh-TW")
+            : dt.toLocaleString("zh-TW", {
+                month: "2-digit",
+                day: "2-digit",
+                hour: "2-digit",
+                minute: "2-digit",
+                hour12: false,
+              }),
+        open: cleanNumber(quote.open?.[i]),
+        high: cleanNumber(quote.high?.[i]),
+        low: cleanNumber(quote.low?.[i]),
+        close: cleanNumber(quote.close?.[i]),
+        volume: cleanNumber(quote.volume?.[i]) || 0,
+      };
+    })
     .filter((x) => x.open && x.high && x.low && x.close);
 
   return {
@@ -665,6 +708,20 @@ function TradingChart({ stock, showMA5, showMA20, showMA60, showBollinger }) {
     volumeSeries.setData(volume);
     chart.timeScale().fitContent();
 
+    // 分K如果資料筆數太少，lightweight-charts 會把單根K棒放超大；
+    // 這裡強制給一段可視範圍，避免當沖K線擠成一根巨棒。
+    if (candles.length < 40) {
+      chart.timeScale().applyOptions({
+        barSpacing: 8,
+        rightOffset: 20,
+        minBarSpacing: 4,
+      });
+      chart.timeScale().setVisibleLogicalRange({
+        from: -20,
+        to: Math.max(40, candles.length + 20),
+      });
+    }
+
     const resizeObserver = new ResizeObserver(() => {
       if (containerRef.current) chart.applyOptions({ width: containerRef.current.clientWidth });
     });
@@ -683,6 +740,7 @@ export default function Stock() {
   const navigate = useNavigate();
   const { symbol } = useParams();
   const [query, setQuery] = useState(symbol || "2330");
+
   const [favorites, setFavorites] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem("stockRadarFavorites") || "[]");
@@ -690,7 +748,14 @@ export default function Stock() {
       return [];
     }
   });
-  const [watchText, setWatchText] = useState("2330,2317,2454,2308,2382,0050,AAPL,NVDA,TSLA,SPY,QQQ");
+
+  const [watchText, setWatchText] = useState(() => {
+    return (
+      localStorage.getItem("stockRadarWatchText") ||
+      "2330,2317,2454,2308,2382,0050,AAPL,NVDA,TSLA,SPY,QQQ"
+    );
+  });
+
   const [range, setRange] = useState("1y");
   const [stock, setStock] = useState(null);
   const [watchList, setWatchList] = useState([]);
@@ -713,10 +778,38 @@ export default function Stock() {
   const [showMA60, setShowMA60] = useState(true);
   const [showBollinger, setShowBollinger] = useState(true);
   const [indicatorMenuOpen, setIndicatorMenuOpen] = useState(false);
+  const [searchHistory, setSearchHistory] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem("stockRadarSearchHistory") || "[]");
+    } catch {
+      return [];
+    }
+  });
+  const [realtimeDayTrade, setRealtimeDayTrade] = useState(false);
+  const [systemStrongList, setSystemStrongList] = useState([]);
+  const [systemStrongLoading, setSystemStrongLoading] = useState(false);
+  const [strongCategory, setStrongCategory] = useState("全部");
+
+  useEffect(() => {
+    localStorage.setItem("stockRadarWatchText", watchText);
+  }, [watchText]);
 
   useEffect(() => {
     localStorage.setItem("stockRadarFavorites", JSON.stringify(favorites));
   }, [favorites]);
+
+  useEffect(() => {
+    localStorage.setItem("stockRadarSearchHistory", JSON.stringify(searchHistory));
+  }, [searchHistory]);
+
+  function rememberSearchKeyword(value) {
+    const keyword = String(value || "").trim().toUpperCase();
+    if (!keyword) return;
+    setSearchHistory((prev) => {
+      const next = [keyword, ...prev.filter((item) => item !== keyword)];
+      return next.slice(0, 10);
+    });
+  }
 
   function addFavorite(targetStock = stock) {
     if (!targetStock?.symbol) {
@@ -739,13 +832,30 @@ export default function Stock() {
   function removeFavorite(symbol) {
     setFavorites((prev) => prev.filter((item) => item.symbol !== symbol));
     setFavoriteNotice(`已移除 ${symbol}`);
-  }
+   }
+
+  function removeWatchSymbol(symbol) {
+  const target = String(symbol).toUpperCase();
+
+  setWatchText((prev) =>
+    prev
+      .split(/[ ,，\n]+/)
+      .map((x) => x.trim().toUpperCase())
+      .filter(Boolean)
+      .filter((item) => item !== target)
+      .join(",")
+  );
+
+  setWatchList((prev) =>
+    prev.filter((item) => item.symbol.toUpperCase() !== target)
+  );
+}
 
   function addWatchSymbol() {
     const value = newWatchSymbol.trim().toUpperCase();
     if (!value) return;
     const items = watchText
-      .split(/[ ,，]+/)
+      .split(/[ ,，\n]+/)
       .map((x) => x.trim().toUpperCase())
       .filter(Boolean);
 
@@ -760,7 +870,7 @@ export default function Stock() {
     const value = newWatchSymbol.trim().toUpperCase();
     if (!value) return;
     const items = watchText
-      .split(/[ ,，]+/)
+      .split(/[ ,，\n]+/)
       .map((x) => x.trim().toUpperCase())
       .filter(Boolean)
       .filter((item) => item !== value);
@@ -774,6 +884,7 @@ export default function Stock() {
     const target = String(input || "").trim();
     if (!target) return;
     setQuery(target);
+    rememberSearchKeyword(target);
     setLoading(true);
     setError("");
     try {
@@ -794,7 +905,7 @@ export default function Stock() {
     setError("");
     try {
       const items = watchText
-        .split(/[ ,，]+/)
+        .split(/[ ,，\n]+/)
         .map((x) => x.trim())
         .filter(Boolean)
         .slice(0, 30);
@@ -819,22 +930,24 @@ export default function Stock() {
     }
   }
 
-  async function searchIntraday(input = query) {
+  async function searchIntraday(input = query, silent = false) {
     const target = String(input || "").trim();
     if (!target) return;
-    setDayTradeLoading(true);
+    if (!silent) setDayTradeLoading(true);
     setError("");
     try {
-      const data = await fetchYahooHistory(target, "1d", intradayInterval);
+      // Yahoo 分K用 5d 比 1d 穩定，避免台股只回傳單根K棒。
+      const data = await fetchYahooHistory(target, "5d", intradayInterval);
       const analyzed = analyzeStock(data);
       setIntradayStock(analyzed);
       setStock(analyzed);
       setQuery(target);
+      rememberSearchKeyword(target);
     } catch (err) {
       console.error(err);
-      setError(err.message || "分K資料抓取失敗");
+      if (!silent) setError(err.message || "分K資料抓取失敗");
     } finally {
-      setDayTradeLoading(false);
+      if (!silent) setDayTradeLoading(false);
     }
   }
 
@@ -843,22 +956,23 @@ export default function Stock() {
     setError("");
     try {
       const items = watchText
-        .split(/[ ,，]+/)
+        .split(/[ ,，\n]+/)
         .map((x) => x.trim())
         .filter(Boolean)
         .slice(0, 30);
 
-      const result = [];
-      for (const item of items) {
-        try {
-          const data = await fetchYahooHistory(item, "1d", intradayInterval);
-          const analyzed = analyzeStock(data);
-          result.push(analyzed);
-          await sleep(120);
-        } catch (err) {
-          console.warn("daytrade scan failed", item, err);
-        }
-      }
+      const result = (
+        await Promise.all(
+          items.map((item) =>
+            fetchYahooHistory(item, "5d", intradayInterval)
+              .then((data) => analyzeStock(data))
+              .catch((err) => {
+                console.warn("daytrade scan failed", item, err);
+                return null;
+              })
+          )
+        )
+      ).filter(Boolean);
 
       result.sort((a, b) => (b.dayTrade?.score || 0) - (a.dayTrade?.score || 0));
       setDayTradeList(result);
@@ -870,6 +984,43 @@ export default function Stock() {
       setError(err.message || "當沖掃描失敗");
     } finally {
       setDayTradeLoading(false);
+    }
+  }
+
+  async function scanSystemStrongStocks() {
+    setSystemStrongLoading(true);
+    setError("");
+    try {
+      const result = (
+        await Promise.all(
+          MARKET_STRONG_POOL.map((item) =>
+            fetchYahooHistory(item.symbol, "1mo", "1d")
+              .then((data) => {
+                const analyzed = analyzeStock(data);
+                return {
+                  ...analyzed,
+                  baseType: item.baseType,
+                  strongType: classifyStrongStock({ ...analyzed, baseType: item.baseType }),
+                };
+              })
+              .catch((err) => {
+                console.warn("system strong scan failed", item.symbol, err);
+                return null;
+              })
+          )
+        )
+      )
+        .filter(Boolean)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 30);
+
+      setSystemStrongList(result);
+      setWatchList(result);
+      if (result[0]) setStock(result[0]);
+    } catch (err) {
+      setError(err.message || "系統強勢股掃描失敗");
+    } finally {
+      setSystemStrongLoading(false);
     }
   }
 
@@ -886,6 +1037,19 @@ export default function Stock() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoScan, watchText, range]);
 
+  useEffect(() => {
+    if (!realtimeDayTrade || activeMenu !== "daytrade") return;
+    const target = query.trim();
+    if (!target) return;
+
+    const timer = setInterval(() => {
+      searchIntraday(target, true);
+    }, 1000);
+
+    return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [realtimeDayTrade, activeMenu, query, intradayInterval]);
+
   const sortedWatchList = useMemo(() => {
     const list = [...watchList];
     const sorters = {
@@ -901,6 +1065,25 @@ export default function Stock() {
   const sortedDayTradeList = useMemo(() => {
     return [...dayTradeList].sort((a, b) => (b.dayTrade?.score || 0) - (a.dayTrade?.score || 0));
   }, [dayTradeList]);
+
+  const filteredSystemStrongList = useMemo(() => {
+    const list = [...systemStrongList];
+    const filtered =
+      strongCategory === "全部"
+        ? list
+        : list.filter((item) => item.strongType === strongCategory || item.baseType === strongCategory);
+
+    return filtered.sort((a, b) => b.score - a.score);
+  }, [systemStrongList, strongCategory]);
+
+  const strongCategoryOptions = useMemo(() => {
+    const options = new Set(["全部"]);
+    systemStrongList.forEach((item) => {
+      if (item.strongType) options.add(item.strongType);
+      if (item.baseType) options.add(item.baseType);
+    });
+    return [...options];
+  }, [systemStrongList]);
 
   const marketStats = useMemo(() => {
     const up = watchList.filter((s) => s.changePct > 0).length;
@@ -920,13 +1103,15 @@ export default function Stock() {
   return (
     <div className="terminal-shell">
       <style>{`
-        body { margin: 0; background: #050914; color: #e5e7eb; font-family: Arial, 'Microsoft JhengHei', sans-serif; }
-        button, input, select, textarea { font-family: inherit; }
-        button { border: 0; border-radius: 10px; padding: 8px 11px; background: #22d3ee; color: #06202a; font-weight: 900; cursor: pointer; font-size: 13px; }
-        button:disabled { opacity: .55; cursor: not-allowed; }
-        button.ghost { background: #111827; color: #e5e7eb; border: 1px solid #334155; }
-        button.danger { background: #fb7185; color: #450a0a; }
-        button.small { padding: 7px 9px; font-size: 12px; }
+        button {border: 0;border-radius: 10px;padding: 8px 11px;background: #22d3ee;color: #06202a;font-weight: 900;cursor: pointer;font-size: 13px;
+        transition:background .18s ease,filter .18s ease,transform .18s ease,border-color .18s ease;}
+        button:hover {filter: brightness(1.12);transform: translateY(-1px);}
+        button:active {transform: translateY(0);}
+        button:disabled {opacity: .55;cursor: not-allowed;}
+        button.ghost {background: #111827;color: #e5e7eb;border: 1px solid #334155;}
+        button.ghost:hover {background: #1e293b;border-color: #64748b;}
+        button.danger {background: #fb7185;color: #450a0a;}
+        button.danger:hover {filter: brightness(1.08);}
         input, textarea, select { width: 100%; box-sizing: border-box; background: #020617; color: #e5e7eb; border: 1px solid #334155; border-radius: 10px; padding: 9px; outline: none; font-size: 13px; }
         label { display: block; color: #cbd5e1; margin: 9px 0 6px; font-size: 12px; }
         h1, h2, h3 { margin: 0; }
@@ -1017,6 +1202,9 @@ export default function Stock() {
         .radar-alert { border-radius: 16px; padding: 14px; margin-bottom: 12px; border: 1px solid rgba(250,204,21,.35); background: rgba(113,63,18,.2); }
         .radar-alert.good { border-color: rgba(34,197,94,.45); background: rgba(20,83,45,.24); }
         .radar-alert.bad { border-color: rgba(248,113,113,.45); background: rgba(127,29,29,.2); }
+        .instant-signal { border: 1px solid rgba(34,211,238,.35); background: rgba(8,47,73,.26); border-radius: 16px; padding: 14px; margin-bottom: 12px; }
+        .instant-signal.buy { border-color: rgba(34,197,94,.55); background: rgba(20,83,45,.28); }
+        .live-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #22c55e; margin-right: 6px; box-shadow: 0 0 12px #22c55e; }
         .watch-table-card { margin-top: 12px; }
         .table-wrap { overflow: auto; border: 1px solid rgba(148,163,184,.16); border-radius: 16px; }
         table { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -1030,6 +1218,10 @@ export default function Stock() {
         .empty { color: #94a3b8; padding: 18px; }
         .error { color: #fecaca; background: rgba(127,29,29,.4); padding: 10px; border-radius: 12px; margin-top: 12px; }
         @media (max-width: 1300px) { .summary-grid, .main-grid { grid-template-columns: 1fr; } .left-nav { width: 150px; } .content { margin-left: 150px; } .chart-tools { align-items: stretch; } }
+        button {transition: background .18s ease, filter .18s ease, transform .18s ease, border-color .18s ease;}
+        button:hover {filter: brightness(1.12);transform: translateY(-1px);}
+        button.ghost:hover {background: #1e293b;border-color: #64748b;}
+        button.danger:hover {filter: brightness(1.08);}
       `}</style>
 
       <div className="app-frame">
@@ -1065,7 +1257,18 @@ export default function Stock() {
                 <div className="card">
                   <div className="section-title"><h2>加入自選或搜尋</h2></div>
                   <label>股票代碼或名稱</label>
-                  <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="2330、00919、AAPL、SPY" onKeyDown={(e) => e.key === "Enter" && searchOne()} />
+                  <input
+                    list="stock-search-history"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    placeholder="2330、00919、AAPL、SPY"
+                    onKeyDown={(e) => e.key === "Enter" && searchOne()}
+                  />
+                  <datalist id="stock-search-history">
+                    {searchHistory.map((item) => (
+                      <option key={item} value={item} />
+                    ))}
+                  </datalist>
                   <label>資料區間</label>
                   <select value={range} onChange={(e) => setRange(e.target.value)}>
                     <option value="3mo">3個月</option>
@@ -1252,7 +1455,7 @@ export default function Stock() {
                         <td><span className="badge">{s.tradeSignal.action}</span></td>
                         <td>
                           <button className="ghost small" onClick={(e) => { e.stopPropagation(); addFavorite(s); }}>收藏</button>{" "}
-                          <button className="danger small" onClick={(e) => { e.stopPropagation(); removeFavorite(s.symbol); }}>刪除</button>
+                          <button className="danger small" onClick={(e) => { e.stopPropagation(); removeWatchSymbol(s.symbol); }}>刪除</button>
                         </td>
                       </tr>
                     ))}
@@ -1264,11 +1467,66 @@ export default function Stock() {
 
           {activeMenu === "signals" && (
             <div className="card">
-              <div className="section-title"><h2>🚨 即時強勢股掃描</h2></div>
-              <label>輸入股票清單，最多 30 檔</label>
-              <textarea rows={5} value={watchText} onChange={(e) => setWatchText(e.target.value)} />
-              <div className="btn-row"><button onClick={scanWatchList} disabled={scanning}>{scanning ? "掃描中..." : "開始掃描"}</button><button className="ghost" onClick={() => setSortMode("score")}>依 AI 排序</button><button className="ghost" onClick={() => setSortMode("win")}>依勝率排序</button></div>
-              {sortedWatchList.length > 0 && <div className="watch-table-card table-wrap"><table><thead><tr><th>排名</th><th>股票</th><th>AI</th><th>勝率</th><th>量比</th><th>訊號</th><th>理由</th></tr></thead><tbody>{sortedWatchList.map((s, i) => <tr key={s.symbol} onClick={() => { setStock(s); setActiveMenu("analysis"); }}><td>{i + 1}</td><td>{s.symbol}<br /><span className="muted">{s.name}</span></td><td>{s.score}</td><td>{s.winRatePredict}%</td><td>{s.volumeRatio?.toFixed(2) ?? "--"}</td><td><span className="badge">{s.tradeSignal.action}</span></td><td>{s.tradeSignal.reasons.slice(0,2).join("、")}</td></tr>)}</tbody></table></div>}
+              <div className="section-title">
+                <h2>🚨 系統強勢股掃描</h2>
+                <span className="muted">系統用預設市場候選池，抓取前一交易日資料後分類。</span>
+              </div>
+
+              <div className="btn-row" style={{ marginBottom: 12 }}>
+                <button onClick={scanSystemStrongStocks} disabled={systemStrongLoading}>
+                  {systemStrongLoading ? "掃描中..." : "抓取系統強勢股"}
+                </button>
+
+                <select
+                  value={strongCategory}
+                  onChange={(e) => setStrongCategory(e.target.value)}
+                  style={{ width: 220 }}
+                >
+                  {strongCategoryOptions.map((item) => (
+                    <option key={item} value={item}>
+                      {item}
+                    </option>
+                  ))}
+                </select>
+
+                <button className="ghost" onClick={() => setSortMode("score")}>依 AI 排序</button>
+                <button className="ghost" onClick={() => setSortMode("win")}>依勝率排序</button>
+              </div>
+
+              {filteredSystemStrongList.length === 0 ? (
+                <p className="empty">按「抓取系統強勢股」後，會自動列出候選強勢股與分類。</p>
+              ) : (
+                <div className="watch-table-card table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>排名</th>
+                        <th>股票</th>
+                        <th>強勢分類</th>
+                        <th>AI</th>
+                        <th>勝率</th>
+                        <th>量比</th>
+                        <th>訊號</th>
+                        <th>理由</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredSystemStrongList.map((s, i) => (
+                        <tr key={s.symbol} onClick={() => { setStock(s); setActiveMenu("analysis"); }}>
+                          <td>{i + 1}</td>
+                          <td><b>{s.symbol}</b><br /><span className="muted">{s.name}</span></td>
+                          <td><span className="badge">{s.strongType || s.baseType || "系統候選"}</span></td>
+                          <td>{s.score}</td>
+                          <td>{s.winRatePredict}%</td>
+                          <td>{s.volumeRatio?.toFixed(2) ?? "--"}</td>
+                          <td><span className="badge">{s.tradeSignal.action}</span></td>
+                          <td>{s.tradeSignal.reasons.slice(0, 2).join("、")}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           )}
 
@@ -1281,6 +1539,7 @@ export default function Stock() {
 
               <div className="btn-row" style={{ marginBottom: 12 }}>
                 <input
+                  list="stock-search-history"
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   placeholder="輸入 2330、00919、AAPL"
@@ -1295,6 +1554,12 @@ export default function Stock() {
                   <option value="60m">60分鐘K</option>
                 </select>
                 <button onClick={() => searchIntraday()} disabled={dayTradeLoading}>{dayTradeLoading ? "讀取中..." : "查詢分K"}</button>
+                <button
+                  className={realtimeDayTrade ? "danger" : "ghost"}
+                  onClick={() => setRealtimeDayTrade((v) => !v)}
+                >
+                  {realtimeDayTrade ? "停止1秒刷新" : "啟動1秒刷新"}
+                </button>
                 <button className="ghost" onClick={scanDayTradeList} disabled={dayTradeLoading}>{dayTradeLoading ? "掃描中..." : "掃描當沖排行榜"}</button>
               </div>
 
@@ -1357,6 +1622,18 @@ export default function Stock() {
                 <div>
                   {intradayStock?.dayTrade ? (
                     <>
+                      <div className={`instant-signal ${intradayStock.dayTrade.canEnter ? "buy" : ""}`}>
+                        <b>
+                          {realtimeDayTrade && <span className="live-dot" />}
+                          AI 即時進場提示
+                        </b>
+                        <p className="muted" style={{ margin: "8px 0 0" }}>
+                          {intradayStock.dayTrade.canEnter
+                            ? "條件達標：可列入進場觀察，請同步看量能與停損。"
+                            : "尚未達標：等待量能、突破或K線確認。"}
+                        </p>
+                      </div>
+
                       <div className={`radar-alert ${intradayStock.dayTrade.canEnter ? "good" : intradayStock.dayTrade.score < 45 ? "bad" : ""}`}>
                         <b>{intradayStock.dayTrade.signal}</b>
                         <p className="muted" style={{ marginBottom: 0 }}>當沖分數 {intradayStock.dayTrade.score}，量比 {intradayStock.volumeRatio?.toFixed(2) ?? "--"}</p>
