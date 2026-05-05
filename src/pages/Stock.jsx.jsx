@@ -930,6 +930,37 @@ export default function Stock() {
     }
   }
 
+ app.get("/api/daily-report", async (req, res) => {
+  try {
+    const newsUrl =
+      "https://newsapi.org/v2/top-headlines?category=business&language=zh&apiKey=YOUR_API_KEY";
+
+    const newsRes = await axios.get(newsUrl);
+
+    const news = newsRes.data.articles.slice(0, 5).map((n) => ({
+      title: n.title,
+      url: n.url,
+      source: n.source.name,
+      time: n.publishedAt,
+    }));
+
+    // 模擬市場數據（可換成你自己的 API）
+    const market = {
+      tw: "台股 約 +0.5%",
+      us: "美股 混合",
+      fx: "USD/TWD 31.5",
+      btc: "BTC +1.2%",
+    };
+
+    res.json({
+      news,
+      market,
+    });
+  } catch (err) {
+    res.status(500).json({ error: "daily report failed" });
+  }
+ });
+
   async function searchIntraday(input = query, silent = false) {
     const target = String(input || "").trim();
     if (!target) return;
