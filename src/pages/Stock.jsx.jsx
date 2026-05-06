@@ -750,6 +750,48 @@ export default function Stock() {
   });
 
   const [watchText, setWatchText] = useState(() => {
+const todayWatchStocks = [...(systemStrongList || []), ...(watchList || [])]
+  .filter(Boolean)
+  .sort((a, b) => (b.score || 0) - (a.score || 0))
+  .slice(0, 5);
+
+const dailyNews = [
+  {
+    title: "台股今日震盪整理，AI、半導體與高股息 ETF 仍是市場關注焦點",
+    source: "市場觀察",
+    impact: "偏多",
+  },
+  {
+    title: "美股科技股走勢分歧，資金持續觀察 NVIDIA、Apple 與大型 ETF 表現",
+    source: "美股觀察",
+    impact: "中性",
+  },
+  {
+    title: "美元與台幣匯率影響外資買賣超，短線需留意資金流向變化",
+    source: "匯率觀察",
+    impact: "中性偏空",
+  },
+  {
+    title: "比特幣維持高波動，市場風險偏好仍會影響科技股與成長股",
+    source: "加密市場",
+    impact: "高波動",
+  },
+  {
+    title: "成交量放大個股仍是短線主軸，但需小心爆量不漲與長上影線",
+    source: "技術面觀察",
+    impact: "短線觀察",
+  },
+ ];
+
+ const dailyAiSummary = (() => {
+  const best = todayWatchStocks[0];
+  if (!best) {
+    return "目前尚未執行強勢掃描，建議先掃描自選股或系統強勢股，再產生更精準的每日摘要。";
+  }
+
+  return `今日市場可先聚焦 ${best.symbol} ${best.name || ""}，AI 分數約 ${best.score ?? "--"} 分，訊號為 ${best.tradeSignal?.action || "觀望"}。短線操作上，優先觀察量能是否持續放大、RSI 是否過熱，以及 K 線是否出現長上影線。若市場整體漲多跌少，可偏向尋找強勢續攻股；若爆量不漲或跌破均線，則建議保守觀望。`;
+ })();
+
     return (
       localStorage.getItem("stockRadarWatchText") ||
       "2330,2317,2454,2308,2382,0050,AAPL,NVDA,TSLA,SPY,QQQ"
@@ -1679,30 +1721,146 @@ export default function Stock() {
           )}
 
           {activeMenu === "report" && (
-            <div className="card">
-              <div className="section-title"><h2>🧾 每日交易報告</h2><span className="muted">Demo Report</span></div>
-              <div className="signal-card"><b>市場背景</b><p>目前依據自選清單統計，上漲 {marketStats.up} 檔，下跌 {marketStats.down} 檔，平均漲跌 {marketStats.avg.toFixed(2)}%。此報告可作為每日盤後觀察模板。</p></div>
-              <div className="signal-card"><b>AI摘要</b><p>{sortedWatchList.slice(0,3).map((s) => `${s.symbol}：${s.tradeSignal.action}，AI ${s.score} 分`).join("；") || "尚未掃描自選清單。"}</p></div>
-              <div className="signal-card"><b>操作提醒</b><p>BUY 僅代表進場觀察，不代表保證獲利；請搭配停損、停利與自身風險承受度。</p></div>
-            </div>
-          )}
+  <div className="card">
+    <div className="section-title">
+      <h2>🧾 每日市場報告</h2>
+      <span className="muted">
+        更新 {new Date().toLocaleString("zh-TW")}
+      </span>
+    </div>
 
-          {activeMenu === "settings" && (
-            <div className="card">
-              <div className="section-title"><h2>⚙️ 參數設定</h2></div>
-              <div className="indicator-toggle">
-                <label className="toggle-card"><input type="checkbox" checked={showMA5} onChange={(e) => setShowMA5(e.target.checked)} /> MA5 日線</label>
-                <label className="toggle-card"><input type="checkbox" checked={showMA20} onChange={(e) => setShowMA20(e.target.checked)} /> MA20 月線</label>
-                <label className="toggle-card"><input type="checkbox" checked={showMA60} onChange={(e) => setShowMA60(e.target.checked)} /> MA60 季線</label>
-                <label className="toggle-card"><input type="checkbox" checked={showBollinger} onChange={(e) => setShowBollinger(e.target.checked)} /> 布林通道</label>
-              </div>
-              <div className="divider" />
-              <label>自選清單</label>
-              <textarea rows={5} value={watchText} onChange={(e) => setWatchText(e.target.value)} />
-            </div>
-          )}
-        </section>
+    <div className="summary-grid">
+      <div className="card">
+        <h3>📊 今日市場簡介</h3>
+        <p className="muted">
+          今日市場以台股、美股科技股、匯率與加密貨幣作為觀察主軸。
+          短線仍以成交量、AI 分數、RSI、MACD 與 K 線型態作為判斷依據。
+        </p>
+      </div>
+
+      <div className="card">
+        <h3>🇹🇼 台股</h3>
+        <p className="muted">
+          觀察重點：半導體、AI伺服器、電子權值股、高股息 ETF。
+        </p>
+        <b>{marketStats.up} 檔上漲 / {marketStats.down} 檔下跌</b>
+      </div>
+
+      <div className="card">
+        <h3>🇺🇸 美股</h3>
+        <p className="muted">
+          觀察重點：AAPL、NVDA、TSLA、SPY、QQQ。
+        </p>
+        <b>科技股與 ETF 為主要風向</b>
+      </div>
+
+      <div className="card">
+        <h3>💱 匯率 / BTC</h3>
+        <p className="muted">
+          匯率會影響外資買賣超，BTC 則可觀察市場風險偏好。
+        </p>
+        <b>偏向風險情緒指標</b>
       </div>
     </div>
-  );
-}
+
+    <div className="card" style={{ marginTop: 12 }}>
+      <div className="section-title">
+        <h2>📰 重要財經新聞 5 則</h2>
+        <span className="muted">中文整理版</span>
+      </div>
+
+      <div className="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>新聞標題</th>
+              <th>來源分類</th>
+              <th>影響判斷</th>
+            </tr>
+          </thead>
+          <tbody>
+            {dailyNews.map((news, index) => (
+              <tr key={index}>
+                <td>{news.title}</td>
+                <td>{news.source}</td>
+                <td>
+                  <span className="badge">{news.impact}</span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div className="card" style={{ marginTop: 12 }}>
+      <div className="section-title">
+        <h2>🤖 AI 摘要</h2>
+        <span className="muted">依照目前掃描結果整理</span>
+      </div>
+
+      <div className="signal-card">
+        <b>今日重點判斷</b>
+        <p>{dailyAiSummary}</p>
+      </div>
+    </div>
+
+    <div className="card" style={{ marginTop: 12 }}>
+      <div className="section-title">
+        <h2>🔥 今日觀察股票</h2>
+        <span className="muted">依 AI 分數排序</span>
+      </div>
+
+      {todayWatchStocks.length === 0 ? (
+        <p className="empty">
+          尚未有觀察名單。請先執行「強勢掃描」或「自選股更新」。
+        </p>
+      ) : (
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>代號</th>
+                <th>名稱</th>
+                <th>AI分數</th>
+                <th>漲跌</th>
+                <th>量比</th>
+                <th>訊號</th>
+                <th>觀察理由</th>
+              </tr>
+            </thead>
+            <tbody>
+              {todayWatchStocks.map((s) => (
+                <tr
+                  key={s.symbol}
+                  onClick={() => {
+                    setStock(s);
+                    setActiveMenu("analysis");
+                  }}
+                >
+                  <td><b>{s.symbol}</b></td>
+                  <td>{s.name}</td>
+                  <td>{s.score ?? "--"}</td>
+                  <td className={s.changePct >= 0 ? "up" : "down"}>
+                    {s.changePct?.toFixed?.(2) ?? "--"}%
+                  </td>
+                  <td>{s.volumeRatio?.toFixed?.(2) ?? "--"}</td>
+                  <td>
+                    <span className="badge">
+                      {s.tradeSignal?.action || "觀望"}
+                    </span>
+                  </td>
+                  <td>
+                    {(s.tags && s.tags.length > 0)
+                      ? s.tags.slice(0, 3).join("、")
+                      : s.volumeSignal?.title || "等待確認"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  </div>
+)}
