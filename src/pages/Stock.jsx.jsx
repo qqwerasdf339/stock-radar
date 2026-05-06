@@ -72,7 +72,7 @@ async function fetchYahooHistory(input, range = "6mo", interval = "1d") {
   const symbol = resolveSymbol(input);
   if (!symbol) throw new Error("請輸入股票代碼或名稱");
 
-  const url = `${API_BASE}/api/yahoo/chart/${encodeURIComponent(symbol)}?range=${range}&interval=${interval}`;
+  const url = `${API_BASE}/api/yahoo/chart/${encodeURIComponent(symbol)}?range=${range}&interval=${interval}&_=${Date.now()}`;
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Yahoo 資料抓取失敗：${symbol}`);
 
@@ -396,79 +396,121 @@ function predictWinRate({ score, rsi, trendUp, longTrendUp, volumeRatio, backtes
 function analyzeDayTrade(stock) {
   if (!stock?.close) return null;
 
+  const history = stock.history || [];
+  const latest = history.at(-1) || {};
+  const prev = history.at(-2) || {};
+  const close = stock.close;
+  const open = latest.open ?? close;
+  const prevClose = prev.close ?? close;
   const reasons = [];
   const risks = [];
-  let score = 0;
+  let score = 15; // 避免資料不足時永遠 0 分，先給基礎觀察分
 
-  const volumeRatio = stock.volumeRatio ?? 0;
   const rsi = stock.rsi ?? 50;
   const macdHist = stock.macdHist ?? 0;
   const changePct = stock.changePct ?? 0;
-  const close = stock.close;
+  const candlePct = prevClose ? ((close - prevClose) / prevClose) * 100 : 0;
+  const bodyPct = open ? ((close - open) / open) * 100 : 0;
 
+  let volumeRatio = stock.volumeRatio;
+  if ((volumeRatio === null || volumeRatio === undefined) && history.length >= 6) {
+    const latestVol = latest.volume || 0;
+    const avgVol = history.slice(-6, -1).reduce((sum, x) => sum + (x.volume || 0), 0) / 5;
+    volumeRatio = avgVol ? latestVol / avgVol : null;
+  }
+  volumeRatio = volumeRatio ?? 1;
+
+  // 量能：當沖最重要，但門檻調整得比較合理，不再容易 0 分
   if (volumeRatio >= 1.8) {
-    score += 30;
-    reasons.push("開盤或盤中明顯放量");
-  } else if (volumeRatio >= 1.3) {
+    score += 28;
+    reasons.push("量能明顯放大");
+  } else if (volumeRatio >= 1.25) {
     score += 20;
     reasons.push("量能放大");
+  } else if (volumeRatio >= 0.85) {
+    score += 8;
+    reasons.push("量能尚可");
   } else {
-    risks.push("量能不足，容易假突破");
+    risks.push("量能偏低，容易假突破");
   }
 
-  if (changePct >= 0.6 && changePct <= 4.5) {
-    score += 20;
-    reasons.push("漲幅有動能但尚未過熱");
-  } else if (changePct > 4.5) {
-    score += 6;
-    risks.push("漲幅過大，追高風險較高");
-  } else if (changePct < 0) {
-    risks.push("目前為下跌，當沖偏弱");
+  // 短線動能：同時看當日漲跌與最近一根分K
+  if (changePct >= 0.2) {
+    score += 14;
+    reasons.push("當日漲幅轉正");
+  } else if (changePct < -1.5) {
+    score -= 8;
+    risks.push("當日跌幅偏大");
   }
 
-  if (rsi >= 50 && rsi <= 70) {
+  if (candlePct > 0.05 || bodyPct > 0.05) {
+    score += 14;
+    reasons.push("最新分K偏多");
+  } else if (candlePct < -0.25) {
+    score -= 6;
+    risks.push("最新分K轉弱");
+  }
+
+  // RSI：放寬到 45~72 比較符合當沖觀察，不再過度嚴苛
+  if (rsi >= 50 && rsi <= 72) {
     score += 18;
     reasons.push("RSI 位於健康偏多區");
-  } else if (rsi > 75) {
-    score -= 12;
+  } else if (rsi >= 45 && rsi < 50) {
+    score += 8;
+    reasons.push("RSI 接近轉強區");
+  } else if (rsi > 78) {
+    score -= 14;
     risks.push("RSI 過熱，容易拉回");
-  } else if (rsi < 45) {
+  } else if (rsi < 40) {
     score -= 8;
     risks.push("RSI 偏弱，買盤不足");
   }
 
+  // MACD：分K容易小幅震盪，允許接近翻正也給分
   if (macdHist > 0) {
     score += 16;
     reasons.push("MACD 短線動能翻正");
+  } else if (macdHist > -0.03) {
+    score += 6;
+    reasons.push("MACD 接近翻正");
   } else {
     risks.push("MACD 尚未轉強");
   }
 
-  if (stock.ma5 && close > stock.ma5) score += 8;
-  else risks.push("價格尚未站上 MA5");
+  if (stock.ma5 && close > stock.ma5) {
+    score += 8;
+    reasons.push("價格站上 MA5");
+  } else if (history.length >= 2 && close > prevClose) {
+    score += 4;
+    reasons.push("價格短線回升");
+  } else {
+    risks.push("價格尚未站上 MA5");
+  }
 
-  if (stock.ma20 && close > stock.ma20) score += 8;
-  else risks.push("價格尚未站上 MA20");
+  if (stock.ma20 && close > stock.ma20) {
+    score += 6;
+    reasons.push("價格站上 MA20");
+  }
 
   if (stock.candlePattern?.title?.includes("長上影")) {
-    score -= 14;
+    score -= 12;
     risks.push("長上影線，上方賣壓較大");
   }
 
   if (stock.volumeSignal?.title?.includes("出貨")) {
-    score -= 18;
+    score -= 16;
     risks.push("爆量不漲，有出貨疑慮");
   }
 
   const finalScore = Math.max(0, Math.min(100, Math.round(score)));
-  const canEnter = finalScore >= 72 && !stock.volumeSignal?.title?.includes("出貨") && rsi < 75;
+  const canEnter = finalScore >= 65 && !stock.volumeSignal?.title?.includes("出貨") && rsi < 78;
 
   let signal = "❌ 不建議當沖";
   let tone = "sell";
   if (canEnter) {
     signal = "🔥 現在可進場觀察";
     tone = "buy";
-  } else if (finalScore >= 55) {
+  } else if (finalScore >= 45) {
     signal = "⚡ 觀察，等突破再進";
     tone = "hold";
   }
@@ -484,7 +526,7 @@ function analyzeDayTrade(stock) {
     entry: close,
     stopLoss,
     takeProfit,
-    reasons: reasons.length ? reasons : ["尚未出現明確當沖優勢"],
+    reasons: reasons.length ? reasons : ["資料偏少，先觀察量能與最新分K方向"],
     risks: risks.length ? risks : ["仍需嚴格控管停損與成交量變化"],
   };
 }
@@ -653,12 +695,12 @@ function TradingChart({ stock, showMA5, showMA20, showMA60, showBollinger }) {
     });
 
     const candleSeries = chart.addSeries(CandlestickSeries, {
-      upColor: "#22c55e",
-      downColor: "#ef4444",
-      borderUpColor: "#22c55e",
-      borderDownColor: "#ef4444",
-      wickUpColor: "#22c55e",
-      wickDownColor: "#ef4444",
+      upColor: "#ef4444",
+      downColor: "#22c55e",
+      borderUpColor: "#ef4444",
+      borderDownColor: "#22c55e",
+      wickUpColor: "#ef4444",
+      wickDownColor: "#22c55e",
     });
 
     const ma5Series = chart.addSeries(LineSeries, { color: "#facc15", lineWidth: 2, priceLineVisible: false });
@@ -695,7 +737,7 @@ function TradingChart({ stock, showMA5, showMA20, showMA60, showBollinger }) {
     const volume = stock.history.map((d) => ({
       time: d.time,
       value: d.volume,
-      color: d.close >= d.open ? "rgba(34,197,94,.38)" : "rgba(239,68,68,.38)",
+      color: d.close >= d.open ? "rgba(239,68,68,.38)" : "rgba(34,197,94,.38)",
     }));
 
     candleSeries.setData(candles);
@@ -769,7 +811,7 @@ const [watchText, setWatchText] = useState(() => {
   const [favoriteNotice, setFavoriteNotice] = useState("");
   const [activeMenu, setActiveMenu] = useState("analysis");
   const [sortMode, setSortMode] = useState("score");
-  const [intradayInterval, setIntradayInterval] = useState("5m");
+  const [intradayInterval, setIntradayInterval] = useState("1m");
   const [intradayStock, setIntradayStock] = useState(null);
   const [dayTradeList, setDayTradeList] = useState([]);
   const [dayTradeLoading, setDayTradeLoading] = useState(false);
@@ -1202,8 +1244,8 @@ const [watchText, setWatchText] = useState(() => {
         .market-card { display: grid; grid-template-columns: repeat(3,1fr); gap: 8px; }
         .market-box { background: #020617; border: 1px solid rgba(148,163,184,.14); border-radius: 14px; padding: 12px; }
         .market-box b { display: block; font-size: 22px; }
-        .up { color: #34d399; }
-        .down { color: #fb7185; }
+        .up { color: #fb7185; }
+        .down { color: #34d399; }
         .neutral { color: #facc15; }
         .stock-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 12px; }
         .stock-title h1 { font-size: 21px; margin-bottom: 4px; }
@@ -1578,7 +1620,7 @@ const [watchText, setWatchText] = useState(() => {
             <div className="card">
               <div className="section-title">
                 <h2>⚡ 當沖模式</h2>
-                <span className="muted">1秒刷新、分K、AI即時進場提示</span>
+                <span className="muted">1秒刷新、1分鐘K、AI即時進場提示</span>
               </div>
 
               <div className="btn-row" style={{ marginBottom: 12 }}>
@@ -1619,7 +1661,7 @@ const [watchText, setWatchText] = useState(() => {
                       <div className="stock-head">
                         <div className="stock-title">
                           <h1>{intradayStock.symbol} {intradayStock.name}</h1>
-                          <p className="muted">目前使用 {intradayInterval}，資料來源為 Yahoo Finance 分K。</p>
+                          <p className="muted">目前使用 {intradayInterval}，資料來源為 Yahoo Finance 分K（已加速輪詢，但 Yahoo 台股可能仍有延遲）。</p>
                         </div>
                         <div className={intradayStock.changePct >= 0 ? "price up" : "price down"}>
                           {intradayStock.close?.toFixed?.(2) ?? "--"}
