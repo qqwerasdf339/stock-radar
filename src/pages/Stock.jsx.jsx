@@ -742,61 +742,19 @@ export default function Stock() {
   const [query, setQuery] = useState(symbol || "2330");
 
   const [favorites, setFavorites] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem("stockRadarFavorites") || "[]");
-    } catch {
-      return [];
-    }
-  });
-
-  const [watchText, setWatchText] = useState(() => {
-const todayWatchStocks = [...(systemStrongList || []), ...(watchList || [])]
-  .filter(Boolean)
-  .sort((a, b) => (b.score || 0) - (a.score || 0))
-  .slice(0, 5);
-
-const dailyNews = [
-  {
-    title: "台股今日震盪整理，AI、半導體與高股息 ETF 仍是市場關注焦點",
-    source: "市場觀察",
-    impact: "偏多",
-  },
-  {
-    title: "美股科技股走勢分歧，資金持續觀察 NVIDIA、Apple 與大型 ETF 表現",
-    source: "美股觀察",
-    impact: "中性",
-  },
-  {
-    title: "美元與台幣匯率影響外資買賣超，短線需留意資金流向變化",
-    source: "匯率觀察",
-    impact: "中性偏空",
-  },
-  {
-    title: "比特幣維持高波動，市場風險偏好仍會影響科技股與成長股",
-    source: "加密市場",
-    impact: "高波動",
-  },
-  {
-    title: "成交量放大個股仍是短線主軸，但需小心爆量不漲與長上影線",
-    source: "技術面觀察",
-    impact: "短線觀察",
-  },
- ];
-
- const dailyAiSummary = (() => {
-  const best = todayWatchStocks[0];
-  if (!best) {
-    return "目前尚未執行強勢掃描，建議先掃描自選股或系統強勢股，再產生更精準的每日摘要。";
+  try {
+    return JSON.parse(localStorage.getItem("stockRadarFavorites") || "[]");
+  } catch {
+    return [];
   }
+});
 
-  return `今日市場可先聚焦 ${best.symbol} ${best.name || ""}，AI 分數約 ${best.score ?? "--"} 分，訊號為 ${best.tradeSignal?.action || "觀望"}。短線操作上，優先觀察量能是否持續放大、RSI 是否過熱，以及 K 線是否出現長上影線。若市場整體漲多跌少，可偏向尋找強勢續攻股；若爆量不漲或跌破均線，則建議保守觀望。`;
- })();
-
-    return (
-      localStorage.getItem("stockRadarWatchText") ||
-      "2330,2317,2454,2308,2382,0050,AAPL,NVDA,TSLA,SPY,QQQ"
-    );
-  });
+const [watchText, setWatchText] = useState(() => {
+  return (
+    localStorage.getItem("stockRadarWatchText") ||
+    "2330,2317,2454,2308,2382,0050,AAPL,NVDA,TSLA,SPY,QQQ"
+  );
+ });
 
   const [range, setRange] = useState("1y");
   const [stock, setStock] = useState(null);
@@ -1039,11 +997,7 @@ const dailyNews = [
             fetchYahooHistory(item.symbol, "1mo", "1d")
               .then((data) => {
                 const analyzed = analyzeStock(data);
-                return {
-                  ...analyzed,
-                  baseType: item.baseType,
-                  strongType: classifyStrongStock({ ...analyzed, baseType: item.baseType }),
-                };
+                return {...analyzed,baseType: item.baseType,strongType: classifyStrongStock({ ...analyzed, baseType: item.baseType }),};
               })
               .catch((err) => {
                 console.warn("system strong scan failed", item.symbol, err);
@@ -1128,6 +1082,54 @@ const dailyNews = [
   }, [systemStrongList]);
 
   const marketStats = useMemo(() => {
+    const todayWatchStocks = useMemo(() => {
+  return [...systemStrongList, ...watchList]
+    .filter(Boolean)
+    .sort((a, b) => (b.score || 0) - (a.score || 0))
+    .slice(0, 5);
+ }, [systemStrongList, watchList]);
+
+ const dailyNews = [
+  {
+    title: "台股今日震盪整理，AI、半導體與高股息 ETF 仍是市場關注焦點",
+    source: "市場觀察",
+    impact: "偏多",
+  },
+  {
+    title: "美股科技股走勢分歧，資金持續觀察 NVIDIA、Apple 與大型 ETF 表現",
+    source: "美股觀察",
+    impact: "中性",
+  },
+  {
+    title: "美元與台幣匯率影響外資買賣超，短線需留意資金流向變化",
+    source: "匯率觀察",
+    impact: "中性偏空",
+  },
+  {
+    title: "比特幣維持高波動，市場風險偏好仍會影響科技股與成長股",
+    source: "加密市場",
+    impact: "高波動",
+  },
+  {
+    title: "成交量放大個股仍是短線主軸，但需小心爆量不漲與長上影線",
+    source: "技術面觀察",
+    impact: "短線觀察",
+  },
+ ];
+
+ const dailyAiSummary = useMemo(() => {
+  const best = todayWatchStocks[0];
+
+  if (!best) {
+    return "目前尚未執行強勢掃描，建議先掃描市場強勢股後再產生 AI 摘要。";
+  }
+
+  return `今日市場可先聚焦 ${best.symbol} ${best.name || ""}，AI 分數約 ${
+    best.score ?? "--"
+  } 分，訊號為 ${
+    best.tradeSignal?.action || "觀望"
+  }。短線操作上，優先觀察量能是否持續放大、RSI 是否過熱，以及 K 線是否出現長上影線。`;
+ }, [todayWatchStocks]);
     const up = watchList.filter((s) => s.changePct > 0).length;
     const down = watchList.filter((s) => s.changePct < 0).length;
     const avg = watchList.length ? watchList.reduce((sum, s) => sum + s.changePct, 0) / watchList.length : 0;
@@ -1572,153 +1574,132 @@ const dailyNews = [
             </div>
           )}
 
-          {activeMenu === "daytrade" && (
-            <div className="card">
-              <div className="section-title">
-                <h2>⚡ 當沖模式</h2>
-                <span className="muted">1 / 5 / 15 分K、開盤爆量雷達、進出場提示</span>
-              </div>
+          {activeMenu === "report" && (
+  <div className="card">
+    <div className="section-title">
+      <h2>🧾 每日市場報告</h2>
+      <span className="muted">中文整理版</span>
+    </div>
 
-              <div className="btn-row" style={{ marginBottom: 12 }}>
-                <input
-                  list="stock-search-history"
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  placeholder="輸入 2330、00919、AAPL"
-                  style={{ width: 220 }}
-                  onKeyDown={(e) => e.key === "Enter" && searchIntraday()}
-                />
-                <select value={intradayInterval} onChange={(e) => setIntradayInterval(e.target.value)} style={{ width: 150 }}>
-                  <option value="1m">1分鐘K</option>
-                  <option value="5m">5分鐘K</option>
-                  <option value="15m">15分鐘K</option>
-                  <option value="30m">30分鐘K</option>
-                  <option value="60m">60分鐘K</option>
-                </select>
-                <button onClick={() => searchIntraday()} disabled={dayTradeLoading}>{dayTradeLoading ? "讀取中..." : "查詢分K"}</button>
-                <button
-                  className={realtimeDayTrade ? "danger" : "ghost"}
-                  onClick={() => setRealtimeDayTrade((v) => !v)}
-                >
-                  {realtimeDayTrade ? "停止1秒刷新" : "啟動1秒刷新"}
-                </button>
-                <button className="ghost" onClick={scanDayTradeList} disabled={dayTradeLoading}>{dayTradeLoading ? "掃描中..." : "掃描當沖排行榜"}</button>
-              </div>
+    <div className="summary-grid">
+      <div className="card">
+        <h3>📊 今日市場簡介</h3>
+        <p className="muted">
+          今日市場以台股、美股科技股、匯率與 BTC 作為觀察主軸。
+          短線重點放在成交量、AI分數、RSI、MACD 與 K 線型態。
+        </p>
+      </div>
 
-              {error && <p className="error">{error}</p>}
+      <div className="card">
+        <h3>🇹🇼 台股</h3>
+        <p className="muted">半導體、AI伺服器、高股息ETF仍是主要觀察方向。</p>
+        <b>{marketStats.up} 檔上漲 / {marketStats.down} 檔下跌</b>
+      </div>
 
-              <div className="daytrade-grid">
-                <div>
-                  <div className="card" style={{ marginBottom: 12 }}>
-                    <div className="stock-head">
-                      <div className="stock-title">
-                        <h1>{intradayStock ? `${intradayStock.symbol} ${intradayStock.name}` : "請查詢分K標的"}</h1>
-                        <p className="muted">目前使用 {intradayInterval}，資料來源為 Yahoo Finance 分K。</p>
-                      </div>
-                      {intradayStock && <div className={intradayStock.changePct >= 0 ? "price up" : "price down"}>{intradayStock.close?.toFixed?.(2)}<small>{intradayStock.changePct.toFixed(2)}%</small></div>}
-                    </div>
+      <div className="card">
+        <h3>🇺🇸 美股</h3>
+        <p className="muted">觀察 AAPL、NVDA、TSLA、SPY、QQQ。</p>
+        <b>科技股與ETF為主要風向</b>
+      </div>
 
-                    {intradayStock ? (
-                      <TradingChart stock={intradayStock} showMA5={showMA5} showMA20={showMA20} showMA60={false} showBollinger={showBollinger} />
-                    ) : (
-                      <p className="empty">輸入股票後點「查詢分K」。</p>
-                    )}
-                  </div>
+      <div className="card">
+        <h3>💱 匯率 / BTC</h3>
+        <p className="muted">匯率影響外資，BTC反映風險偏好。</p>
+        <b>偏向風險情緒指標</b>
+      </div>
+    </div>
 
-                  {sortedDayTradeList.length > 0 && (
-                    <div className="table-wrap">
-                      <table>
-                        <thead>
-                          <tr>
-                            <th>排名</th>
-                            <th>股票</th>
-                            <th>當沖分</th>
-                            <th>量比</th>
-                            <th>漲跌</th>
-                            <th>提示</th>
-                            <th>進場</th>
-                            <th>停損</th>
-                            <th>停利</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {sortedDayTradeList.map((s, i) => (
-                            <tr key={s.symbol} onClick={() => { setIntradayStock(s); setStock(s); }}>
-                              <td>{i + 1}</td>
-                              <td><b>{s.symbol}</b><br /><span className="muted">{s.name}</span></td>
-                              <td>{s.dayTrade?.score ?? "--"}</td>
-                              <td>{s.volumeRatio?.toFixed(2) ?? "--"}</td>
-                              <td className={s.changePct >= 0 ? "up" : "down"}>{s.changePct.toFixed(2)}%</td>
-                              <td><span className="badge">{s.dayTrade?.signal}</span></td>
-                              <td>{s.dayTrade?.entry?.toFixed?.(2)}</td>
-                              <td className="down">{s.dayTrade?.stopLoss?.toFixed?.(2)}</td>
-                              <td className="up">{s.dayTrade?.takeProfit?.toFixed?.(2)}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
+    <div className="card" style={{ marginTop: 12 }}>
+      <div className="section-title">
+        <h2>📰 重要財經新聞 5 則</h2>
+        <span className="muted">模擬中文整理</span>
+      </div>
 
-                <div>
-                  {intradayStock?.dayTrade ? (
-                    <>
-                      <div className={`instant-signal ${intradayStock.dayTrade.canEnter ? "buy" : ""}`}>
-                        <b>
-                          {realtimeDayTrade && <span className="live-dot" />}
-                          AI 即時進場提示
-                        </b>
-                        <p className="muted" style={{ margin: "8px 0 0" }}>
-                          {intradayStock.dayTrade.canEnter
-                            ? "條件達標：可列入進場觀察，請同步看量能與停損。"
-                            : "尚未達標：等待量能、突破或K線確認。"}
-                        </p>
-                      </div>
+      <div className="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>新聞標題</th>
+              <th>來源分類</th>
+              <th>影響判斷</th>
+            </tr>
+          </thead>
+          <tbody>
+            {[
+              ["台股震盪整理，AI與半導體仍是盤面焦點", "台股觀察", "中性偏多"],
+              ["美股科技股走勢分歧，資金觀察大型科技股財報", "美股觀察", "中性"],
+              ["美元與台幣匯率影響外資買賣超", "匯率觀察", "中性偏空"],
+              ["BTC維持高波動，市場風險偏好仍需觀察", "加密市場", "高波動"],
+              ["成交量放大個股成短線主軸，但需小心爆量不漲", "技術面觀察", "短線觀察"],
+            ].map(([title, source, impact], index) => (
+              <tr key={index}>
+                <td>{title}</td>
+                <td>{source}</td>
+                <td><span className="badge">{impact}</span></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
 
-                      <div className={`radar-alert ${intradayStock.dayTrade.canEnter ? "good" : intradayStock.dayTrade.score < 45 ? "bad" : ""}`}>
-                        <b>{intradayStock.dayTrade.signal}</b>
-                        <p className="muted" style={{ marginBottom: 0 }}>當沖分數 {intradayStock.dayTrade.score}，量比 {intradayStock.volumeRatio?.toFixed(2) ?? "--"}</p>
-                      </div>
+    <div className="card" style={{ marginTop: 12 }}>
+      <div className="section-title">
+        <h2>🤖 AI 摘要</h2>
+        <span className="muted">依目前掃描結果整理</span>
+      </div>
 
-                      <div className="daytrade-score">
-                        <b>{intradayStock.dayTrade.score}</b>
-                        <span>{intradayStock.dayTrade.signal}</span>
-                      </div>
+      <div className="signal-card">
+        <b>今日重點判斷</b>
+        <p>
+          目前市場適合先觀察量能放大與AI分數較高的標的。
+          若出現爆量上漲、MACD翻正、RSI未過熱，可列入短線觀察。
+          若出現爆量不漲、長上影線或跌破均線，建議保守觀望。
+        </p>
+      </div>
+    </div>
 
-                      <div className="entry-grid">
-                        <div className="entry-box"><span className="muted">進場</span><b>{intradayStock.dayTrade.entry?.toFixed?.(2)}</b></div>
-                        <div className="entry-box"><span className="muted">停損</span><b className="down">{intradayStock.dayTrade.stopLoss?.toFixed?.(2)}</b></div>
-                        <div className="entry-box"><span className="muted">停利</span><b className="up">{intradayStock.dayTrade.takeProfit?.toFixed?.(2)}</b></div>
-                      </div>
+    <div className="card" style={{ marginTop: 12 }}>
+      <div className="section-title">
+        <h2>🔥 今日觀察股票</h2>
+        <span className="muted">依目前清單排序</span>
+      </div>
 
-                      <div className="signal-card">
-                        <b>🔥 開盤爆量雷達</b>
-                        <p>{intradayStock.volumeSignal.title}。{intradayStock.volumeSignal.detail}</p>
-                      </div>
-
-                      <div className="signal-card">
-                        <b>現在可進場判斷</b>
-                        <p>{intradayStock.dayTrade.canEnter ? "條件達標，可列入當沖進場觀察。" : "條件尚未完整達標，建議等待突破、量能或K線確認。"}</p>
-                      </div>
-
-                      <div className="signal-card">
-                        <b>主要理由</b>
-                        <p>{intradayStock.dayTrade.reasons.join("、")}</p>
-                      </div>
-
-                      <div className="signal-card">
-                        <b>風險提醒</b>
-                        <p>{intradayStock.dayTrade.risks.join("、")}</p>
-                      </div>
-                    </>
-                  ) : (
-                    <p className="empty">尚無當沖資料。</p>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
+      {(sortedWatchList.length === 0 && systemStrongList.length === 0) ? (
+        <p className="empty">尚未有觀察名單。請先執行「強勢掃描」或「自選股更新」。</p>
+      ) : (
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>代號</th>
+                <th>名稱</th>
+                <th>AI分數</th>
+                <th>漲跌</th>
+                <th>量比</th>
+                <th>訊號</th>
+              </tr>
+            </thead>
+            <tbody>
+              {[...systemStrongList, ...sortedWatchList].slice(0, 5).map((s) => (
+                <tr key={s.symbol} onClick={() => { setStock(s); setActiveMenu("analysis"); }}>
+                  <td><b>{s.symbol}</b></td>
+                  <td>{s.name}</td>
+                  <td>{s.score ?? "--"}</td>
+                  <td className={s.changePct >= 0 ? "up" : "down"}>
+                    {s.changePct?.toFixed?.(2) ?? "--"}%
+                  </td>
+                  <td>{s.volumeRatio?.toFixed?.(2) ?? "--"}</td>
+                  <td><span className="badge">{s.tradeSignal?.action || "觀望"}</span></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  </div>
+ )}
 
           {activeMenu === "report" && (
   <div className="card">
@@ -1864,3 +1845,8 @@ const dailyNews = [
     </div>
   </div>
 )}
+        </section>
+      </div>
+    </div>
+  );
+}
