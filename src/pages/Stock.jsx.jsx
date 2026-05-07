@@ -1,3 +1,4 @@
+import { getStockDisplayName, initStockNameMap } from "../utils/stockName";
 import { useNavigate, useParams } from "react-router-dom";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -246,7 +247,7 @@ async function fetchYahooHistory(input, range = "6mo", interval = "1d") {
 
   return {
     symbol,
-    name: meta.longName || meta.shortName || symbol,
+    name: getStockDisplayName(symbol, meta.longName || meta.shortName || symbol),
     currency: meta.currency || "TWD",
     regularMarketPrice: meta.regularMarketPrice || history.at(-1)?.close || null,
     history,
@@ -1128,6 +1129,49 @@ export default function Stock() {
   }
 });
 
+useEffect(() => {
+  initStockNameMap().then(() => {
+    setStock((prev) =>
+      prev
+        ? {
+            ...prev,
+            name: getStockDisplayName(prev.symbol, prev.name),
+          }
+        : prev
+    );
+
+    setWatchList((prev) =>
+      prev.map((item) => ({
+        ...item,
+        name: getStockDisplayName(item.symbol, item.name),
+      }))
+    );
+
+    setSystemStrongList((prev) =>
+      prev.map((item) => ({
+        ...item,
+        name: getStockDisplayName(item.symbol, item.name),
+      }))
+    );
+
+    setNextDayList((prev) =>
+      prev.map((item) => ({
+        ...item,
+        name: getStockDisplayName(item.symbol, item.name),
+      }))
+    );
+
+    setDayTradeList((prev) =>
+      prev.map((item) => ({
+        ...item,
+        name: getStockDisplayName(item.symbol, item.name),
+      }))
+    );
+  });
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, []);
+
 const [watchText, setWatchText] = useState(() => {
   const savedWatchText = localStorage.getItem("stockRadarWatchText");
 
@@ -1849,8 +1893,15 @@ const [watchText, setWatchText] = useState(() => {
         .combined-market-card { grid-column: 2; grid-row: 1; min-height: 210px; display: grid; grid-template-columns: 1fr 1.25fr; gap: 20px; align-items: center; }
         .chart-area-card { grid-column: 1 / span 2; grid-row: 2; }
         .selected-panel { text-align: center; }
-        .selected-panel h2 { font-size: 25px; margin-bottom: 8px; }
-        .selected-panel .price { text-align: center; margin-top: 12px; }
+        .selected-name { font-size: 31px; font-weight: 900; letter-spacing: .04em; color: #f8fafc; margin: 4px 0 6px; line-height: 1.12; }
+        .selected-symbol { font-size: 16px; font-weight: 700; margin: 2px 0 10px; color: #bfdbfe; }
+        .stock-name-stack { display: flex; flex-direction: column; gap: 2px; line-height: 1.15; }
+        .stock-name-main { font-size: 25px; font-weight: 900; color: #f8fafc; letter-spacing: .03em; }
+        .stock-name-code { font-size: 13px; color: #93c5fd; font-weight: 700; }
+        .stock-name-main.small { font-size: 22px; }
+        .selected-panel .price { text-align: center; margin-top: 8px; font-size: 24px; line-height: 1.15; }
+        .selected-panel .price small { font-size: 13px; margin-top: 4px; }
+        .selected-panel .price .price-label { font-size: 14px; margin-right: 8px; color: #e5e7eb; font-weight: 700; }
         .market-panel { border-left: 1px solid rgba(148,163,184,.22); padding-left: 20px; }
         .right-panel-card { grid-column: 3; grid-row: 1 / span 2; position: sticky; top: 16px; }
 
@@ -2037,10 +2088,12 @@ const [watchText, setWatchText] = useState(() => {
                 <div className="card combined-market-card">
                   <div className="selected-panel">
                     <div className="section-title"><h2>目前選股 & 市場寬度</h2></div>
-                    <h2>{stock?.symbol || query}</h2>
-                    <p className="muted">{stock?.name || "尚未載入資料"}</p>
+                    <div className="selected-name">
+                      {getStockDisplayName(stock?.symbol, stock?.name) || "尚未載入資料"}
+                    </div>
+                    <div className="selected-symbol">{stock?.symbol || query}</div>
                     <div className={stock?.changePct >= 0 ? "price up" : "price down"}>
-                      <span style={{ fontSize: 16, marginRight: 8, color: "#e5e7eb" }}>現價</span>
+                      <span className="price-label">現價</span>
                       {stock?.close?.toFixed?.(2) ?? "--"}
                       <small>{stock?.changePct?.toFixed?.(2) ?? "--"}%</small>
                     </div>
@@ -2073,7 +2126,11 @@ const [watchText, setWatchText] = useState(() => {
                 <div className="card chart-area-card">
                   <div className="stock-head">
                     <div className="stock-title">
-                      <h1>{stock ? `${stock.symbol} ${stock.name}` : "請搜尋股票"}</h1>
+                      <h1>
+                        {stock
+                          ? `${getStockDisplayName(stock.symbol, stock.name)} ${stock.symbol}`
+                          : "請搜尋股票"}
+                      </h1>
                       <p className="muted">互動 K 線、MA5 / MA20 / MA60、布林通道、成交量</p>
                     </div>
                     {stock && (
@@ -2255,7 +2312,12 @@ const [watchText, setWatchText] = useState(() => {
                   <tbody>
                     {displayedWatchList.map((s) => (
                       <tr key={s.symbol} onClick={() => { setStock(s); setActiveMenu("analysis"); }}>
-                        <td><b>{s.symbol}</b><br /><span className="muted">{s.name}</span></td>
+                        <td>
+                            <div className="stock-name-stack">
+                              <span className="stock-name-main">{getStockDisplayName(s.symbol, s.name)}</span>
+                              <span className="stock-name-code">{s.symbol}</span>
+                            </div>
+                          </td>
                         <td><span className="badge">{s.currency === "USD" ? "美股" : "台股"}</span></td>
                         <td>{s.currency} {s.close?.toFixed?.(2)}</td>
                         <td className={s.changePct >= 0 ? "up" : "down"}>{s.changePct.toFixed(2)}%</td>
@@ -2336,7 +2398,12 @@ const [watchText, setWatchText] = useState(() => {
                       {filteredSystemStrongList.map((s, i) => (
                         <tr key={s.symbol} onClick={() => { setStock(s); setActiveMenu("analysis"); }}>
                           <td>{i + 1}</td>
-                          <td><b>{s.symbol}</b><br /><span className="muted">{s.name}</span></td>
+                          <td>
+                            <div className="stock-name-stack">
+                              <span className="stock-name-main">{getStockDisplayName(s.symbol, s.name)}</span>
+                              <span className="stock-name-code">{s.symbol}</span>
+                            </div>
+                          </td>
                           <td><span className="badge">{s.recent3DayType || s.strongType || s.baseType || "系統候選"}</span></td>
                           <td>{s.recent3DayScore ?? "--"}</td>
                           <td className={s.recent3DayChange >= 0 ? "up" : "down"}>{s.recent3DayChange?.toFixed?.(2) ?? "--"}%</td>
@@ -2427,8 +2494,13 @@ const [watchText, setWatchText] = useState(() => {
                             setActiveMenu("analysis");
                           }}
                         >
-                          <td><b>{s.symbol}</b></td>
-                          <td>{s.name}</td>
+                          <td>
+                            <div className="stock-name-stack">
+                              <span className="stock-name-main small">{getStockDisplayName(s.symbol, s.name)}</span>
+                              <span className="stock-name-code">{s.symbol}</span>
+                            </div>
+                          </td>
+                          <td>{s.symbol}</td>
                           <td><b>{s.nextDay?.nextDayScore ?? "--"}</b></td>
                           <td><span className="badge">{s.nextDay?.nextDayRank || "待觀察"}</span></td>
                           <td>{s.nextDay?.gapUpProbability ?? "--"}%</td>
@@ -2499,7 +2571,9 @@ const [watchText, setWatchText] = useState(() => {
                     <>
                       <div className="stock-head">
                         <div className="stock-title">
-                          <h1>{intradayStock.symbol} {intradayStock.name}</h1>
+                          <h1>
+                            {getStockDisplayName(intradayStock.symbol, intradayStock.name)} {intradayStock.symbol}
+                          </h1>
                           <p className="muted">目前使用 {klineLabel(klineType)}，資料來源為 Yahoo Finance K線（已加速輪詢，但 Yahoo 台股可能仍有延遲）。</p>
                         </div>
                         <div className={intradayStock.changePct >= 0 ? "price up" : "price down"}>
@@ -2582,7 +2656,12 @@ const [watchText, setWatchText] = useState(() => {
                         {sortedDayTradeList.map((s, i) => (
                           <tr key={s.symbol} onClick={() => { setIntradayStock(s); setStock(s); }}>
                             <td>{i + 1}</td>
-                            <td><b>{s.symbol}</b><br /><span className="muted">{s.name}</span></td>
+                            <td>
+                            <div className="stock-name-stack">
+                              <span className="stock-name-main">{getStockDisplayName(s.symbol, s.name)}</span>
+                              <span className="stock-name-code">{s.symbol}</span>
+                            </div>
+                          </td>
                             <td>{s.dayTrade?.score ?? "--"}</td>
                             <td className={s.changePct >= 0 ? "up" : "down"}>{s.changePct?.toFixed?.(2) ?? "--"}%</td>
                             <td>{s.volumeRatio?.toFixed?.(2) ?? "--"}</td>
@@ -2688,13 +2767,18 @@ const [watchText, setWatchText] = useState(() => {
                     <div className="table-wrap">
                       <table>
                         <thead>
-                          <tr><th>代號</th><th>名稱</th><th>AI分數</th><th>漲跌</th><th>量比</th><th>訊號</th><th>觀察理由</th></tr>
+                          <tr><th>股票</th><th>代號</th><th>AI分數</th><th>漲跌</th><th>量比</th><th>訊號</th><th>觀察理由</th></tr>
                         </thead>
                         <tbody>
                           {todayWatchStocks.map((s) => (
                             <tr key={s.symbol} onClick={() => { setStock(s); setActiveMenu("analysis"); }}>
                               <td><b>{s.symbol}</b></td>
-                              <td>{s.name}</td>
+                              <td>
+                                <div className="stock-name-stack">
+                                  <span className="stock-name-main small">{getStockDisplayName(s.symbol, s.name)}</span>
+                                  <span className="stock-name-code">{s.symbol}</span>
+                                </div>
+                              </td>
                               <td>{s.score ?? "--"}</td>
                               <td className={s.changePct >= 0 ? "up" : "down"}>{s.changePct?.toFixed?.(2) ?? "--"}%</td>
                               <td>{s.volumeRatio?.toFixed?.(2) ?? "--"}</td>
