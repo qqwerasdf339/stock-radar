@@ -821,6 +821,7 @@ function analyzeStock(stock) {
     tradeSignal,
     winRatePredict,
     dayTrade,
+    nextDay,
   };
 }
 
@@ -1234,7 +1235,7 @@ const [watchText, setWatchText] = useState(() => {
   const [nextDayList, setNextDayList] = useState([]);
   const [nextDayLoading, setNextDayLoading] = useState(false);
   const [nextDaySortMode, setNextDaySortMode] = useState("score");
-  const [reportTab, setReportTab] = useState("overview");
+  const [reportTab, setReportTab] = useState("market");
 
   useEffect(() => {
     localStorage.setItem("stockRadarWatchText", watchText);
@@ -1830,6 +1831,129 @@ const [watchText, setWatchText] = useState(() => {
       }。短線操作上，優先觀察量能是否持續放大、RSI 是否過熱，以及 K 線是否出現長上影線。`
     : "目前尚未執行強勢掃描，建議先掃描市場強勢股或自選股後，再產生 AI 摘要。";
 
+  const reportUniverse = useMemo(() => {
+    const map = new Map();
+
+    [...systemStrongList, ...watchList, ...nextDayList, ...dayTradeList]
+      .filter(Boolean)
+      .forEach((item) => {
+        if (!item?.symbol) return;
+        const old = map.get(item.symbol);
+        if (!old || (item.score || 0) > (old.score || 0)) {
+          map.set(item.symbol, item);
+        }
+      });
+
+    return [...map.values()];
+  }, [systemStrongList, watchList, nextDayList, dayTradeList]);
+
+  const reportStrongTop25 = useMemo(() => {
+    return [...reportUniverse]
+      .filter((s) => Number.isFinite(s.changePct))
+      .sort((a, b) => {
+        const aScore = (a.score || 0) * 0.45 + Math.max(a.changePct || 0, 0) * 8 + (a.volumeRatio || 0) * 8;
+        const bScore = (b.score || 0) * 0.45 + Math.max(b.changePct || 0, 0) * 8 + (b.volumeRatio || 0) * 8;
+        return bScore - aScore;
+      })
+      .slice(0, 25);
+  }, [reportUniverse]);
+
+  const reportWeakTop25 = useMemo(() => {
+    return [...reportUniverse]
+      .filter((s) => Number.isFinite(s.changePct))
+      .sort((a, b) => {
+        const aScore = (a.score || 0) * 0.35 + (a.changePct || 0) * 10 + (a.volumeRatio || 0);
+        const bScore = (b.score || 0) * 0.35 + (b.changePct || 0) * 10 + (b.volumeRatio || 0);
+        return aScore - bScore;
+      })
+      .slice(0, 25);
+  }, [reportUniverse]);
+
+  const usTechWatchList = useMemo(() => {
+    const codes = ["NVDA", "AAPL", "TSLA", "MSFT", "META", "AMD", "AMZN", "GOOGL", "SMCI", "QQQ", "SOXX"];
+    return codes
+      .map((code) => reportUniverse.find((s) => s.symbol === code))
+      .filter(Boolean);
+  }, [reportUniverse]);
+
+  const industryReport = useMemo(() => {
+    const industryMap = new Map();
+
+    systemStrongList.forEach((item) => {
+      const key = item.baseType || item.strongType || "其他";
+      const old = industryMap.get(key) || { name: key, count: 0, avgChange: 0, avgScore: 0, volume: 0 };
+      industryMap.set(key, {
+        name: key,
+        count: old.count + 1,
+        avgChange: old.avgChange + (item.changePct || 0),
+        avgScore: old.avgScore + (item.score || 0),
+        volume: old.volume + (item.volumeRatio || 0),
+      });
+    });
+
+    const result = [...industryMap.values()].map((item) => ({
+      ...item,
+      avgChange: item.count ? item.avgChange / item.count : 0,
+      avgScore: item.count ? item.avgScore / item.count : 0,
+      volume: item.count ? item.volume / item.count : 0,
+    }));
+
+    return {
+      strong: result
+        .filter((item) => item.avgChange >= 0 || item.avgScore >= 60)
+        .sort((a, b) => b.avgScore + b.avgChange * 8 - (a.avgScore + a.avgChange * 8))
+        .slice(0, 8),
+      weak: result
+        .sort((a, b) => a.avgScore + a.avgChange * 8 - (b.avgScore + b.avgChange * 8))
+        .slice(0, 8),
+    };
+  }, [systemStrongList]);
+
+  const reportNextDayCandidates = useMemo(() => {
+    return [...sortedNextDayList]
+      .filter((s) => !s.nextDay?.fakeBreakout)
+      .slice(0, 25);
+  }, [sortedNextDayList]);
+
+  const reportDayTradeCandidates = useMemo(() => {
+    return [...sortedDayTradeList]
+      .filter((s) => (s.dayTrade?.score || 0) >= 35)
+      .slice(0, 25);
+  }, [sortedDayTradeList]);
+
+  const marketDirectionText =
+    marketStats.avg > 1
+      ? "多方明顯偏強"
+      : marketStats.avg > 0
+      ? "震盪偏多"
+      : marketStats.avg < -1
+      ? "空方明顯偏弱"
+      : "震盪偏弱";
+
+  const marketMoodText =
+    marketStats.avg > 1
+      ? "極度樂觀"
+      : marketStats.avg > 0
+      ? "偏多"
+      : marketStats.avg < -1
+      ? "偏空"
+      : "保守觀望";
+
+  const aiRiskItems = [
+    marketStats.avg < 0 ? "⚠️ 市場平均漲跌幅偏弱，追價前需確認量能與大盤方向。" : "⚠️ 盤勢雖偏多，仍要避免追高長上影與爆量不漲標的。",
+    reportStrongTop25.some((s) => (s.changePct || 0) > 5) ? "⚠️ 部分強勢股短線漲幅過大，隔日容易開高震盪。" : "⚠️ 強勢股漲幅尚未全面過熱，但仍需分批進出。",
+    "⚠️ 美債 / 匯率 / BTC 屬風險情緒指標，目前未接即時資料，請搭配外部行情確認。",
+    "⚠️ AI 分數只適合輔助判斷，不能取代停損與資金控管。",
+  ];
+
+  const tomorrowStrategyItems = [
+    marketStats.avg >= 0 ? "📌 大盤偏多時，優先觀察強勢股回測支撐後轉強。" : "📌 大盤偏弱時，先降低持股比例，等待量能回溫。",
+    "🔥 強勢股 Top25 只挑量比放大、收盤站上短均線、沒有長上影的標的。",
+    "🌙 隔日沖優先選擇：高分數、開高機率高、未觸發假突破的股票。",
+    "⚡ 當沖觀察股只做高流動性與量能放大的標的，避免冷門股。",
+    "🛡️ 若開盤 30 分鐘內指數快速轉弱，暫停追價，改等回測或尾盤確認。",
+  ];
+
   const suggestion = useMemo(() => {
     const q = query.trim();
     if (!q) return [];
@@ -1935,6 +2059,23 @@ const [watchText, setWatchText] = useState(() => {
         .report-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; border-bottom: 1px solid rgba(148,163,184,.14); padding-bottom: 10px; }
         .report-tabs button { background: #020617; color: #cbd5e1; border: 1px solid rgba(148,163,184,.22); }
         .report-tabs button.active { background: rgba(56,189,248,.22); color: #67e8f9; border-color: rgba(56,189,248,.55); }
+        .report-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+        .report-card, .macro-card { background: #020617; border: 1px solid rgba(148,163,184,.18); border-radius: 16px; padding: 14px; }
+        .report-card h2, .macro-card h3 { margin-bottom: 12px; }
+        .market-direction-badge { display: inline-flex; padding: 8px 12px; border-radius: 999px; font-weight: 900; margin-bottom: 12px; border: 1px solid rgba(148,163,184,.22); }
+        .market-direction-badge.up { background: rgba(239,68,68,.14); color: #fca5a5; border-color: rgba(239,68,68,.35); }
+        .market-direction-badge.down { background: rgba(34,197,94,.14); color: #86efac; border-color: rgba(34,197,94,.35); }
+        .market-stats-grid, .macro-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+        .market-stats-grid div, .industry-item, .risk-item, .strategy-item { background: rgba(15,23,42,.85); border: 1px solid rgba(148,163,184,.16); border-radius: 14px; padding: 12px; }
+        .market-stats-grid span, .macro-card p { display: block; color: #94a3b8; font-size: 12px; margin-bottom: 6px; }
+        .market-stats-grid b, .macro-card b { font-size: 20px; }
+        .ai-summary-box { margin-top: 12px; padding: 14px; border-radius: 16px; background: rgba(56,189,248,.08); border: 1px solid rgba(56,189,248,.22); color: #dbeafe; }
+        .industry-list, .risk-list, .strategy-box { display: grid; gap: 10px; }
+        .industry-item { display: flex; justify-content: space-between; align-items: center; }
+        .industry-item.up span { color: #fca5a5; }
+        .industry-item.down span { color: #86efac; }
+        .report-empty { color: #94a3b8; padding: 16px; border: 1px dashed rgba(148,163,184,.25); border-radius: 14px; }
+
 
         .score-main { background: linear-gradient(135deg, rgba(56,189,248,.22), rgba(37,99,235,.18)); border: 1px solid rgba(56,189,248,.28); border-radius: 18px; padding: 18px; text-align: center; margin-bottom: 12px; }
         .score-main b { display: block; font-size: 48px; line-height: 1; }
@@ -2679,100 +2820,87 @@ const [watchText, setWatchText] = useState(() => {
           {activeMenu === "report" && (
             <div className="card">
               <div className="section-title">
-                <h2>🧾 每日市場報告</h2>
+                <h2>🧾 每日市場報告 Pro</h2>
                 <span className="muted">更新 {new Date().toLocaleString("zh-TW")}</span>
               </div>
 
               <div className="report-tabs">
-                <button className={reportTab === "overview" ? "active" : ""} onClick={() => setReportTab("overview")}>📊 今日市場簡介</button>
-                <button className={reportTab === "news" ? "active" : ""} onClick={() => setReportTab("news")}>📰 重要財經新聞 5 則</button>
-                <button className={reportTab === "ai" ? "active" : ""} onClick={() => setReportTab("ai")}>🤖 AI 摘要</button>
-                <button className={reportTab === "watch" ? "active" : ""} onClick={() => setReportTab("watch")}>🔥 今日觀察股票</button>
+                <button className={reportTab === "market" ? "active" : ""} onClick={() => setReportTab("market")}>📊 今日大盤方向</button>
+                <button className={reportTab === "industry" ? "active" : ""} onClick={() => setReportTab("industry")}>🏭 台股強弱產業</button>
+                <button className={reportTab === "us" ? "active" : ""} onClick={() => setReportTab("us")}>🇺🇸 美股科技股</button>
+                <button className={reportTab === "macro" ? "active" : ""} onClick={() => setReportTab("macro")}>💱 匯率 / 美債 / BTC</button>
+                <button className={reportTab === "strength" ? "active" : ""} onClick={() => setReportTab("strength")}>🔥 強弱勢股</button>
+                <button className={reportTab === "nextday" ? "active" : ""} onClick={() => setReportTab("nextday")}>🌙 隔日沖候選</button>
+                <button className={reportTab === "daytrade" ? "active" : ""} onClick={() => setReportTab("daytrade")}>⚡ 當沖觀察</button>
+                <button className={reportTab === "risk" ? "active" : ""} onClick={() => setReportTab("risk")}>⚠️ AI風險提醒</button>
+                <button className={reportTab === "strategy" ? "active" : ""} onClick={() => setReportTab("strategy")}>📌 明日策略</button>
               </div>
 
-              {reportTab === "overview" && (
-                <div className="summary-grid">
-                  <div className="card">
-                    <h3>📊 今日市場簡介</h3>
-                    <p className="muted">
-                      今日市場以台股、美股科技股、匯率與 BTC 作為觀察主軸。
-                      短線重點放在成交量、AI分數、RSI、MACD 與 K 線型態。
-                    </p>
+              {reportTab === "market" && (
+                <div className="report-card">
+                  <h2>📊 今日大盤方向</h2>
+                  <div className={`market-direction-badge ${marketStats.avg >= 0 ? "up" : "down"}`}>
+                    {marketDirectionText}
                   </div>
-                  <div className="card">
-                    <h3>TW 台股</h3>
-                    <p className="muted">半導體、AI伺服器、高股息ETF仍是主要觀察方向。</p>
-                    <b>{marketStats.up} 檔上漲 / {marketStats.down} 檔下跌</b>
+
+                  <div className="market-stats-grid">
+                    <div><span>上漲家數</span><b className="up">{marketStats.up}</b></div>
+                    <div><span>下跌家數</span><b className="down">{marketStats.down}</b></div>
+                    <div><span>平均漲跌幅</span><b className={marketStats.avg >= 0 ? "up" : "down"}>{marketStats.avg.toFixed(2)}%</b></div>
+                    <div><span>市場情緒</span><b>{marketMoodText}</b></div>
                   </div>
-                  <div className="card">
-                    <h3>US 美股</h3>
-                    <p className="muted">觀察 AAPL、NVDA、TSLA、SPY、QQQ。</p>
-                    <b>科技股與 ETF 為主要風向</b>
-                  </div>
-                  <div className="card">
-                    <h3>💱 匯率 / BTC</h3>
-                    <p className="muted">匯率影響外資，BTC 反映風險偏好。</p>
-                    <b>偏向風險情緒指標</b>
+
+                  <div className="ai-summary-box">
+                    AI 判斷目前市場：
+                    {marketStats.avg > 1
+                      ? "資金明顯偏多，強勢股可續抱，但避免追高過熱標的。"
+                      : marketStats.avg > 0
+                      ? "盤勢偏震盪偏多，適合觀察量能放大的主流股。"
+                      : "市場偏弱，建議降低追價，等待轉強訊號。"}
                   </div>
                 </div>
               )}
 
-              {reportTab === "news" && (
-                <div className="card">
-                  <div className="section-title">
-                    <h2>📰 重要財經新聞 5 則</h2>
-                    <span className="muted">中文整理版</span>
+              {reportTab === "industry" && (
+                <div className="report-grid">
+                  <div className="report-card">
+                    <h2>🏭 台股強勢產業</h2>
+                    <div className="industry-list">
+                      {industryReport.strong.length ? industryReport.strong.map((item) => (
+                        <div className="industry-item up" key={item.name}>
+                          <b>{item.name}</b>
+                          <span>▲ {item.avgChange.toFixed(2)}%｜AI {Math.round(item.avgScore)}</span>
+                        </div>
+                      )) : <p className="report-empty">強勢產業資料更新中。</p>}
+                    </div>
                   </div>
-                  <div className="table-wrap">
-                    <table>
-                      <thead>
-                        <tr><th>新聞標題</th><th>來源分類</th><th>影響判斷</th></tr>
-                      </thead>
-                      <tbody>
-                        {dailyNews.map((news, index) => (
-                          <tr key={index}>
-                            <td>{news.title}</td>
-                            <td>{news.source}</td>
-                            <td><span className="badge">{news.impact}</span></td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+
+                  <div className="report-card">
+                    <h2>📉 台股弱勢產業</h2>
+                    <div className="industry-list">
+                      {industryReport.weak.length ? industryReport.weak.map((item) => (
+                        <div className="industry-item down" key={item.name}>
+                          <b>{item.name}</b>
+                          <span>▼ {item.avgChange.toFixed(2)}%｜AI {Math.round(item.avgScore)}</span>
+                        </div>
+                      )) : <p className="report-empty">弱勢產業資料更新中。</p>}
+                    </div>
                   </div>
                 </div>
               )}
 
-              {reportTab === "ai" && (
-                <div className="card">
-                  <div className="section-title">
-                    <h2>🤖 AI 摘要</h2>
-                    <span className="muted">依目前掃描結果整理</span>
-                  </div>
-                  <div className="signal-card">
-                    <b>今日重點判斷</b>
-                    <p>{dailyAiSummary}</p>
-                  </div>
-                </div>
-              )}
-
-              {reportTab === "watch" && (
-                <div className="card">
-                  <div className="section-title">
-                    <h2>🔥 今日觀察股票</h2>
-                    <span className="muted">依 AI 分數排序</span>
-                  </div>
-                  {todayWatchStocks.length === 0 ? (
-                    <p className="empty">觀察名單更新中，系統會持續背景更新自選股與強勢股。</p>
+              {reportTab === "us" && (
+                <div className="report-card">
+                  <h2>🇺🇸 美股科技股觀察</h2>
+                  {usTechWatchList.length === 0 ? (
+                    <p className="report-empty">尚未有美股科技股資料。可將 NVDA、AAPL、TSLA、MSFT、META、AMD 加入自選後自動更新。</p>
                   ) : (
                     <div className="table-wrap">
                       <table>
-                        <thead>
-                          <tr><th>股票</th><th>代號</th><th>AI分數</th><th>漲跌</th><th>量比</th><th>訊號</th><th>觀察理由</th></tr>
-                        </thead>
+                        <thead><tr><th>股票</th><th>AI分數</th><th>趨勢</th><th>觀察</th><th>量比</th></tr></thead>
                         <tbody>
-                          {todayWatchStocks.map((s) => (
+                          {usTechWatchList.map((s) => (
                             <tr key={s.symbol} onClick={() => { setStock(s); setActiveMenu("analysis"); }}>
-                              <td><b>{s.symbol}</b></td>
                               <td>
                                 <div className="stock-name-stack">
                                   <span className="stock-name-main small">{getStockDisplayName(s.symbol, s.name)}</span>
@@ -2781,15 +2909,185 @@ const [watchText, setWatchText] = useState(() => {
                               </td>
                               <td>{s.score ?? "--"}</td>
                               <td className={s.changePct >= 0 ? "up" : "down"}>{s.changePct?.toFixed?.(2) ?? "--"}%</td>
-                              <td>{s.volumeRatio?.toFixed?.(2) ?? "--"}</td>
                               <td><span className="badge">{s.tradeSignal?.action || "觀望"}</span></td>
-                              <td>{(s.tags && s.tags.length > 0) ? s.tags.slice(0, 3).join("、") : s.volumeSignal?.title || "等待確認"}</td>
+                              <td>{s.volumeRatio?.toFixed?.(2) ?? "--"}</td>
                             </tr>
                           ))}
                         </tbody>
                       </table>
                     </div>
                   )}
+                </div>
+              )}
+
+              {reportTab === "macro" && (
+                <div className="macro-grid">
+                  <div className="macro-card">
+                    <h3>💵 匯率 / 美元</h3>
+                    <b>觀察外資方向</b>
+                    <p>美元偏強時，外資對台股通常較保守；美元轉弱時，風險資產較容易回溫。</p>
+                  </div>
+                  <div className="macro-card">
+                    <h3>📉 美國10年債</h3>
+                    <b>觀察科技股壓力</b>
+                    <p>殖利率走高時，科技成長股估值壓力提高；殖利率回落時有利科技股反彈。</p>
+                  </div>
+                  <div className="macro-card">
+                    <h3>₿ BTC</h3>
+                    <b>風險偏好指標</b>
+                    <p>BTC 走強通常代表市場風險偏好提升；劇烈下跌時需留意科技股同步震盪。</p>
+                  </div>
+                  <div className="macro-card">
+                    <h3>🧭 AI 總結</h3>
+                    <b>{marketMoodText}</b>
+                    <p>宏觀資料目前以文字規則提醒為主，後續可再接匯率、美債與 BTC 即時 API。</p>
+                  </div>
+                </div>
+              )}
+
+              {reportTab === "strength" && (
+                <div className="report-grid">
+                  <div className="report-card">
+                    <h2>🔥 今日強勢股 Top25</h2>
+                    {reportStrongTop25.length === 0 ? (
+                      <p className="report-empty">強勢股資料更新中。</p>
+                    ) : (
+                      <div className="table-wrap">
+                        <table>
+                          <thead><tr><th>股票</th><th>AI</th><th>漲幅</th><th>量比</th><th>訊號</th></tr></thead>
+                          <tbody>
+                            {reportStrongTop25.map((s) => (
+                              <tr key={s.symbol} onClick={() => { setStock(s); setActiveMenu("analysis"); }}>
+                                <td>
+                                  <div className="stock-name-stack">
+                                    <span className="stock-name-main small">{getStockDisplayName(s.symbol, s.name)}</span>
+                                    <span className="stock-name-code">{s.symbol}</span>
+                                  </div>
+                                </td>
+                                <td>{s.score ?? "--"}</td>
+                                <td className="up">{s.changePct?.toFixed?.(2) ?? "--"}%</td>
+                                <td>{s.volumeRatio?.toFixed?.(2) ?? "--"}</td>
+                                <td><span className="badge">{s.tradeSignal?.action || "觀望"}</span></td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="report-card">
+                    <h2>📉 今日弱勢股 Top25</h2>
+                    {reportWeakTop25.length === 0 ? (
+                      <p className="report-empty">弱勢股資料更新中。</p>
+                    ) : (
+                      <div className="table-wrap">
+                        <table>
+                          <thead><tr><th>股票</th><th>AI</th><th>跌幅</th><th>量比</th><th>訊號</th></tr></thead>
+                          <tbody>
+                            {reportWeakTop25.map((s) => (
+                              <tr key={s.symbol} onClick={() => { setStock(s); setActiveMenu("analysis"); }}>
+                                <td>
+                                  <div className="stock-name-stack">
+                                    <span className="stock-name-main small">{getStockDisplayName(s.symbol, s.name)}</span>
+                                    <span className="stock-name-code">{s.symbol}</span>
+                                  </div>
+                                </td>
+                                <td>{s.score ?? "--"}</td>
+                                <td className="down">{s.changePct?.toFixed?.(2) ?? "--"}%</td>
+                                <td>{s.volumeRatio?.toFixed?.(2) ?? "--"}</td>
+                                <td><span className="badge">{s.tradeSignal?.action || "觀望"}</span></td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {reportTab === "nextday" && (
+                <div className="report-card">
+                  <h2>🌙 隔日沖候選股</h2>
+                  {reportNextDayCandidates.length === 0 ? (
+                    <p className="report-empty">隔日沖候選資料更新中。</p>
+                  ) : (
+                    <div className="table-wrap">
+                      <table>
+                        <thead><tr><th>股票</th><th>分數</th><th>開高率</th><th>訊號</th><th>假突破</th></tr></thead>
+                        <tbody>
+                          {reportNextDayCandidates.map((s) => (
+                            <tr key={s.symbol} onClick={() => { setStock(s); setActiveMenu("analysis"); }}>
+                              <td>
+                                <div className="stock-name-stack">
+                                  <span className="stock-name-main small">{getStockDisplayName(s.symbol, s.name)}</span>
+                                  <span className="stock-name-code">{s.symbol}</span>
+                                </div>
+                              </td>
+                              <td>{s.nextDay?.nextDayScore ?? "--"}</td>
+                              <td>{s.nextDay?.gapUpProbability ?? "--"}%</td>
+                              <td><span className="badge">{s.nextDay?.nextDaySignal || "觀望"}</span></td>
+                              <td className={s.nextDay?.fakeBreakout ? "down" : "up"}>{s.nextDay?.fakeBreakout ? "有風險" : "通過"}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {reportTab === "daytrade" && (
+                <div className="report-card">
+                  <h2>⚡ 當沖觀察股</h2>
+                  {reportDayTradeCandidates.length === 0 ? (
+                    <p className="report-empty">當沖觀察資料更新中。可先執行當沖排行榜或等待背景更新。</p>
+                  ) : (
+                    <div className="table-wrap">
+                      <table>
+                        <thead><tr><th>股票</th><th>即時分數</th><th>訊號</th><th>進場價</th><th>停損 / 停利</th></tr></thead>
+                        <tbody>
+                          {reportDayTradeCandidates.map((s) => (
+                            <tr key={s.symbol} onClick={() => { setIntradayStock(s); setStock(s); setActiveMenu("daytrade"); }}>
+                              <td>
+                                <div className="stock-name-stack">
+                                  <span className="stock-name-main small">{getStockDisplayName(s.symbol, s.name)}</span>
+                                  <span className="stock-name-code">{s.symbol}</span>
+                                </div>
+                              </td>
+                              <td>{s.dayTrade?.score ?? "--"}</td>
+                              <td><span className="badge">{s.dayTrade?.signal || "觀察"}</span></td>
+                              <td>{s.dayTrade?.entry?.toFixed?.(2) ?? "--"}</td>
+                              <td>{s.dayTrade?.stopLoss?.toFixed?.(2) ?? "--"} / {s.dayTrade?.takeProfit?.toFixed?.(2) ?? "--"}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {reportTab === "risk" && (
+                <div className="report-card">
+                  <h2>⚠️ AI 風險提醒</h2>
+                  <div className="risk-list">
+                    {aiRiskItems.map((item, index) => (
+                      <div className="risk-item" key={index}>{item}</div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {reportTab === "strategy" && (
+                <div className="report-card">
+                  <h2>📌 明日操作策略</h2>
+                  <div className="strategy-box">
+                    {tomorrowStrategyItems.map((item, index) => (
+                      <div className="strategy-item" key={index}>{item}</div>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
