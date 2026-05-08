@@ -1002,10 +1002,24 @@ function analyzeNextDayStrategy(stock) {
   };
 }
 
-function TradingChart({ stock, showMA5, showMA20, showMA60, showBollinger, chartKey = "default" }) {
+function TradingChart({
+  stock,
+  showMA5,
+  showMA20,
+  showMA60,
+  showBollinger,
+  chartKey = "default",
+  drawingLines = [],
+  freeDrawings = [],
+  drawingEnabled = false,
+  drawingTool = "line",
+  onCreateDrawing,
+}) {
   const containerRef = useRef(null);
+  const overlayRef = useRef(null);
   const visibleRangeRef = useRef(null);
   const lastChartKeyRef = useRef(null);
+  const [draftDrawing, setDraftDrawing] = useState(null);
 
   useEffect(() => {
     if (!containerRef.current || !stock?.history?.length) return;
@@ -1073,6 +1087,96 @@ function TradingChart({ stock, showMA5, showMA20, showMA60, showBollinger, chart
     }));
 
     candleSeries.setData(candles);
+
+    const getLineColor = (line) => {
+      if (line.type === "support") return "#22c55e";
+      if (line.type === "stop") return "#f97316";
+      if (line.type === "trend") return "#38bdf8";
+      if (line.type === "zone") return "#a855f7";
+      return "#ef4444";
+    };
+
+    const getLineTitle = (line) => {
+      if (line.label) return line.label;
+      if (line.type === "support") return "支撐";
+      if (line.type === "stop") return "停損";
+      if (line.type === "trend") return "趨勢線";
+      if (line.type === "zone") return "價格區間";
+      return "壓力";
+    };
+
+    drawingLines.forEach((line) => {
+      const kind = line.kind || "horizontal";
+      const color = getLineColor(line);
+
+      if (kind === "trend") {
+        const startBarsAgo = Number(line.startBarsAgo ?? 20);
+        const endBarsAgo = Number(line.endBarsAgo ?? 0);
+        const startPrice = Number(line.startPrice);
+        const endPrice = Number(line.endPrice);
+
+        const startIndex = Math.max(0, Math.min(candles.length - 1, candles.length - 1 - startBarsAgo));
+        const endIndex = Math.max(0, Math.min(candles.length - 1, candles.length - 1 - endBarsAgo));
+
+        if (Number.isFinite(startPrice) && Number.isFinite(endPrice) && candles[startIndex] && candles[endIndex]) {
+          const trendSeries = chart.addSeries(LineSeries, {
+            color,
+            lineWidth: 2,
+            priceLineVisible: false,
+            lastValueVisible: false,
+          });
+
+          trendSeries.setData([
+            { time: candles[startIndex].time, value: startPrice },
+            { time: candles[endIndex].time, value: endPrice },
+          ]);
+        }
+
+        return;
+      }
+
+      if (kind === "zone") {
+        const top = Number(line.top);
+        const bottom = Number(line.bottom);
+        if (!Number.isFinite(top) || !Number.isFinite(bottom)) return;
+
+        const upper = Math.max(top, bottom);
+        const lower = Math.min(top, bottom);
+
+        candleSeries.createPriceLine({
+          price: upper,
+          color,
+          lineWidth: 2,
+          lineStyle: 2,
+          axisLabelVisible: true,
+          title: `${getLineTitle(line)} 上緣`,
+        });
+
+        candleSeries.createPriceLine({
+          price: lower,
+          color,
+          lineWidth: 2,
+          lineStyle: 2,
+          axisLabelVisible: true,
+          title: `${getLineTitle(line)} 下緣`,
+        });
+
+        return;
+      }
+
+      const price = Number(line.price);
+      if (!Number.isFinite(price)) return;
+
+      candleSeries.createPriceLine({
+        price,
+        color,
+        lineWidth: 2,
+        lineStyle: 2,
+        axisLabelVisible: true,
+        title: getLineTitle(line),
+      });
+    });
+
     ma5Series.setData(showMA5 ? buildMA(5) : []);
     ma20Series.setData(showMA20 ? buildMA(20) : []);
     ma60Series.setData(showMA60 ? buildMA(60) : []);
@@ -1112,9 +1216,115 @@ function TradingChart({ stock, showMA5, showMA20, showMA60, showBollinger, chart
       resizeObserver.disconnect();
       chart.remove();
     };
-  }, [stock, showMA5, showMA20, showMA60, showBollinger, chartKey]);
+  }, [stock, showMA5, showMA20, showMA60, showBollinger, chartKey, drawingLines]);
 
-  return <div ref={containerRef} className="trading-chart" />;
+  function getNormalizedPoint(event) {
+    const box = overlayRef.current?.getBoundingClientRect();
+    if (!box) return null;
+    return {
+      x: Math.max(0, Math.min(1, (event.clientX - box.left) / box.width)),
+      y: Math.max(0, Math.min(1, (event.clientY - box.top) / box.height)),
+    };
+  }
+
+  function handlePointerDown(event) {
+    if (!drawingEnabled) return;
+    const point = getNormalizedPoint(event);
+    if (!point) return;
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (drawingTool === "brush") {
+      setDraftDrawing({ id: "draft", tool: "brush", points: [point] });
+    } else {
+      setDraftDrawing({ id: "draft", tool: drawingTool, start: point, end: point });
+    }
+  }
+
+  function handlePointerMove(event) {
+    if (!drawingEnabled || !draftDrawing) return;
+    const point = getNormalizedPoint(event);
+    if (!point) return;
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (draftDrawing.tool === "brush") {
+      setDraftDrawing((prev) => ({ ...prev, points: [...(prev?.points || []), point] }));
+    } else {
+      setDraftDrawing((prev) => ({ ...prev, end: point }));
+    }
+  }
+
+  function handlePointerUp(event) {
+    if (!drawingEnabled || !draftDrawing) return;
+    event.preventDefault();
+    event.stopPropagation();
+
+    const completed = { ...draftDrawing, id: `${Date.now()}-${Math.random().toString(16).slice(2)}` };
+    const isValidBrush = completed.tool === "brush" && completed.points?.length >= 2;
+    const isValidShape =
+      completed.tool !== "brush" &&
+      completed.start &&
+      completed.end &&
+      (Math.abs(completed.start.x - completed.end.x) > 0.005 ||
+        Math.abs(completed.start.y - completed.end.y) > 0.005);
+
+    if (isValidBrush || isValidShape) onCreateDrawing?.(completed);
+    setDraftDrawing(null);
+  }
+
+  function renderDrawing(item, isDraft = false) {
+    const color = item.tool === "rect" ? "#a855f7" : item.tool === "brush" ? "#facc15" : "#38bdf8";
+    const strokeWidth = isDraft ? 2.5 : 2;
+
+    if (item.tool === "brush") {
+      const points = item.points || [];
+      const d = points.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x * 100} ${p.y * 100}`).join(" ");
+      return (
+        <path key={item.id} d={d} fill="none" stroke={color} strokeWidth={strokeWidth}
+          strokeLinecap="round" strokeLinejoin="round" opacity={isDraft ? 0.75 : 0.95}
+          vectorEffect="non-scaling-stroke" />
+      );
+    }
+
+    if (item.tool === "rect") {
+      const x = Math.min(item.start.x, item.end.x) * 100;
+      const y = Math.min(item.start.y, item.end.y) * 100;
+      const width = Math.abs(item.start.x - item.end.x) * 100;
+      const height = Math.abs(item.start.y - item.end.y) * 100;
+      return (
+        <rect key={item.id} x={x} y={y} width={width} height={height}
+          fill="rgba(168,85,247,.12)" stroke={color} strokeWidth={strokeWidth}
+          strokeDasharray={isDraft ? "6 4" : "0"} vectorEffect="non-scaling-stroke" />
+      );
+    }
+
+    return (
+      <line key={item.id} x1={item.start.x * 100} y1={item.start.y * 100}
+        x2={item.end.x * 100} y2={item.end.y * 100}
+        stroke={color} strokeWidth={strokeWidth} strokeLinecap="round"
+        strokeDasharray={isDraft ? "6 4" : "0"} vectorEffect="non-scaling-stroke" />
+    );
+  }
+
+  return (
+    <div className={`chart-drawing-wrap ${drawingEnabled ? "drawing-active" : ""}`}>
+      <div ref={containerRef} className="trading-chart" />
+      <svg
+        ref={overlayRef}
+        className="chart-free-draw-overlay"
+        viewBox="0 0 100 100"
+        preserveAspectRatio="none"
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerLeave={handlePointerUp}
+      >
+        {freeDrawings.map((item) => renderDrawing(item))}
+        {draftDrawing && renderDrawing(draftDrawing, true)}
+      </svg>
+    </div>
+  );
 }
 
 export default function Stock() {
@@ -1208,6 +1418,8 @@ const [watchText, setWatchText] = useState(() => {
   const [newWatchSymbol, setNewWatchSymbol] = useState("");
   const [favoriteNotice, setFavoriteNotice] = useState("");
   const [activeMenu, setActiveMenu] = useState("analysis");
+  const menuHistoryRef = useRef([]);
+  const lastMenuRef = useRef("analysis");
   const [sortMode, setSortMode] = useState("score");
   const [intradayInterval, setIntradayInterval] = useState("1m");
   const [klineType, setKlineType] = useState("1d");
@@ -1236,6 +1448,32 @@ const [watchText, setWatchText] = useState(() => {
   const [nextDayLoading, setNextDayLoading] = useState(false);
   const [nextDaySortMode, setNextDaySortMode] = useState("score");
   const [reportTab, setReportTab] = useState("market");
+  const [chartLines, setChartLines] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem("stockRadarChartLines") || "{}");
+    } catch {
+      return {};
+    }
+  });
+  const [linePrice, setLinePrice] = useState("");
+  const [lineLabel, setLineLabel] = useState("");
+  const [lineType, setLineType] = useState("resistance");
+  const [drawingKind, setDrawingKind] = useState("horizontal");
+  const [trendStartBarsAgo, setTrendStartBarsAgo] = useState("20");
+  const [trendEndBarsAgo, setTrendEndBarsAgo] = useState("0");
+  const [trendStartPrice, setTrendStartPrice] = useState("");
+  const [trendEndPrice, setTrendEndPrice] = useState("");
+  const [zoneTopPrice, setZoneTopPrice] = useState("");
+  const [zoneBottomPrice, setZoneBottomPrice] = useState("");
+  const [freeDrawings, setFreeDrawings] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem("stockRadarFreeDrawings") || "{}");
+    } catch {
+      return {};
+    }
+  });
+  const [freeDrawingEnabled, setFreeDrawingEnabled] = useState(false);
+  const [freeDrawingTool, setFreeDrawingTool] = useState("line");
 
   useEffect(() => {
     localStorage.setItem("stockRadarWatchText", watchText);
@@ -1248,6 +1486,414 @@ const [watchText, setWatchText] = useState(() => {
   useEffect(() => {
     localStorage.setItem("stockRadarSearchHistory", JSON.stringify(searchHistory));
   }, [searchHistory]);
+
+  useEffect(() => {
+    if (lastMenuRef.current !== activeMenu) {
+      menuHistoryRef.current.push(lastMenuRef.current);
+      lastMenuRef.current = activeMenu;
+    }
+  }, [activeMenu]);
+
+  function goBackToPreviousView() {
+    const previousMenu = menuHistoryRef.current.pop();
+
+    if (previousMenu) {
+      lastMenuRef.current = previousMenu;
+      setActiveMenu(previousMenu);
+      return;
+    }
+
+    if (window.history.length > 1) {
+      navigate(-1);
+      return;
+    }
+
+    navigate("/");
+  }
+
+  useEffect(() => {
+    localStorage.setItem("stockRadarChartLines", JSON.stringify(chartLines));
+  }, [chartLines]);
+
+  useEffect(() => {
+    localStorage.setItem("stockRadarFreeDrawings", JSON.stringify(freeDrawings));
+  }, [freeDrawings]);
+
+
+  function getChartLineKey(targetStock = stock) {
+    const symbol = targetStock?.symbol || query || "default";
+    return `${symbol}-${klineType}`;
+  }
+
+  function getDrawingLines(targetStock = stock) {
+    return chartLines[getChartLineKey(targetStock)] || [];
+  }
+
+  function addChartLine(targetStock = stock) {
+    if (!targetStock?.symbol) {
+      setError("請先選擇股票後再新增畫線");
+      return;
+    }
+
+    const key = getChartLineKey(targetStock);
+    const baseLabel = lineLabel.trim();
+
+    let newLine = null;
+
+    if (drawingKind === "trend") {
+      const startBarsAgo = Number(trendStartBarsAgo);
+      const endBarsAgo = Number(trendEndBarsAgo);
+      const startPrice = Number(trendStartPrice);
+      const endPrice = Number(trendEndPrice);
+
+      if (
+        !Number.isFinite(startBarsAgo) ||
+        !Number.isFinite(endBarsAgo) ||
+        !Number.isFinite(startPrice) ||
+        !Number.isFinite(endPrice) ||
+        startPrice <= 0 ||
+        endPrice <= 0
+      ) {
+        setError("請輸入有效的趨勢線起點 / 終點資料");
+        return;
+      }
+
+      newLine = {
+        id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        kind: "trend",
+        type: "trend",
+        startBarsAgo,
+        endBarsAgo,
+        startPrice,
+        endPrice,
+        label: baseLabel || "趨勢線",
+      };
+    } else if (drawingKind === "zone") {
+      const top = Number(zoneTopPrice);
+      const bottom = Number(zoneBottomPrice);
+
+      if (!Number.isFinite(top) || !Number.isFinite(bottom) || top <= 0 || bottom <= 0) {
+        setError("請輸入有效的區間上緣 / 下緣價格");
+        return;
+      }
+
+      newLine = {
+        id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        kind: "zone",
+        type: "zone",
+        top,
+        bottom,
+        label: baseLabel || "價格區間",
+      };
+    } else {
+      const price = Number(linePrice || targetStock?.close);
+
+      if (!Number.isFinite(price) || price <= 0) {
+        setError("請輸入有效價格");
+        return;
+      }
+
+      newLine = {
+        id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        kind: "horizontal",
+        price,
+        type: lineType,
+        label:
+          baseLabel ||
+          (lineType === "support"
+            ? "支撐"
+            : lineType === "stop"
+            ? "停損"
+            : "壓力"),
+      };
+    }
+
+    setChartLines((prev) => ({
+      ...prev,
+      [key]: [...(prev[key] || []), newLine],
+    }));
+
+    setLinePrice("");
+    setLineLabel("");
+    setTrendStartPrice("");
+    setTrendEndPrice("");
+    setZoneTopPrice("");
+    setZoneBottomPrice("");
+  }
+
+  function deleteChartLine(targetStock, lineId) {
+    const key = getChartLineKey(targetStock);
+
+    setChartLines((prev) => ({
+      ...prev,
+      [key]: (prev[key] || []).filter((line) => line.id !== lineId),
+    }));
+  }
+
+  function clearChartLines(targetStock = stock) {
+    const key = getChartLineKey(targetStock);
+
+    setChartLines((prev) => ({
+      ...prev,
+      [key]: [],
+    }));
+  }
+
+
+  function getFreeDrawings(targetStock = stock) {
+    return freeDrawings[getChartLineKey(targetStock)] || [];
+  }
+
+  function addFreeDrawing(targetStock = stock, drawing) {
+    if (!targetStock?.symbol || !drawing) return;
+    const key = getChartLineKey(targetStock);
+    setFreeDrawings((prev) => ({
+      ...prev,
+      [key]: [...(prev[key] || []), drawing],
+    }));
+  }
+
+  function deleteFreeDrawing(targetStock, drawingId) {
+    const key = getChartLineKey(targetStock);
+    setFreeDrawings((prev) => ({
+      ...prev,
+      [key]: (prev[key] || []).filter((item) => item.id !== drawingId),
+    }));
+  }
+
+  function clearFreeDrawings(targetStock = stock) {
+    const key = getChartLineKey(targetStock);
+    setFreeDrawings((prev) => ({ ...prev, [key]: [] }));
+  }
+
+  function DrawingTools({ targetStock }) {
+    const lines = getDrawingLines(targetStock);
+
+    const fillCurrentPrice = () => {
+      const value = targetStock?.close?.toFixed?.(2) || "";
+      if (drawingKind === "horizontal") setLinePrice(value);
+      if (drawingKind === "trend") {
+        setTrendEndPrice(value);
+        if (!trendStartPrice) setTrendStartPrice(value);
+      }
+      if (drawingKind === "zone") {
+        setZoneTopPrice(value);
+        if (!zoneBottomPrice) setZoneBottomPrice(value);
+      }
+    };
+
+    const describeLine = (line) => {
+      const kind = line.kind || "horizontal";
+
+      if (kind === "trend") {
+        return `${line.label || "趨勢線"}｜${line.startBarsAgo}根前 ${Number(line.startPrice).toFixed(2)} → ${line.endBarsAgo}根前 ${Number(line.endPrice).toFixed(2)}`;
+      }
+
+      if (kind === "zone") {
+        return `${line.label || "價格區間"}｜${Number(Math.max(line.top, line.bottom)).toFixed(2)} ~ ${Number(Math.min(line.top, line.bottom)).toFixed(2)}`;
+      }
+
+      return `${line.label || "水平線"} ${Number(line.price).toFixed(2)}`;
+    };
+
+    return (
+      <div className="drawing-panel">
+        <div className="drawing-title">
+          <b>✏️ K線畫線 v3</b>
+          <span>水平線 / 趨勢線 / 區間 / 滑鼠自由畫</span>
+        </div>
+
+        <div className="drawing-mode-tabs">
+          <button
+            className={drawingKind === "horizontal" ? "active" : "ghost"}
+            onClick={() => setDrawingKind("horizontal")}
+          >
+            水平線
+          </button>
+          <button
+            className={drawingKind === "trend" ? "active" : "ghost"}
+            onClick={() => setDrawingKind("trend")}
+          >
+            趨勢線
+          </button>
+          <button
+            className={drawingKind === "zone" ? "active" : "ghost"}
+            onClick={() => setDrawingKind("zone")}
+          >
+            區間
+          </button>
+        </div>
+
+        {drawingKind === "horizontal" && (
+          <div className="drawing-row">
+            <select
+              value={lineType}
+              onChange={(e) => setLineType(e.target.value)}
+              style={{ width: 100 }}
+            >
+              <option value="resistance">壓力</option>
+              <option value="support">支撐</option>
+              <option value="stop">停損</option>
+            </select>
+
+            <input
+              value={linePrice}
+              onChange={(e) => setLinePrice(e.target.value)}
+              placeholder={`價格，例如 ${targetStock?.close?.toFixed?.(2) || ""}`}
+              style={{ width: 150 }}
+            />
+
+            <input
+              value={lineLabel}
+              onChange={(e) => setLineLabel(e.target.value)}
+              placeholder="標籤，可空白"
+              style={{ width: 150 }}
+            />
+
+            <button className="ghost" onClick={fillCurrentPrice}>
+              帶入現價
+            </button>
+
+            <button className="ghost" onClick={() => addChartLine(targetStock)}>
+              新增水平線
+            </button>
+          </div>
+        )}
+
+        {drawingKind === "trend" && (
+          <div className="drawing-row">
+            <input
+              value={trendStartBarsAgo}
+              onChange={(e) => setTrendStartBarsAgo(e.target.value)}
+              placeholder="起點：幾根前"
+              style={{ width: 120 }}
+            />
+            <input
+              value={trendStartPrice}
+              onChange={(e) => setTrendStartPrice(e.target.value)}
+              placeholder="起點價格"
+              style={{ width: 120 }}
+            />
+            <input
+              value={trendEndBarsAgo}
+              onChange={(e) => setTrendEndBarsAgo(e.target.value)}
+              placeholder="終點：幾根前"
+              style={{ width: 120 }}
+            />
+            <input
+              value={trendEndPrice}
+              onChange={(e) => setTrendEndPrice(e.target.value)}
+              placeholder="終點價格"
+              style={{ width: 120 }}
+            />
+            <input
+              value={lineLabel}
+              onChange={(e) => setLineLabel(e.target.value)}
+              placeholder="標籤，可空白"
+              style={{ width: 150 }}
+            />
+
+            <button className="ghost" onClick={fillCurrentPrice}>
+              帶入現價
+            </button>
+
+            <button className="ghost" onClick={() => addChartLine(targetStock)}>
+              新增趨勢線
+            </button>
+          </div>
+        )}
+
+        {drawingKind === "zone" && (
+          <div className="drawing-row">
+            <input
+              value={zoneTopPrice}
+              onChange={(e) => setZoneTopPrice(e.target.value)}
+              placeholder="上緣價格"
+              style={{ width: 130 }}
+            />
+            <input
+              value={zoneBottomPrice}
+              onChange={(e) => setZoneBottomPrice(e.target.value)}
+              placeholder="下緣價格"
+              style={{ width: 130 }}
+            />
+            <input
+              value={lineLabel}
+              onChange={(e) => setLineLabel(e.target.value)}
+              placeholder="標籤，例如壓力區"
+              style={{ width: 160 }}
+            />
+
+            <button className="ghost" onClick={fillCurrentPrice}>
+              帶入現價
+            </button>
+
+            <button className="ghost" onClick={() => addChartLine(targetStock)}>
+              新增區間
+            </button>
+          </div>
+        )}
+
+        <div className="drawing-free-box">
+          <div className="drawing-title" style={{ marginBottom: 6 }}>
+            <b>🖱️ 滑鼠自由畫</b>
+            <span>開啟後可直接在K線圖上拖曳畫線</span>
+          </div>
+
+          <div className="drawing-row">
+            <button className={freeDrawingEnabled ? "danger" : "ghost"} onClick={() => setFreeDrawingEnabled((v) => !v)}>
+              {freeDrawingEnabled ? "停止自由畫" : "啟動自由畫"}
+            </button>
+
+            <select value={freeDrawingTool} onChange={(e) => setFreeDrawingTool(e.target.value)} style={{ width: 130 }}>
+              <option value="line">直線</option>
+              <option value="brush">手繪線</option>
+              <option value="rect">矩形區域</option>
+            </select>
+
+            <button className="danger" onClick={() => clearFreeDrawings(targetStock)} disabled={!getFreeDrawings(targetStock).length}>
+              清空自由畫
+            </button>
+
+            <span className="muted">
+              自由畫模式開啟時，拖曳圖表會變成畫線；要縮放/移動K線請先停止自由畫。
+            </span>
+          </div>
+        </div>
+
+        <div className="drawing-row" style={{ marginTop: 8 }}>
+          <button className="danger" onClick={() => clearChartLines(targetStock)} disabled={!lines.length}>
+            清空水平/趨勢/區間
+          </button>
+          <span className="muted">
+            趨勢線用「幾根前」定位：0 = 最新K棒，20 = 往前第20根。
+          </span>
+        </div>
+
+        {lines.length > 0 && (
+          <div className="drawing-list">
+            {lines.map((line) => (
+              <span className={`drawing-chip ${line.type || line.kind}`} key={line.id}>
+                {describeLine(line)}
+                <button onClick={() => deleteChartLine(targetStock, line.id)}>×</button>
+              </span>
+            ))}
+          </div>
+        )}
+
+        {getFreeDrawings(targetStock).length > 0 && (
+          <div className="drawing-list">
+            {getFreeDrawings(targetStock).map((item, index) => (
+              <span className={`drawing-chip ${item.tool}`} key={item.id}>
+                自由畫{index + 1}｜{item.tool === "rect" ? "矩形" : item.tool === "brush" ? "手繪" : "直線"}
+                <button onClick={() => deleteFreeDrawing(targetStock, item.id)}>×</button>
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
 
   function rememberSearchKeyword(value) {
     const keyword = String(value || "").trim().toUpperCase();
@@ -1488,7 +2134,7 @@ const [watchText, setWatchText] = useState(() => {
       ).filter(Boolean);
 
       setWatchList(result);
-      if (!stock && result[0]) setStock(result[0]);
+      if (!silent && !stock && result[0]) setStock(result[0]);
       if (!silent) setActiveMenu("watchlist");
     } catch (err) {
       setError(err.message || "自選清單掃描失敗");
@@ -1595,7 +2241,6 @@ const [watchText, setWatchText] = useState(() => {
         .slice(0, 50);
 
       setSystemStrongList(result);
-      if (result[0]) setStock(result[0]);
     } catch (err) {
       setError(err.message || "系統強勢股掃描失敗");
     } finally {
@@ -1633,7 +2278,7 @@ const [watchText, setWatchText] = useState(() => {
         });
 
       setNextDayList(result);
-      if (!stock && result[0]) setStock(result[0]);
+      if (!silent && !stock && result[0]) setStock(result[0]);
     } catch (err) {
       if (!silent) setError(err.message || "隔日沖選股失敗");
     } finally {
@@ -1654,6 +2299,7 @@ const [watchText, setWatchText] = useState(() => {
 
     async function loadWatchListInBackground() {
       if (cancelled) return;
+      // 背景更新只刷新清單，不切換目前分析看板的股票。
       await scanWatchList({ silent: true });
     }
 
@@ -1676,6 +2322,7 @@ const [watchText, setWatchText] = useState(() => {
 
     async function loadNextDayInBackground() {
       if (cancelled) return;
+      // 背景更新只刷新隔日沖清單，不切換目前分析看板的股票。
       await scanNextDayList({ silent: true });
     }
 
@@ -1847,7 +2494,7 @@ const [watchText, setWatchText] = useState(() => {
     return [...map.values()];
   }, [systemStrongList, watchList, nextDayList, dayTradeList]);
 
-  const reportStrongTop25 = useMemo(() => {
+  const reportStrongTop50 = useMemo(() => {
     return [...reportUniverse]
       .filter((s) => Number.isFinite(s.changePct))
       .sort((a, b) => {
@@ -1855,10 +2502,10 @@ const [watchText, setWatchText] = useState(() => {
         const bScore = (b.score || 0) * 0.45 + Math.max(b.changePct || 0, 0) * 8 + (b.volumeRatio || 0) * 8;
         return bScore - aScore;
       })
-      .slice(0, 25);
+      .slice(0, 50);
   }, [reportUniverse]);
 
-  const reportWeakTop25 = useMemo(() => {
+  const reportWeakTop50 = useMemo(() => {
     return [...reportUniverse]
       .filter((s) => Number.isFinite(s.changePct))
       .sort((a, b) => {
@@ -1866,8 +2513,58 @@ const [watchText, setWatchText] = useState(() => {
         const bScore = (b.score || 0) * 0.35 + (b.changePct || 0) * 10 + (b.volumeRatio || 0);
         return aScore - bScore;
       })
-      .slice(0, 25);
+      .slice(0, 50);
   }, [reportUniverse]);
+
+
+  const reportIndustryRank = useMemo(() => {
+    function buildIndustryRows(list, direction = "strong") {
+      const map = new Map();
+
+      list.forEach((s) => {
+        const industry =
+          s.baseType ||
+          s.strongType ||
+          (s.currency === "USD" ? "美股 / ETF" : "其他");
+
+        const old = map.get(industry) || {
+          industry,
+          count: 0,
+          avgChange: 0,
+          avgScore: 0,
+          avgVolumeRatio: 0,
+          stocks: [],
+        };
+
+        old.count += 1;
+        old.avgChange += s.changePct || 0;
+        old.avgScore += s.score || 0;
+        old.avgVolumeRatio += s.volumeRatio || 0;
+        old.stocks.push(s);
+        map.set(industry, old);
+      });
+
+      return [...map.values()]
+        .map((item) => ({
+          ...item,
+          avgChange: item.count ? item.avgChange / item.count : 0,
+          avgScore: item.count ? item.avgScore / item.count : 0,
+          avgVolumeRatio: item.count ? item.avgVolumeRatio / item.count : 0,
+          topStocks: item.stocks.slice(0, 5),
+        }))
+        .sort((a, b) => {
+          const aRank = a.avgScore * 0.4 + a.avgChange * 10 + a.avgVolumeRatio * 6;
+          const bRank = b.avgScore * 0.4 + b.avgChange * 10 + b.avgVolumeRatio * 6;
+          return direction === "strong" ? bRank - aRank : aRank - bRank;
+        })
+        .slice(0, 5);
+    }
+
+    return {
+      strong: buildIndustryRows(reportStrongTop50, "strong"),
+      weak: buildIndustryRows(reportWeakTop50, "weak"),
+    };
+  }, [reportStrongTop50, reportWeakTop50]);
 
   const usTechWatchList = useMemo(() => {
     const codes = ["NVDA", "AAPL", "TSLA", "MSFT", "META", "AMD", "AMZN", "GOOGL", "SMCI", "QQQ", "SOXX"];
@@ -1941,7 +2638,7 @@ const [watchText, setWatchText] = useState(() => {
 
   const aiRiskItems = [
     marketStats.avg < 0 ? "⚠️ 市場平均漲跌幅偏弱，追價前需確認量能與大盤方向。" : "⚠️ 盤勢雖偏多，仍要避免追高長上影與爆量不漲標的。",
-    reportStrongTop25.some((s) => (s.changePct || 0) > 5) ? "⚠️ 部分強勢股短線漲幅過大，隔日容易開高震盪。" : "⚠️ 強勢股漲幅尚未全面過熱，但仍需分批進出。",
+    reportStrongTop50.some((s) => (s.changePct || 0) > 5) ? "⚠️ 部分強勢股短線漲幅過大，隔日容易開高震盪。" : "⚠️ 強勢股漲幅尚未全面過熱，但仍需分批進出。",
     "⚠️ 美債 / 匯率 / BTC 屬風險情緒指標，目前未接即時資料，請搭配外部行情確認。",
     "⚠️ AI 分數只適合輔助判斷，不能取代停損與資金控管。",
   ];
@@ -1990,13 +2687,23 @@ const [watchText, setWatchText] = useState(() => {
         .nav-btn { width: 100%; display: flex; align-items: center; gap: 8px; margin-bottom: 7px; background: transparent; color: #94a3b8; border: 1px solid transparent; justify-content: flex-start; padding: 10px; }
         .nav-btn.active { color: #67e8f9; background: rgba(34,211,238,.12); border-color: rgba(34,211,238,.35); }
         .content { padding: 16px; margin-left: 170px; }
-        .top-bar { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
-        .top-title h1 { font-size: 24px; }
-        .top-title p { color: #94a3b8; font-size: 13px; margin: 6px 0 0; }
-        .top-stats { display: flex; gap: 12px; align-items: center; }
-        .mini-stat { min-width: 82px; background: rgba(15,23,42,.86); border: 1px solid rgba(148,163,184,.18); border-radius: 12px; padding: 8px 10px; }
+        .top-bar { position: relative; display: grid; grid-template-columns: 240px 1fr 360px; align-items: center; gap: 16px; margin-bottom: 14px; min-height: 96px; }
+        .top-back-btn { height: 58px; border-radius: 16px; background: linear-gradient(135deg, rgba(15,23,42,.98), rgba(30,41,59,.98)); color: #e2e8f0; border: 1px solid rgba(56,189,248,.28); font-size: 17px; font-weight: 900; box-shadow: 0 10px 24px rgba(0,0,0,.28); }
+        .top-back-btn:hover { background: linear-gradient(135deg, rgba(8,47,73,.98), rgba(15,118,110,.98)); border-color: rgba(34,211,238,.55); }
+        .top-title { text-align: center; justify-self: center; }
+        .top-title h1 { font-size: 32px; letter-spacing: 2px; font-weight: 900; }
+        .top-title p { color: #94a3b8; font-size: 13px; margin: 8px 0 0; white-space: nowrap; }
+        .top-stats { display: flex; gap: 12px; align-items: center; justify-content: flex-end; }
+        .mini-stat { min-width: 90px; background: rgba(15,23,42,.86); border: 1px solid rgba(148,163,184,.18); border-radius: 14px; padding: 10px 12px; text-align: center; }
         .mini-stat span { color: #94a3b8; font-size: 11px; }
-        .mini-stat b { display: block; font-size: 17px; margin-top: 3px; }
+        .mini-stat b { display: block; font-size: 20px; margin-top: 5px; }
+        @media (max-width: 1280px) {
+          .top-bar { grid-template-columns: 1fr; min-height: auto; }
+          .top-title { order: -1; }
+          .top-title p { white-space: normal; }
+          .top-stats { justify-content: center; }
+          .top-back-btn { width: 100%; }
+        }
         .card { background: rgba(15,23,42,.84); border: 1px solid rgba(148,163,184,.18); border-radius: 14px; box-shadow: 0 14px 36px rgba(0,0,0,.28); padding: 12px; }
         .favorite-action { background: linear-gradient(135deg, #facc15, #fb923c); color: #1f1300; }
         .favorite-action.saved { background: #14532d; color: #bbf7d0; border: 1px solid rgba(34,197,94,.45); }
@@ -2072,9 +2779,34 @@ const [watchText, setWatchText] = useState(() => {
         .ai-summary-box { margin-top: 12px; padding: 14px; border-radius: 16px; background: rgba(56,189,248,.08); border: 1px solid rgba(56,189,248,.22); color: #dbeafe; }
         .industry-list, .risk-list, .strategy-box { display: grid; gap: 10px; }
         .industry-item { display: flex; justify-content: space-between; align-items: center; }
+        .industry-item > div { min-width: 0; }
         .industry-item.up span { color: #fca5a5; }
         .industry-item.down span { color: #86efac; }
         .report-empty { color: #94a3b8; padding: 16px; border: 1px dashed rgba(148,163,184,.25); border-radius: 14px; }
+        .drawing-panel { background: rgba(2,6,23,.72); border: 1px solid rgba(148,163,184,.18); border-radius: 14px; padding: 10px; margin: 10px 0; }
+        .drawing-title { display: flex; justify-content: space-between; align-items: center; gap: 10px; color: #e5e7eb; margin-bottom: 8px; }
+        .drawing-title span { color: #94a3b8; font-size: 12px; }
+        .drawing-mode-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+        .drawing-mode-tabs button { background: #111827; color: #e5e7eb; border: 1px solid #334155; }
+        .drawing-mode-tabs button.active { background: #22d3ee; color: #06202a; border-color: #22d3ee; }
+        .drawing-free-box { background: rgba(15,23,42,.75); border: 1px solid rgba(56,189,248,.18); border-radius: 12px; padding: 9px; margin-top: 8px; }
+        .chart-drawing-wrap { position: relative; width: 100%; }
+        .chart-free-draw-overlay { position: absolute; inset: 0; width: 100%; height: 560px; pointer-events: none; z-index: 10; }
+        .chart-drawing-wrap.drawing-active .chart-free-draw-overlay { pointer-events: auto; cursor: crosshair; touch-action: none; }
+        .chart-drawing-wrap.drawing-active .trading-chart { user-select: none; }
+        .drawing-chip.line { border-color: rgba(56,189,248,.5); color: #67e8f9; }
+        .drawing-chip.brush { border-color: rgba(250,204,21,.55); color: #fde68a; }
+        .drawing-chip.rect { border-color: rgba(168,85,247,.5); color: #d8b4fe; }
+        .drawing-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+        .drawing-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+        .drawing-chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid rgba(148,163,184,.22); border-radius: 999px; padding: 5px 6px 5px 10px; font-size: 12px; color: #e5e7eb; background: #020617; }
+        .drawing-chip.support { border-color: rgba(34,197,94,.45); color: #86efac; }
+        .drawing-chip.resistance { border-color: rgba(239,68,68,.45); color: #fca5a5; }
+        .drawing-chip.stop { border-color: rgba(249,115,22,.5); color: #fdba74; }
+        .drawing-chip.trend { border-color: rgba(56,189,248,.5); color: #67e8f9; }
+        .drawing-chip.zone { border-color: rgba(168,85,247,.5); color: #d8b4fe; }
+        .drawing-chip button { padding: 1px 6px; border-radius: 999px; background: rgba(148,163,184,.18); color: #e5e7eb; font-size: 12px; }
+
 
 
         .score-main { background: linear-gradient(135deg, rgba(56,189,248,.22), rgba(37,99,235,.18)); border: 1px solid rgba(56,189,248,.28); border-radius: 18px; padding: 18px; text-align: center; margin-bottom: 12px; }
@@ -2144,10 +2876,15 @@ const [watchText, setWatchText] = useState(() => {
 
         <section className="content">
           <header className="top-bar">
+            <button className="top-back-btn" onClick={goBackToPreviousView}>
+              ← 返回上一個畫面
+            </button>
+
             <div className="top-title">
               <h1>股市分析</h1>
               <p>追蹤台股、美股與 ETF，整合 AI 分數、K線、量價與進出場提示。</p>
             </div>
+
             <div className="top-stats">
               <div className="mini-stat"><span>目前標的</span><b>{stock?.symbol || query}</b></div>
               <div className="mini-stat"><span>AI分數</span><b>{stock?.score ?? "--"}</b></div>
@@ -2323,6 +3060,8 @@ const [watchText, setWatchText] = useState(() => {
                   </div>
 
                   {stock ? (
+                    <>
+                    <DrawingTools targetStock={stock} />
                     <TradingChart
                       stock={stock}
                       showMA5={showMA5}
@@ -2330,7 +3069,13 @@ const [watchText, setWatchText] = useState(() => {
                       showMA60={showMA60}
                       showBollinger={showBollinger}
                       chartKey={klineType}
+                      drawingLines={getDrawingLines(stock)}
+                      freeDrawings={getFreeDrawings(stock)}
+                      drawingEnabled={freeDrawingEnabled}
+                      drawingTool={freeDrawingTool}
+                      onCreateDrawing={(drawing) => addFreeDrawing(stock, drawing)}
                     />
+                    </>
                   ) : (
                     <p className="empty">請從上方搜尋股票，或使用網址 /stock/2330。</p>
                   )}
@@ -2737,6 +3482,7 @@ const [watchText, setWatchText] = useState(() => {
                           <option value="1mo">月K</option>
                         </select>
                       </div>
+                      <DrawingTools targetStock={intradayStock} />
                       <TradingChart
                         stock={intradayStock}
                         showMA5={showMA5}
@@ -2744,6 +3490,11 @@ const [watchText, setWatchText] = useState(() => {
                         showMA60={showMA60}
                         showBollinger={showBollinger}
                         chartKey={klineType}
+                        drawingLines={getDrawingLines(intradayStock)}
+                        freeDrawings={getFreeDrawings(intradayStock)}
+                        drawingEnabled={freeDrawingEnabled}
+                        drawingTool={freeDrawingTool}
+                        onCreateDrawing={(drawing) => addFreeDrawing(intradayStock, drawing)}
                       />
                     </>
                   ) : (
@@ -2829,7 +3580,7 @@ const [watchText, setWatchText] = useState(() => {
                 <button className={reportTab === "industry" ? "active" : ""} onClick={() => setReportTab("industry")}>🏭 台股強弱產業</button>
                 <button className={reportTab === "us" ? "active" : ""} onClick={() => setReportTab("us")}>🇺🇸 美股科技股</button>
                 <button className={reportTab === "macro" ? "active" : ""} onClick={() => setReportTab("macro")}>💱 匯率 / 美債 / BTC</button>
-                <button className={reportTab === "strength" ? "active" : ""} onClick={() => setReportTab("strength")}>🔥 強弱勢股</button>
+                <button className={reportTab === "strength" ? "active" : ""} onClick={() => setReportTab("strength")}>🔥 強弱勢Top50</button>
                 <button className={reportTab === "nextday" ? "active" : ""} onClick={() => setReportTab("nextday")}>🌙 隔日沖候選</button>
                 <button className={reportTab === "daytrade" ? "active" : ""} onClick={() => setReportTab("daytrade")}>⚡ 當沖觀察</button>
                 <button className={reportTab === "risk" ? "active" : ""} onClick={() => setReportTab("risk")}>⚠️ AI風險提醒</button>
@@ -2946,63 +3697,116 @@ const [watchText, setWatchText] = useState(() => {
               )}
 
               {reportTab === "strength" && (
-                <div className="report-grid">
-                  <div className="report-card">
-                    <h2>🔥 今日強勢股 Top25</h2>
-                    {reportStrongTop25.length === 0 ? (
-                      <p className="report-empty">強勢股資料更新中。</p>
-                    ) : (
-                      <div className="table-wrap">
-                        <table>
-                          <thead><tr><th>股票</th><th>AI</th><th>漲幅</th><th>量比</th><th>訊號</th></tr></thead>
-                          <tbody>
-                            {reportStrongTop25.map((s) => (
-                              <tr key={s.symbol} onClick={() => { setStock(s); setActiveMenu("analysis"); }}>
-                                <td>
-                                  <div className="stock-name-stack">
-                                    <span className="stock-name-main small">{getStockDisplayName(s.symbol, s.name)}</span>
-                                    <span className="stock-name-code">{s.symbol}</span>
-                                  </div>
-                                </td>
-                                <td>{s.score ?? "--"}</td>
-                                <td className="up">{s.changePct?.toFixed?.(2) ?? "--"}%</td>
-                                <td>{s.volumeRatio?.toFixed?.(2) ?? "--"}</td>
-                                <td><span className="badge">{s.tradeSignal?.action || "觀望"}</span></td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
+                <div className="report-card">
+                  <div className="section-title">
+                    <h2>🔥 今日強 / 弱勢股票 Top50</h2>
+                    <span className="muted">依 AI 分數、漲跌幅、量比綜合排序，並自動彙整產業前五名</span>
                   </div>
 
-                  <div className="report-card">
-                    <h2>📉 今日弱勢股 Top25</h2>
-                    {reportWeakTop25.length === 0 ? (
-                      <p className="report-empty">弱勢股資料更新中。</p>
-                    ) : (
-                      <div className="table-wrap">
-                        <table>
-                          <thead><tr><th>股票</th><th>AI</th><th>跌幅</th><th>量比</th><th>訊號</th></tr></thead>
-                          <tbody>
-                            {reportWeakTop25.map((s) => (
-                              <tr key={s.symbol} onClick={() => { setStock(s); setActiveMenu("analysis"); }}>
-                                <td>
-                                  <div className="stock-name-stack">
-                                    <span className="stock-name-main small">{getStockDisplayName(s.symbol, s.name)}</span>
-                                    <span className="stock-name-code">{s.symbol}</span>
-                                  </div>
-                                </td>
-                                <td>{s.score ?? "--"}</td>
-                                <td className="down">{s.changePct?.toFixed?.(2) ?? "--"}%</td>
-                                <td>{s.volumeRatio?.toFixed?.(2) ?? "--"}</td>
-                                <td><span className="badge">{s.tradeSignal?.action || "觀望"}</span></td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
+                  <div className="report-grid" style={{ marginBottom: 12 }}>
+                    <div className="report-card">
+                      <h2>🏆 強勢產業前五名</h2>
+                      <div className="industry-list">
+                        {reportIndustryRank.strong.length ? reportIndustryRank.strong.map((item, index) => (
+                          <div className="industry-item up" key={item.industry}>
+                            <div>
+                              <b>{index + 1}. {item.industry}</b>
+                              <div className="muted">
+                                平均漲幅 {item.avgChange.toFixed(2)}%｜平均AI {Math.round(item.avgScore)}｜平均量比 {item.avgVolumeRatio.toFixed(2)}
+                              </div>
+                              <div className="muted">
+                                代表股：{item.topStocks.map((s) => `${getStockDisplayName(s.symbol, s.name)}(${s.symbol})`).join("、")}
+                              </div>
+                            </div>
+                            <span>▲ 強勢</span>
+                          </div>
+                        )) : <p className="report-empty">強勢產業資料更新中。</p>}
                       </div>
-                    )}
+                    </div>
+
+                    <div className="report-card">
+                      <h2>📉 弱勢產業前五名</h2>
+                      <div className="industry-list">
+                        {reportIndustryRank.weak.length ? reportIndustryRank.weak.map((item, index) => (
+                          <div className="industry-item down" key={item.industry}>
+                            <div>
+                              <b>{index + 1}. {item.industry}</b>
+                              <div className="muted">
+                                平均漲幅 {item.avgChange.toFixed(2)}%｜平均AI {Math.round(item.avgScore)}｜平均量比 {item.avgVolumeRatio.toFixed(2)}
+                              </div>
+                              <div className="muted">
+                                代表股：{item.topStocks.map((s) => `${getStockDisplayName(s.symbol, s.name)}(${s.symbol})`).join("、")}
+                              </div>
+                            </div>
+                            <span>▼ 弱勢</span>
+                          </div>
+                        )) : <p className="report-empty">弱勢產業資料更新中。</p>}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="report-grid">
+                    <div className="report-card">
+                      <h2>🔥 今日強勢股 Top50</h2>
+                      {reportStrongTop50.length === 0 ? (
+                        <p className="report-empty">強勢股資料更新中。</p>
+                      ) : (
+                        <div className="table-wrap">
+                          <table>
+                            <thead><tr><th>排名</th><th>股票</th><th>產業</th><th>AI</th><th>漲幅</th><th>量比</th><th>訊號</th></tr></thead>
+                            <tbody>
+                              {reportStrongTop50.map((s, index) => (
+                                <tr key={s.symbol} onClick={() => { setStock(s); setActiveMenu("analysis"); }}>
+                                  <td>{index + 1}</td>
+                                  <td>
+                                    <div className="stock-name-stack">
+                                      <span className="stock-name-main small">{getStockDisplayName(s.symbol, s.name)}</span>
+                                      <span className="stock-name-code">{s.symbol}</span>
+                                    </div>
+                                  </td>
+                                  <td><span className="badge">{s.baseType || s.strongType || (s.currency === "USD" ? "美股 / ETF" : "其他")}</span></td>
+                                  <td>{s.score ?? "--"}</td>
+                                  <td className="up">{s.changePct?.toFixed?.(2) ?? "--"}%</td>
+                                  <td>{s.volumeRatio?.toFixed?.(2) ?? "--"}</td>
+                                  <td><span className="badge">{s.tradeSignal?.action || "觀望"}</span></td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="report-card">
+                      <h2>📉 今日弱勢股 Top50</h2>
+                      {reportWeakTop50.length === 0 ? (
+                        <p className="report-empty">弱勢股資料更新中。</p>
+                      ) : (
+                        <div className="table-wrap">
+                          <table>
+                            <thead><tr><th>排名</th><th>股票</th><th>產業</th><th>AI</th><th>跌幅</th><th>量比</th><th>訊號</th></tr></thead>
+                            <tbody>
+                              {reportWeakTop50.map((s, index) => (
+                                <tr key={s.symbol} onClick={() => { setStock(s); setActiveMenu("analysis"); }}>
+                                  <td>{index + 1}</td>
+                                  <td>
+                                    <div className="stock-name-stack">
+                                      <span className="stock-name-main small">{getStockDisplayName(s.symbol, s.name)}</span>
+                                      <span className="stock-name-code">{s.symbol}</span>
+                                    </div>
+                                  </td>
+                                  <td><span className="badge">{s.baseType || s.strongType || (s.currency === "USD" ? "美股 / ETF" : "其他")}</span></td>
+                                  <td>{s.score ?? "--"}</td>
+                                  <td className="down">{s.changePct?.toFixed?.(2) ?? "--"}%</td>
+                                  <td>{s.volumeRatio?.toFixed?.(2) ?? "--"}</td>
+                                  <td><span className="badge">{s.tradeSignal?.action || "觀望"}</span></td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               )}
