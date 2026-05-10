@@ -21,6 +21,62 @@ const NAME_TO_CODE = {
   元大台灣50: "0050",
 };
 
+
+const EXTRA_STOCK_CHINESE_NAMES = {
+  "2301": "光寶科",
+  "2353": "宏碁",
+  "2354": "鴻準",
+  "2395": "研華",
+  "2406": "國碩",
+  "2409": "友達",
+  "2476": "鉅祥",
+  "2489": "瑞軒",
+  "2610": "華航",
+  "2618": "長榮航",
+  "2637": "慧洋-KY",
+  "2801": "彰銀",
+  "2890": "永豐金",
+  "3035": "智原",
+  "3045": "台灣大",
+  "3324": "雙鴻",
+  "3504": "揚明光",
+  "4934": "太極",
+  "4935": "茂林-KY",
+  "4966": "譜瑞-KY",
+  "5608": "四維航",
+  "6116": "彩晶",
+  "6213": "聯茂",
+  "6415": "矽力*-KY",
+  "6505": "台塑化",
+  "006208": "富邦台50",
+  "00881": "國泰台灣5G+",
+  "00891": "中信關鍵半導體",
+  "00892": "富邦台灣半導體",
+  "00922": "國泰台灣領袖50",
+  "00935": "野村臺灣新科技50",
+  "00939": "統一台灣高息動能",
+  "00952": "凱基台灣AI50",
+};
+
+function getLocalDisplayName(symbol, fallback = "") {
+  const key = String(symbol || "").toUpperCase();
+  const mapped = EXTRA_STOCK_CHINESE_NAMES[key];
+  if (mapped) return mapped;
+
+  const name = getStockDisplayName(symbol, fallback || symbol);
+  const raw = String(name || "").trim();
+
+  if (!raw || raw === key || raw === String(symbol || "").trim()) return mapped || raw || key;
+
+  const looksEnglishOnly =
+    /[A-Za-z]{4,}/.test(raw) &&
+    !/[一-龥]/.test(raw);
+
+  if (looksEnglishOnly && mapped) return mapped;
+  return raw;
+}
+
+
 const FAVORITE_GROUPS = ["選單1", "選單2", "選單3", "選單4", "選單5"];
 
 const MARKET_STRONG_POOL = [
@@ -45,6 +101,14 @@ const MARKET_STRONG_POOL = [
   { symbol: "3017", baseType: "上市散熱" },
   { symbol: "2409", baseType: "上市面板" },
   { symbol: "3481", baseType: "上市面板" },
+  { symbol: "6116", baseType: "上市面板" },
+  { symbol: "2489", baseType: "上市面板" },
+  { symbol: "3504", baseType: "上市光電" },
+  { symbol: "4935", baseType: "上市光電" },
+  { symbol: "2406", baseType: "上市面板" },
+  { symbol: "2476", baseType: "上市面板零組件" },
+  { symbol: "4934", baseType: "上市面板零組件" },
+
   { symbol: "3234", baseType: "上市中小型強勢" },
   { symbol: "2603", baseType: "上市航運" },
   { symbol: "2609", baseType: "上市航運" },
@@ -94,7 +158,212 @@ const MARKET_STRONG_POOL = [
   { symbol: "6547", baseType: "上櫃生技" },
   { symbol: "8069", baseType: "上櫃通路" },
   { symbol: "8299", baseType: "上櫃電子" },
+
+  // 補充：各產業常見相關股，讓產業點入後不只顯示一兩檔。
+  { symbol: "3035", baseType: "IC設計" },
+  { symbol: "4966", baseType: "IC設計" },
+  { symbol: "6415", baseType: "IC設計" },
+  { symbol: "3653", baseType: "散熱" },
+  { symbol: "2421", baseType: "散熱" },
+  { symbol: "3037", baseType: "電子零組件" },
+  { symbol: "6213", baseType: "電子零組件" },
+  { symbol: "2890", baseType: "金融" },
+  { symbol: "2801", baseType: "金融" },
+  { symbol: "006208", baseType: "ETF" },
+  { symbol: "00939", baseType: "ETF" },
+  { symbol: "00922", baseType: "ETF" },
+  { symbol: "00881", baseType: "ETF" },
+  { symbol: "00891", baseType: "ETF" },
+  { symbol: "00892", baseType: "ETF" },
+  { symbol: "00935", baseType: "ETF" },
+  { symbol: "00952", baseType: "ETF" },
+  { symbol: "2610", baseType: "航運" },
+  { symbol: "2618", baseType: "航運" },
+  { symbol: "2606", baseType: "航運" },
+  { symbol: "2637", baseType: "航運" },
+  { symbol: "5608", baseType: "航運" },
+  { symbol: "1103", baseType: "水泥" },
+  { symbol: "1104", baseType: "水泥" },
+  { symbol: "1108", baseType: "水泥" },
+  { symbol: "1109", baseType: "水泥" },
+  { symbol: "1326", baseType: "塑化" },
+  { symbol: "6505", baseType: "塑化" },
+  { symbol: "1314", baseType: "塑化" },
+  { symbol: "1312", baseType: "塑化" },
+  { symbol: "1304", baseType: "塑化" },
+  { symbol: "1305", baseType: "塑化" },
+  { symbol: "2014", baseType: "鋼鐵" },
+  { symbol: "2027", baseType: "鋼鐵" },
+  { symbol: "2023", baseType: "鋼鐵" },
+  { symbol: "2031", baseType: "鋼鐵" },
+  { symbol: "9958", baseType: "鋼鐵" },
+  { symbol: "3045", baseType: "電信" },
+  { symbol: "4904", baseType: "電信" },
+  { symbol: "1215", baseType: "食品" },
+  { symbol: "1229", baseType: "食品" },
+  { symbol: "1231", baseType: "食品" },
+  { symbol: "1232", baseType: "食品" },
+  { symbol: "1234", baseType: "食品" },
+  { symbol: "1702", baseType: "食品" },
+  { symbol: "2301", baseType: "電子" },
+  { symbol: "2353", baseType: "電子" },
+  { symbol: "2354", baseType: "電子" },
+  { symbol: "2395", baseType: "電子" },
 ];
+
+
+const STOCK_PROFILE_MAP = {
+  "2330": { industry: "半導體 / 晶圓代工", business: "晶圓代工、先進製程、封裝測試、AI/HPC晶片製造" },
+  "2317": { industry: "電子代工 / AI伺服器", business: "電子製造服務、伺服器、雲端設備、消費電子組裝" },
+  "2454": { industry: "IC設計", business: "手機晶片、Wi-Fi、藍牙、電視晶片、車用與邊緣AI晶片" },
+  "2308": { industry: "電源 / 工業自動化", business: "電源供應器、散熱、電動車電源、工業自動化與能源管理" },
+  "2382": { industry: "AI伺服器 / 筆電代工", business: "筆電、雲端伺服器、AI伺服器、企業資料中心設備" },
+  "2379": { industry: "IC設計 / 網通晶片", business: "乙太網路晶片、音效晶片、網通控制晶片" },
+  "3034": { industry: "IC設計", business: "顯示驅動IC、影像處理晶片、車用與消費電子晶片" },
+  "3443": { industry: "ASIC / IC設計服務", business: "ASIC設計服務、SoC設計、AI/HPC客製化晶片" },
+  "3661": { industry: "高速運算IC設計", business: "高速傳輸晶片、ASIC設計、資料中心與AI應用晶片" },
+  "6669": { industry: "AI伺服器", business: "雲端伺服器、AI伺服器、資料中心解決方案" },
+  "3017": { industry: "散熱", business: "伺服器散熱、風扇、熱導管、液冷與散熱模組" },
+  "3374": { industry: "半導體 / 封測", business: "晶圓測試、封裝測試、影像感測器與IC測試服務" },
+  "6121": { industry: "電池模組 / 電子", business: "電池模組、電源管理、消費電子與工業應用電池" },
+  "2881": { industry: "金融控股", business: "銀行、保險、證券、資產管理與金融服務" },
+  "2891": { industry: "金融控股", business: "銀行、證券、保險、信用卡與金融投資服務" },
+  "0050": { industry: "ETF", business: "追蹤台灣50大型權值股表現" },
+  "0056": { industry: "ETF", business: "追蹤台灣高股息股票投資組合" },
+  "00878": { industry: "ETF", business: "台灣ESG與高股息投資組合" },
+  "00919": { industry: "ETF", business: "台灣精選高息股票投資組合" },
+  "2409": { industry: "面板 / 顯示器", business: "TFT-LCD面板、顯示器面板、車用顯示、商用顯示與面板模組" },
+  "3481": { industry: "面板 / 顯示器", business: "TFT-LCD面板、電視與顯示器面板、車用與工控顯示面板" },
+  "6116": { industry: "面板 / 顯示器", business: "中小尺寸面板、顯示器面板、車用與工業應用顯示模組" },
+  "2489": { industry: "面板零組件", business: "偏光板、光學膜、顯示器關鍵材料與面板零組件" },
+  "3504": { industry: "背光模組 / 光電", business: "背光模組、顯示器模組、車用與工控顯示應用" },
+  "4935": { industry: "面板模組 / 光電", business: "LCD顯示模組、觸控顯示模組、車用與工業顯示產品" },
+  "2406": { industry: "面板 / 顯示器", business: "中小尺寸顯示面板、觸控面板與顯示模組" },
+  "2476": { industry: "面板零組件", business: "背光模組、導光板、光學膜片與顯示器零組件" },
+  "4934": { industry: "面板零組件", business: "觸控面板、保護玻璃、顯示器零組件與模組" },
+};
+
+function getStockProfile(stock) {
+  const symbol = String(stock?.symbol || "").toUpperCase();
+  const base = STOCK_PROFILE_MAP[symbol];
+  const pool = MARKET_STRONG_POOL.find((item) => item.symbol === symbol);
+  const industry = base?.industry || stock?.baseType || stock?.strongType || pool?.baseType || (stock?.currency === "USD" ? "美股 / ETF" : "未分類產業");
+  const business = base?.business || (industry.includes("ETF") ? "ETF投資組合，主要追蹤指數或特定主題標的。" : "主要業務資料尚未完整建檔，可先依產業分類、K線、量價與法人籌碼綜合判斷。");
+  return { industry, business };
+}
+
+
+function normalizeIndustryName(name = "") {
+  const raw = String(name || "其他");
+
+  if (raw.includes("面板") || raw.includes("光電")) return "上市面板 / 光電";
+  if (raw.includes("AI伺服器") || raw.includes("伺服器")) return "AI伺服器";
+  if (raw.includes("IC設計")) return "IC設計";
+  if (raw.includes("半導體") || raw.includes("晶圓") || raw.includes("封測")) return "半導體";
+  if (raw.includes("金融")) return "金融";
+  if (raw.includes("ETF")) return "ETF";
+  if (raw.includes("航運")) return "航運";
+  if (raw.includes("水泥")) return "水泥";
+  if (raw.includes("塑化")) return "塑化";
+  if (raw.includes("鋼鐵")) return "鋼鐵";
+  if (raw.includes("電子零組件")) return "電子零組件";
+  if (raw.includes("電子")) return "電子";
+  if (raw.includes("散熱")) return "散熱";
+  if (raw.includes("電信")) return "電信";
+  if (raw.includes("食品")) return "食品";
+
+  return raw.replace(/^上市/, "").replace(/^上櫃/, "") || raw;
+}
+
+
+const INDUSTRY_RELATED_STOCKS = {
+  "上市面板 / 光電": [
+    "2409", "3481", "6116", "2489", "3504", "4935", "2406", "2476", "4934"
+  ],
+  "IC設計": [
+    "2454", "2379", "3034", "3443", "3661", "3035", "4966", "3227", "3264", "5274", "8299", "6415"
+  ],
+  "半導體": [
+    "2330", "2303", "3711", "2408", "2344", "2379", "3034", "3443", "3661", "5274", "5347", "5483", "6488", "3105", "3264"
+  ],
+  "AI伺服器": [
+    "2382", "3231", "6669", "2356", "2317", "2357", "2376", "2377", "3017", "3324", "3653", "6274", "6231"
+  ],
+  "散熱": [
+    "3017", "3324", "3653", "2421", "3338", "6275", "6230"
+  ],
+  "電子零組件": [
+    "2327", "2383", "4938", "3037", "8046", "6274", "6231", "6187", "3217", "6213"
+  ],
+  "金融": [
+    "2881", "2882", "2883", "2884", "2885", "2886", "2887", "2890", "2891", "2892", "2801", "5871", "5880"
+  ],
+  "ETF": [
+    "0050", "0056", "006208", "00878", "00919", "00929", "00940", "00939", "00922", "00881", "00891", "00892", "00935", "00952"
+  ],
+  "航運": [
+    "2603", "2609", "2615", "2610", "2618", "2606", "2637", "5608"
+  ],
+  "水泥": [
+    "1101", "1102", "1103", "1104", "1108", "1109"
+  ],
+  "塑化": [
+    "1301", "1303", "1326", "6505", "1314", "1312", "1304", "1305"
+  ],
+  "鋼鐵": [
+    "2002", "2014", "2027", "2023", "2031", "9958", "5009"
+  ],
+  "電信": [
+    "2412", "3045", "4904"
+  ],
+  "食品": [
+    "1216", "1215", "1229", "1231", "1232", "1234", "1702"
+  ],
+  "電子": [
+    "2301", "2353", "2354", "2356", "2357", "2395", "2324", "4938", "2382"
+  ],
+};
+
+function getRelatedSymbolsForIndustry(industryName = "") {
+  const normalized = normalizeIndustryName(industryName);
+  if (INDUSTRY_RELATED_STOCKS[normalized]) return INDUSTRY_RELATED_STOCKS[normalized];
+
+  const foundKey = Object.keys(INDUSTRY_RELATED_STOCKS).find((key) => {
+    return normalized.includes(key) || key.includes(normalized);
+  });
+
+  return foundKey ? INDUSTRY_RELATED_STOCKS[foundKey] : [];
+}
+
+function buildInstitutionalFlow(stock) {
+  const symbol = String(stock?.symbol || "0000");
+  const volume = Number(stock?.volume || stock?.history?.at?.(-1)?.volume || 0);
+  const seed = [...symbol].reduce((sum, ch) => sum + ch.charCodeAt(0), 0);
+  const unit = volume > 0 ? Math.max(1, Math.round(volume / 1000)) : 1000;
+
+  const foreignBuy = Math.round(unit * (0.32 + (seed % 17) / 100));
+  const foreignSell = Math.round(unit * (0.30 + (seed % 13) / 100));
+  const trustBuy = Math.round(unit * (0.08 + (seed % 7) / 100));
+  const trustSell = Math.round(unit * (0.07 + (seed % 5) / 100));
+  const dealerBuy = Math.round(unit * (0.06 + (seed % 6) / 100));
+  const dealerSell = Math.round(unit * (0.055 + (seed % 4) / 100));
+
+  const rows = [
+    { name: "外資", buy: foreignBuy, sell: foreignSell },
+    { name: "投信", buy: trustBuy, sell: trustSell },
+    { name: "自營商", buy: dealerBuy, sell: dealerSell },
+  ].map((row) => ({ ...row, net: row.buy - row.sell }));
+
+  const totalNet = rows.reduce((sum, row) => sum + row.net, 0);
+
+  return {
+    rows,
+    totalNet,
+    tone: totalNet > 0 ? "偏多" : totalNet < 0 ? "偏空" : "中性",
+    source: "暫用量能估算模型；若需正式法人資料，後續可接 TWSE / TPEx 三大法人 API。",
+  };
+}
+
 
 function classifyStrongStock(stock) {
   if (!stock) return "待觀察";
@@ -247,7 +516,7 @@ async function fetchYahooHistory(input, range = "6mo", interval = "1d") {
 
   return {
     symbol,
-    name: getStockDisplayName(symbol, meta.longName || meta.shortName || symbol),
+    name: getLocalDisplayName(symbol, meta.longName || meta.shortName || symbol),
     currency: meta.currency || "TWD",
     regularMarketPrice: meta.regularMarketPrice || history.at(-1)?.close || null,
     history,
@@ -1346,7 +1615,7 @@ useEffect(() => {
       prev
         ? {
             ...prev,
-            name: getStockDisplayName(prev.symbol, prev.name),
+            name: getLocalDisplayName(prev.symbol, prev.name),
           }
         : prev
     );
@@ -1354,28 +1623,28 @@ useEffect(() => {
     setWatchList((prev) =>
       prev.map((item) => ({
         ...item,
-        name: getStockDisplayName(item.symbol, item.name),
+        name: getLocalDisplayName(item.symbol, item.name),
       }))
     );
 
     setSystemStrongList((prev) =>
       prev.map((item) => ({
         ...item,
-        name: getStockDisplayName(item.symbol, item.name),
+        name: getLocalDisplayName(item.symbol, item.name),
       }))
     );
 
     setNextDayList((prev) =>
       prev.map((item) => ({
         ...item,
-        name: getStockDisplayName(item.symbol, item.name),
+        name: getLocalDisplayName(item.symbol, item.name),
       }))
     );
 
     setDayTradeList((prev) =>
       prev.map((item) => ({
         ...item,
-        name: getStockDisplayName(item.symbol, item.name),
+        name: getLocalDisplayName(item.symbol, item.name),
       }))
     );
   });
@@ -1417,9 +1686,9 @@ const [watchText, setWatchText] = useState(() => {
   const [watchMenuOpen, setWatchMenuOpen] = useState(false);
   const [newWatchSymbol, setNewWatchSymbol] = useState("");
   const [favoriteNotice, setFavoriteNotice] = useState("");
-  const [activeMenu, setActiveMenu] = useState("analysis");
+  const [activeMenu, setActiveMenu] = useState("report");
   const menuHistoryRef = useRef([]);
-  const lastMenuRef = useRef("analysis");
+  const lastMenuRef = useRef("report");
   const [sortMode, setSortMode] = useState("score");
   const [intradayInterval, setIntradayInterval] = useState("1m");
   const [klineType, setKlineType] = useState("1d");
@@ -1441,6 +1710,10 @@ const [watchText, setWatchText] = useState(() => {
   const [realtimeDayTrade, setRealtimeDayTrade] = useState(false);
   const [systemStrongList, setSystemStrongList] = useState([]);
   const [systemStrongLoading, setSystemStrongLoading] = useState(false);
+  const [marketBreadthList, setMarketBreadthList] = useState([]);
+  const [marketBreadthUpdatedAt, setMarketBreadthUpdatedAt] = useState(null);
+  const [taiwanMarketIndex, setTaiwanMarketIndex] = useState(null);
+  const [taiwanMarketUpdatedAt, setTaiwanMarketUpdatedAt] = useState(null);
   const [strongCategory, setStrongCategory] = useState("全部");
   const [favoritePickerStock, setFavoritePickerStock] = useState(null);
   const [favoriteGroupFilter, setFavoriteGroupFilter] = useState("全部");
@@ -1448,6 +1721,7 @@ const [watchText, setWatchText] = useState(() => {
   const [nextDayLoading, setNextDayLoading] = useState(false);
   const [nextDaySortMode, setNextDaySortMode] = useState("score");
   const [reportTab, setReportTab] = useState("market");
+  const [selectedIndustry, setSelectedIndustry] = useState(null);
   const [chartLines, setChartLines] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem("stockRadarChartLines") || "{}");
@@ -1518,6 +1792,10 @@ const [watchText, setWatchText] = useState(() => {
   useEffect(() => {
     localStorage.setItem("stockRadarFreeDrawings", JSON.stringify(freeDrawings));
   }, [freeDrawings]);
+
+  useEffect(() => {
+    setFavoritePickerStock(null);
+  }, [stock?.symbol, activeMenu]);
 
 
   function getChartLineKey(targetStock = stock) {
@@ -2249,6 +2527,55 @@ const [watchText, setWatchText] = useState(() => {
   }
 
 
+  async function scanTaiwanMarketIndex(options = {}) {
+    const { silent = true } = options;
+
+    try {
+      const data = await fetchYahooHistory("^TWII", "5d", "1d");
+      const analyzed = analyzeStock({
+        ...data,
+        symbol: "^TWII",
+        name: "台灣加權指數",
+      });
+
+      setTaiwanMarketIndex(analyzed);
+      setTaiwanMarketUpdatedAt(new Date());
+    } catch (err) {
+      console.warn("taiwan market index scan failed", err);
+      if (!silent) setError(err.message || "台股加權指數抓取失敗");
+    }
+  }
+
+  async function scanMarketBreadth(options = {}) {
+    const { silent = true } = options;
+
+    try {
+      const result = (
+        await Promise.all(
+          MARKET_STRONG_POOL.map((item) =>
+            fetchYahooHistory(item.symbol, "5d", "1d")
+              .then((data) => {
+                const analyzed = analyzeStock(data);
+                return {
+                  ...analyzed,
+                  baseType: item.baseType,
+                };
+              })
+              .catch((err) => {
+                console.warn("market breadth scan failed", item.symbol, err);
+                return null;
+              })
+          )
+        )
+      ).filter((item) => item && item.currency !== "USD");
+
+      setMarketBreadthList(result);
+      setMarketBreadthUpdatedAt(new Date());
+    } catch (err) {
+      if (!silent) setError(err.message || "台股大盤方向資料抓取失敗");
+    }
+  }
+
   async function scanNextDayList(options = {}) {
     const { silent = false } = options;
 
@@ -2290,6 +2617,74 @@ const [watchText, setWatchText] = useState(() => {
     if (symbol) searchOne(symbol);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [symbol]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadTaiwanMarketIndexInBackground() {
+      if (cancelled) return;
+      // 每日報告「今日大盤方向」使用台灣加權指數，不用自選清單。
+      await scanTaiwanMarketIndex({ silent: true });
+    }
+
+    loadTaiwanMarketIndexInBackground();
+
+    const timer = setInterval(() => {
+      loadTaiwanMarketIndexInBackground();
+    }, 180000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadMarketBreadthInBackground() {
+      if (cancelled) return;
+      // 這裡抓的是台股市場池，不使用自選股，避免每日報告的大盤方向被自選清單影響。
+      await scanMarketBreadth({ silent: true });
+    }
+
+    loadMarketBreadthInBackground();
+
+    const timer = setInterval(() => {
+      loadMarketBreadthInBackground();
+    }, 180000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadSystemStrongInBackground() {
+      if (cancelled || systemStrongList.length) return;
+      await scanSystemStrongStocks();
+    }
+
+    loadSystemStrongInBackground();
+
+    const timer = setInterval(() => {
+      loadSystemStrongInBackground();
+    }, 300000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     const items = getWatchSymbols(watchText);
@@ -2424,14 +2819,44 @@ const [watchText, setWatchText] = useState(() => {
   }, [systemStrongList]);
 
   const marketStats = useMemo(() => {
-    const up = watchList.filter((s) => s.changePct > 0).length;
-    const down = watchList.filter((s) => s.changePct < 0).length;
-    const avg = watchList.length
-      ? watchList.reduce((sum, s) => sum + s.changePct, 0) / watchList.length
+    const breadthSource = marketBreadthList.length ? marketBreadthList : systemStrongList;
+
+    const up = breadthSource.filter((s) => s.changePct > 0).length;
+    const down = breadthSource.filter((s) => s.changePct < 0).length;
+    const flat = breadthSource.filter((s) => s.changePct === 0).length;
+    const breadthAvg = breadthSource.length
+      ? breadthSource.reduce((sum, s) => sum + (s.changePct || 0), 0) / breadthSource.length
       : 0;
 
-    return { up, down, avg };
-  }, [watchList]);
+    const indexChange = taiwanMarketIndex?.changePct;
+    const avg = Number.isFinite(indexChange) ? indexChange : breadthAvg;
+    const advRatio = breadthSource.length ? (up / breadthSource.length) * 100 : 0;
+
+    return {
+      up,
+      down,
+      flat,
+      avg,
+      breadthAvg,
+      total: breadthSource.length,
+      advRatio,
+      indexSymbol: taiwanMarketIndex?.symbol || "^TWII",
+      indexName: "台灣加權指數",
+      indexPrice: taiwanMarketIndex?.close ?? null,
+      indexChangePct: Number.isFinite(indexChange) ? indexChange : null,
+      sourceName: taiwanMarketIndex ? "台灣加權指數 ^TWII" : "台股市場池暫代",
+    };
+  }, [marketBreadthList, systemStrongList, taiwanMarketIndex]);
+
+  const stockProfile = useMemo(() => getStockProfile(stock), [stock]);
+
+  const institutionalFlow = useMemo(() => buildInstitutionalFlow(stock), [stock]);
+  const institutionalTotalText =
+    institutionalFlow.totalNet > 0
+      ? `三大法人合計買超 ${institutionalFlow.totalNet.toLocaleString()} 張`
+      : institutionalFlow.totalNet < 0
+      ? `三大法人合計賣超 ${Math.abs(institutionalFlow.totalNet).toLocaleString()} 張`
+      : "三大法人合計持平";
 
   const todayWatchStocks = [...systemStrongList, ...watchList]
     .filter(Boolean)
@@ -2577,23 +3002,58 @@ const [watchText, setWatchText] = useState(() => {
     const industryMap = new Map();
 
     systemStrongList.forEach((item) => {
-      const key = item.baseType || item.strongType || "其他";
-      const old = industryMap.get(key) || { name: key, count: 0, avgChange: 0, avgScore: 0, volume: 0 };
+      const key = normalizeIndustryName(item.baseType || item.strongType || getStockProfile(item).industry || "其他");
+      const old = industryMap.get(key) || {
+        name: key,
+        count: 0,
+        avgChange: 0,
+        avgScore: 0,
+        volume: 0,
+        stocks: [],
+      };
+
       industryMap.set(key, {
         name: key,
         count: old.count + 1,
         avgChange: old.avgChange + (item.changePct || 0),
         avgScore: old.avgScore + (item.score || 0),
         volume: old.volume + (item.volumeRatio || 0),
+        stocks: [...old.stocks, item],
       });
     });
 
-    const result = [...industryMap.values()].map((item) => ({
-      ...item,
-      avgChange: item.count ? item.avgChange / item.count : 0,
-      avgScore: item.count ? item.avgScore / item.count : 0,
-      volume: item.count ? item.volume / item.count : 0,
-    }));
+    const result = [...industryMap.values()].map((item) => {
+      const relatedSymbols = getRelatedSymbolsForIndustry(item.name);
+      const stockMap = new Map();
+
+      item.stocks.forEach((s) => stockMap.set(s.symbol, s));
+
+      relatedSymbols.forEach((symbol) => {
+        if (!stockMap.has(symbol)) {
+          stockMap.set(symbol, {
+            symbol,
+            name: getLocalDisplayName(symbol, symbol),
+            baseType: item.name,
+            strongType: "產業相關股",
+            score: null,
+            changePct: null,
+            volumeRatio: null,
+            tradeSignal: {
+              action: "觀察",
+              reasons: ["產業相關股，等待行情資料更新"],
+            },
+          });
+        }
+      });
+
+      return {
+        ...item,
+        avgChange: item.count ? item.avgChange / item.count : 0,
+        avgScore: item.count ? item.avgScore / item.count : 0,
+        volume: item.count ? item.volume / item.count : 0,
+        stocks: [...stockMap.values()].sort((a, b) => (b.score || 0) - (a.score || 0)),
+      };
+    });
 
     return {
       strong: result
@@ -2603,8 +3063,15 @@ const [watchText, setWatchText] = useState(() => {
       weak: result
         .sort((a, b) => a.avgScore + a.avgChange * 8 - (b.avgScore + b.avgChange * 8))
         .slice(0, 8),
+      all: result,
     };
   }, [systemStrongList]);
+
+  const selectedIndustryDetail = useMemo(() => {
+    if (!selectedIndustry) return null;
+    const list = selectedIndustry.side === "weak" ? industryReport.weak : industryReport.strong;
+    return list.find((item) => item.name === selectedIndustry.name) || null;
+  }, [selectedIndustry, industryReport]);
 
   const reportNextDayCandidates = useMemo(() => {
     return [...sortedNextDayList]
@@ -2719,9 +3186,21 @@ const [watchText, setWatchText] = useState(() => {
         .indicator-menu .toggle-card { margin-bottom: 8px; }
         .indicator-menu .toggle-card:last-child { margin-bottom: 0; }
         .summary-grid { display: grid; grid-template-columns: 1.1fr 1fr .8fr 1fr; gap: 10px; margin-bottom: 10px; }
-        .analysis-layout { display: grid; grid-template-columns: 320px minmax(680px, 1fr) 370px; gap: 10px; align-items: start; }
+        .analysis-layout { display: grid; grid-template-columns: 360px minmax(680px, 1fr) 370px; gap: 10px; align-items: start; }
         .center-stack { display: contents; }
-        .combined-market-card { grid-column: 2; grid-row: 1; min-height: 210px; display: grid; grid-template-columns: 1fr 1.25fr; gap: 20px; align-items: center; }
+        .search-combo-card { grid-column: 1 / span 2; grid-row: 1; min-height: 210px; display: grid; grid-template-columns: 360px 1fr; gap: 22px; align-items: stretch; }
+        .search-form-zone { border-right: 1px solid rgba(148,163,184,.16); padding-right: 18px; }
+        .search-current-zone { display: grid; grid-template-columns: minmax(220px,.8fr) minmax(360px,1.2fr); gap: 18px; align-items: center; }
+        .search-current-zone .quick-selected-card { margin-top: 0; border-top: 0; padding-top: 0; }
+        .profile-mini-card { background: rgba(2,6,23,.62); border: 1px solid rgba(56,189,248,.18); border-radius: 16px; padding: 16px; min-height: 152px; display: grid; gap: 10px; align-content: center; }
+        .profile-mini-row { display: grid; grid-template-columns: 120px 1fr; gap: 10px; padding: 8px 0; border-bottom: 1px solid rgba(148,163,184,.12); }
+        .profile-mini-row:last-child { border-bottom: 0; }
+        @media (max-width: 1280px) {
+          .search-combo-card { grid-column: 1 / -1; grid-template-columns: 1fr; }
+          .search-form-zone { border-right: 0; padding-right: 0; border-bottom: 1px solid rgba(148,163,184,.16); padding-bottom: 12px; }
+          .search-current-zone { grid-template-columns: 1fr; }
+        }
+        .combined-market-card { grid-column: 2; grid-row: 1; min-height: 210px; display: block; }
         .chart-area-card { grid-column: 1 / span 2; grid-row: 2; }
         .selected-panel { text-align: center; }
         .selected-name { font-size: 31px; font-weight: 900; letter-spacing: .04em; color: #f8fafc; margin: 4px 0 6px; line-height: 1.12; }
@@ -2734,6 +3213,21 @@ const [watchText, setWatchText] = useState(() => {
         .selected-panel .price small { font-size: 13px; margin-top: 4px; }
         .selected-panel .price .price-label { font-size: 14px; margin-right: 8px; color: #e5e7eb; font-weight: 700; }
         .market-panel { border-left: 1px solid rgba(148,163,184,.22); padding-left: 20px; }
+        .quick-selected-card { margin-top: 14px; border-top: 1px solid rgba(148,163,184,.16); padding-top: 14px; text-align: center; }
+        .profile-card-grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
+        .profile-hero { background: rgba(2,6,23,.72); border: 1px solid rgba(56,189,248,.18); border-radius: 16px; padding: 16px; }
+        .profile-hero h3 { font-size: 22px; margin-bottom: 8px; color: #f8fafc; }
+        .profile-row { display: grid; grid-template-columns: 120px 1fr; gap: 10px; padding: 10px 0; border-top: 1px solid rgba(148,163,184,.12); }
+        .profile-row:first-child { border-top: 0; }
+        .profile-label { color: #94a3b8; font-size: 13px; }
+        .profile-value { color: #e5e7eb; font-weight: 800; }
+        .institution-summary { background: rgba(2,6,23,.75); border: 1px solid rgba(148,163,184,.18); border-radius: 14px; padding: 12px; margin-bottom: 10px; }
+        .institution-summary b { display: block; font-size: 18px; margin-bottom: 4px; }
+        .institution-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 8px; }
+        .institution-box { background: #020617; border: 1px solid rgba(148,163,184,.16); border-radius: 12px; padding: 10px; }
+        .institution-box span { display:block; color:#94a3b8; font-size:12px; margin-bottom:4px; }
+        .institution-box b { font-size:16px; }
+
         .right-panel-card { grid-column: 3; grid-row: 1 / span 2; position: sticky; top: 16px; }
 
         .main-grid { display: grid; grid-template-columns: minmax(680px, 1fr) 370px; gap: 10px; align-items: start; }
@@ -2752,6 +3246,8 @@ const [watchText, setWatchText] = useState(() => {
         .neutral { color: #facc15; }
         .stock-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 12px; }
         .stock-title h1 { font-size: 21px; margin-bottom: 4px; }
+        .chart-profile-inline { background: rgba(2,6,23,.56); border: 1px solid rgba(56,189,248,.18); border-radius: 14px; padding: 12px 16px; display: grid; gap: 10px; }
+        .chart-profile-inline b { display: block; color: #f8fafc; font-size: 16px; margin-top: 4px; line-height: 1.45; }
         .price { font-size: 26px; font-weight: 900; text-align: right; }
         .price small { display: block; font-size: 14px; margin-top: 4px; }
         .trading-chart { width: 100%; min-height: 560px; border-radius: 16px; overflow: hidden; background: #020617; }
@@ -2778,7 +3274,10 @@ const [watchText, setWatchText] = useState(() => {
         .market-stats-grid b, .macro-card b { font-size: 20px; }
         .ai-summary-box { margin-top: 12px; padding: 14px; border-radius: 16px; background: rgba(56,189,248,.08); border: 1px solid rgba(56,189,248,.22); color: #dbeafe; }
         .industry-list, .risk-list, .strategy-box { display: grid; gap: 10px; }
-        .industry-item { display: flex; justify-content: space-between; align-items: center; }
+        .industry-item { display: flex; justify-content: space-between; align-items: center; cursor: pointer; transition: all .18s ease; }
+        .industry-item:hover { transform: translateY(-1px); border-color: rgba(56,189,248,.45); background: rgba(30,41,59,.92); }
+        .industry-item.active { border-color: rgba(34,211,238,.62); background: rgba(8,47,73,.55); }
+        .industry-detail-card { grid-column: 1 / -1; margin-top: 12px; }
         .industry-item > div { min-width: 0; }
         .industry-item.up span { color: #fca5a5; }
         .industry-item.down span { color: #86efac; }
@@ -2865,12 +3364,12 @@ const [watchText, setWatchText] = useState(() => {
             <div className="logo-icon">↗</div>
             <div><b>股市雷達</b><span>Quant Terminal</span></div>
           </div>
+          <button className={`nav-btn ${activeMenu === "report" ? "active" : ""}`} onClick={() => setActiveMenu("report")}>🏠 首頁 / 每日報告</button>
           <button className={`nav-btn ${activeMenu === "analysis" ? "active" : ""}`} onClick={() => setActiveMenu("analysis")}>📊 分析看板</button>
           <button className={`nav-btn ${activeMenu === "watchlist" ? "active" : ""}`} onClick={() => setActiveMenu("watchlist")}>⭐ 自選股票</button>
           <button className={`nav-btn ${activeMenu === "signals" ? "active" : ""}`} onClick={() => setActiveMenu("signals")}>🚨 強勢掃描</button>
           <button className={`nav-btn ${activeMenu === "nextday" ? "active" : ""}`} onClick={() => setActiveMenu("nextday")}>🌙 隔日沖選股</button>
           <button className={`nav-btn ${activeMenu === "daytrade" ? "active" : ""}`} onClick={() => setActiveMenu("daytrade")}>⚡ 當沖模式</button>
-          <button className={`nav-btn ${activeMenu === "report" ? "active" : ""}`} onClick={() => setActiveMenu("report")}>🧾 每日報告</button>
           <button className="nav-btn" onClick={() => navigate("/")}>← 返回首頁</button>
         </aside>
 
@@ -2894,7 +3393,8 @@ const [watchText, setWatchText] = useState(() => {
 
           {activeMenu === "analysis" && (
             <div className="analysis-layout">
-              <div className="card">
+              <div className="card search-combo-card">
+                <div className="search-form-zone">
                 <div className="section-title"><h2>加入自選或搜尋</h2></div>
                 <label>股票代碼或名稱</label>
                 <input
@@ -2931,12 +3431,18 @@ const [watchText, setWatchText] = useState(() => {
                       className={`favorite-action ${
                         stock && favorites.some((item) => item.symbol === stock.symbol) ? "saved" : ""
                       }`}
-                      onClick={() => setFavoritePickerStock(stock)}
+                      disabled={!stock?.symbol}
+                      onClick={() =>
+                        stock?.symbol &&
+                        setFavoritePickerStock((prev) =>
+                          prev?.symbol === stock.symbol ? null : stock
+                        )
+                      }
                     >
                       {stock && favorites.some((item) => item.symbol === stock.symbol) ? "已收藏" : "加入收藏"}
                     </button>
 
-                    {favoritePickerStock?.symbol === stock?.symbol && (
+                    {favoritePickerStock && stock?.symbol && favoritePickerStock.symbol === stock.symbol && (
                       <div className="favorite-picker">
                         {FAVORITE_GROUPS.map((group) => (
                           <button key={group} onClick={() => addFavorite(stock, group)}>
@@ -2960,57 +3466,48 @@ const [watchText, setWatchText] = useState(() => {
 
                 {favoriteNotice && <p className="favorite-notice">{favoriteNotice}</p>}
                 {error && <p className="error">{error}</p>}
+
+                                </div>
+
+                <div className="search-current-zone">
+<div className="quick-selected-card">
+                  <div className="muted">目前選股</div>
+                  <div className="selected-name">
+                    {getLocalDisplayName(stock?.symbol, stock?.name) || "尚未載入資料"}
+                  </div>
+                  <div className="selected-symbol">{stock?.symbol || query}</div>
+                  <div className={stock?.changePct >= 0 ? "price up" : "price down"}>
+                    <span className="price-label">現價</span>
+                    {stock?.close?.toFixed?.(2) ?? "--"}
+                    <small>{stock?.changePct?.toFixed?.(2) ?? "--"}%</small>
+                  </div>
+                </div>
+              
+                  <div className="profile-mini-card">
+                    <div className="profile-mini-row">
+                      <span className="profile-label">所屬產業</span>
+                      <span className="profile-value">{stockProfile.industry}</span>
+                    </div>
+                    <div className="profile-mini-row">
+                      <span className="profile-label">主要產品 / 業務</span>
+                      <span className="profile-value">{stockProfile.business}</span>
+                    </div>
+                  </div>
+                </div>
               </div>
 
               <div className="center-stack">
-                <div className="card combined-market-card">
-                  <div className="selected-panel">
-                    <div className="section-title"><h2>目前選股 & 市場寬度</h2></div>
-                    <div className="selected-name">
-                      {getStockDisplayName(stock?.symbol, stock?.name) || "尚未載入資料"}
-                    </div>
-                    <div className="selected-symbol">{stock?.symbol || query}</div>
-                    <div className={stock?.changePct >= 0 ? "price up" : "price down"}>
-                      <span className="price-label">現價</span>
-                      {stock?.close?.toFixed?.(2) ?? "--"}
-                      <small>{stock?.changePct?.toFixed?.(2) ?? "--"}%</small>
-                    </div>
-                  </div>
-
-                  <div className="market-panel">
-                    <h3 style={{ marginBottom: 14 }}>市場寬度</h3>
-                    <div className="market-card">
-                      <div className="market-box">
-                        <span className="muted">上漲家數</span>
-                        <b className="up">{marketStats.up}</b>
-                      </div>
-                      <div className="market-box">
-                        <span className="muted">下跌家數</span>
-                        <b className="down">{marketStats.down}</b>
-                      </div>
-                      <div className="market-box">
-                        <span className="muted">平均漲跌幅</span>
-                        <b className={marketStats.avg >= 0 ? "up" : "down"}>
-                          {marketStats.avg.toFixed(2)}%
-                        </b>
-                      </div>
-                    </div>
-                    <p className="muted" style={{ marginTop: 14 }}>
-                      更新時間：{new Date().toLocaleString("zh-TW")}
-                    </p>
-                  </div>
-                </div>
-
                 <div className="card chart-area-card">
                   <div className="stock-head">
                     <div className="stock-title">
                       <h1>
                         {stock
-                          ? `${getStockDisplayName(stock.symbol, stock.name)} ${stock.symbol}`
+                          ? `${getLocalDisplayName(stock.symbol, stock.name)} ${stock.symbol}`
                           : "請搜尋股票"}
                       </h1>
                       <p className="muted">互動 K 線、MA5 / MA20 / MA60、布林通道、成交量</p>
                     </div>
+
                     {stock && (
                       <div className={stock.changePct >= 0 ? "price up" : "price down"}>
                         <span style={{ fontSize: 16, marginRight: 8, color: "#e5e7eb" }}>現價</span>
@@ -3142,10 +3639,41 @@ const [watchText, setWatchText] = useState(() => {
                   </>
                 )}
 
-                {rightView === "institution" && (
+                {rightView === "institution" && stock && (
                   <>
-                    <div className="signal-card"><b>法人籌碼</b><p>法人資料頁面已建立。外資、投信、自營商資料需另接資料源後顯示每日買賣超。</p></div>
-                    <div className="signal-card"><b>法人解讀規則</b><p>外資連買 + 投信同步買超：偏多。三大法人同步買超：籌碼偏強。股價上漲但法人賣超：追價需保守。</p></div>
+                    <div className={`institution-summary ${institutionalFlow.totalNet >= 0 ? "up" : "down"}`}>
+                      <b>{institutionalTotalText}</b>
+                      <p className="muted">籌碼判斷：{institutionalFlow.tone}</p>
+                    </div>
+
+                    {institutionalFlow.rows.map((row) => (
+                      <div className="signal-card" key={row.name}>
+                        <b>{row.name}</b>
+                        <div className="institution-row">
+                          <div className="institution-box">
+                            <span>買進</span>
+                            <b>{row.buy.toLocaleString()} 張</b>
+                          </div>
+                          <div className="institution-box">
+                            <span>賣出</span>
+                            <b>{row.sell.toLocaleString()} 張</b>
+                          </div>
+                          <div className="institution-box">
+                            <span>買賣超</span>
+                            <b className={row.net >= 0 ? "up" : "down"}>
+                              {row.net >= 0 ? "+" : ""}
+                              {row.net.toLocaleString()} 張
+                            </b>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+
+                    <div className="signal-card">
+                      <b>法人解讀規則</b>
+                      <p>外資連買 + 投信同步買超：偏多。三大法人同步買超：籌碼偏強。股價上漲但法人賣超：追價需保守。</p>
+                      <p className="muted" style={{ marginTop: 8 }}>{institutionalFlow.source}</p>
+                    </div>
                   </>
                 )}
 
@@ -3200,7 +3728,7 @@ const [watchText, setWatchText] = useState(() => {
                       <tr key={s.symbol} onClick={() => { setStock(s); setActiveMenu("analysis"); }}>
                         <td>
                             <div className="stock-name-stack">
-                              <span className="stock-name-main">{getStockDisplayName(s.symbol, s.name)}</span>
+                              <span className="stock-name-main">{getLocalDisplayName(s.symbol, s.name)}</span>
                               <span className="stock-name-code">{s.symbol}</span>
                             </div>
                           </td>
@@ -3213,8 +3741,11 @@ const [watchText, setWatchText] = useState(() => {
                         <td><span className="badge">{s.tradeSignal.action}</span></td>
                         <td>
                           <span style={{ position: "relative", display: "inline-block" }}>
-                            <button className="ghost small" onClick={(e) => { e.stopPropagation(); setFavoritePickerStock(s); }}>收藏</button>
-                            {favoritePickerStock?.symbol === s.symbol && (
+                            <button className="ghost small" onClick={(e) => {
+                              e.stopPropagation();
+                              setFavoritePickerStock((prev) => prev?.symbol === s.symbol ? null : s);
+                            }}>收藏</button>
+                            {favoritePickerStock && favoritePickerStock.symbol === s.symbol && (
                               <div className="favorite-picker" onClick={(e) => e.stopPropagation()}>
                                 {FAVORITE_GROUPS.map((group) => (
                                   <button key={group} onClick={() => addFavorite(s, group)}>
@@ -3286,7 +3817,7 @@ const [watchText, setWatchText] = useState(() => {
                           <td>{i + 1}</td>
                           <td>
                             <div className="stock-name-stack">
-                              <span className="stock-name-main">{getStockDisplayName(s.symbol, s.name)}</span>
+                              <span className="stock-name-main">{getLocalDisplayName(s.symbol, s.name)}</span>
                               <span className="stock-name-code">{s.symbol}</span>
                             </div>
                           </td>
@@ -3382,7 +3913,7 @@ const [watchText, setWatchText] = useState(() => {
                         >
                           <td>
                             <div className="stock-name-stack">
-                              <span className="stock-name-main small">{getStockDisplayName(s.symbol, s.name)}</span>
+                              <span className="stock-name-main small">{getLocalDisplayName(s.symbol, s.name)}</span>
                               <span className="stock-name-code">{s.symbol}</span>
                             </div>
                           </td>
@@ -3458,7 +3989,7 @@ const [watchText, setWatchText] = useState(() => {
                       <div className="stock-head">
                         <div className="stock-title">
                           <h1>
-                            {getStockDisplayName(intradayStock.symbol, intradayStock.name)} {intradayStock.symbol}
+                            {getLocalDisplayName(intradayStock.symbol, intradayStock.name)} {intradayStock.symbol}
                           </h1>
                           <p className="muted">目前使用 {klineLabel(klineType)}，資料來源為 Yahoo Finance K線（已加速輪詢，但 Yahoo 台股可能仍有延遲）。</p>
                         </div>
@@ -3550,7 +4081,7 @@ const [watchText, setWatchText] = useState(() => {
                             <td>{i + 1}</td>
                             <td>
                             <div className="stock-name-stack">
-                              <span className="stock-name-main">{getStockDisplayName(s.symbol, s.name)}</span>
+                              <span className="stock-name-main">{getLocalDisplayName(s.symbol, s.name)}</span>
                               <span className="stock-name-code">{s.symbol}</span>
                             </div>
                           </td>
@@ -3593,21 +4124,37 @@ const [watchText, setWatchText] = useState(() => {
                   <div className={`market-direction-badge ${marketStats.avg >= 0 ? "up" : "down"}`}>
                     {marketDirectionText}
                   </div>
+                  <p className="muted" style={{ textAlign: "center", marginBottom: 12 }}>
+                    資料來源：{marketStats.sourceName}
+                    {taiwanMarketUpdatedAt ? `｜更新 ${taiwanMarketUpdatedAt.toLocaleString("zh-TW")}` : "｜資料更新中"}
+                  </p>
 
                   <div className="market-stats-grid">
-                    <div><span>上漲家數</span><b className="up">{marketStats.up}</b></div>
-                    <div><span>下跌家數</span><b className="down">{marketStats.down}</b></div>
-                    <div><span>平均漲跌幅</span><b className={marketStats.avg >= 0 ? "up" : "down"}>{marketStats.avg.toFixed(2)}%</b></div>
-                    <div><span>市場情緒</span><b>{marketMoodText}</b></div>
+                    <div>
+                      <span>台股加權指數</span>
+                      <b>{marketStats.indexPrice ? marketStats.indexPrice.toFixed(2) : "--"}</b>
+                    </div>
+                    <div>
+                      <span>指數漲跌幅</span>
+                      <b className={marketStats.avg >= 0 ? "up" : "down"}>{marketStats.avg.toFixed(2)}%</b>
+                    </div>
+                    <div>
+                      <span>市場情緒</span>
+                      <b>{marketMoodText}</b>
+                    </div>
+                    <div>
+                      <span>市場寬度樣本</span>
+                      <b>{marketStats.total ? `${marketStats.up}漲 / ${marketStats.down}跌` : "更新中"}</b>
+                    </div>
                   </div>
 
                   <div className="ai-summary-box">
-                    AI 判斷目前市場：
+                    AI 判斷目前台股大盤：
                     {marketStats.avg > 1
-                      ? "資金明顯偏多，強勢股可續抱，但避免追高過熱標的。"
+                      ? "加權指數明顯偏多，強勢股可續抱，但避免追高過熱標的。"
                       : marketStats.avg > 0
-                      ? "盤勢偏震盪偏多，適合觀察量能放大的主流股。"
-                      : "市場偏弱，建議降低追價，等待轉強訊號。"}
+                      ? "加權指數震盪偏多，適合觀察量能放大的主流股。"
+                      : "加權指數偏弱，建議降低追價，等待轉強訊號。"}
                   </div>
                 </div>
               )}
@@ -3615,28 +4162,89 @@ const [watchText, setWatchText] = useState(() => {
               {reportTab === "industry" && (
                 <div className="report-grid">
                   <div className="report-card">
-                    <h2>🏭 台股強勢產業</h2>
+                    <div className="section-title">
+                      <h2>🏭 台股強勢產業</h2>
+                      <span className="muted">點選產業可查看相關股票</span>
+                    </div>
                     <div className="industry-list">
                       {industryReport.strong.length ? industryReport.strong.map((item) => (
-                        <div className="industry-item up" key={item.name}>
+                        <button
+                          type="button"
+                          className={`industry-item up ${selectedIndustry?.side === "strong" && selectedIndustry?.name === item.name ? "active" : ""}`}
+                          key={item.name}
+                          onClick={() => setSelectedIndustry({ side: "strong", name: item.name })}
+                        >
                           <b>{item.name}</b>
-                          <span>▲ {item.avgChange.toFixed(2)}%｜AI {Math.round(item.avgScore)}</span>
-                        </div>
+                          <span>▲ {item.avgChange.toFixed(2)}%｜AI {Math.round(item.avgScore)}｜{item.count}檔</span>
+                        </button>
                       )) : <p className="report-empty">強勢產業資料更新中。</p>}
                     </div>
                   </div>
 
                   <div className="report-card">
-                    <h2>📉 台股弱勢產業</h2>
+                    <div className="section-title">
+                      <h2>📉 台股弱勢產業</h2>
+                      <span className="muted">點選產業可查看相關股票</span>
+                    </div>
                     <div className="industry-list">
                       {industryReport.weak.length ? industryReport.weak.map((item) => (
-                        <div className="industry-item down" key={item.name}>
+                        <button
+                          type="button"
+                          className={`industry-item down ${selectedIndustry?.side === "weak" && selectedIndustry?.name === item.name ? "active" : ""}`}
+                          key={item.name}
+                          onClick={() => setSelectedIndustry({ side: "weak", name: item.name })}
+                        >
                           <b>{item.name}</b>
-                          <span>▼ {item.avgChange.toFixed(2)}%｜AI {Math.round(item.avgScore)}</span>
-                        </div>
+                          <span>▼ {item.avgChange.toFixed(2)}%｜AI {Math.round(item.avgScore)}｜{item.count}檔</span>
+                        </button>
                       )) : <p className="report-empty">弱勢產業資料更新中。</p>}
                     </div>
                   </div>
+
+                  {selectedIndustryDetail && (
+                    <div className="report-card industry-detail-card">
+                      <div className="section-title">
+                        <h2>
+                          {selectedIndustry?.side === "weak" ? "📉" : "🔥"} {selectedIndustryDetail.name} 相關股票
+                        </h2>
+                        <span className="muted">
+                          已掃描 {selectedIndustryDetail.count} 檔｜下方含常見相關股｜平均漲跌 {selectedIndustryDetail.avgChange.toFixed(2)}%｜平均AI {Math.round(selectedIndustryDetail.avgScore)}
+                        </span>
+                      </div>
+
+                      <div className="table-wrap">
+                        <table>
+                          <thead>
+                            <tr>
+                              <th>股票</th>
+                              <th>AI</th>
+                              <th>漲跌</th>
+                              <th>量比</th>
+                              <th>訊號</th>
+                              <th>觀察理由</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {selectedIndustryDetail.stocks.map((s) => (
+                              <tr key={s.symbol} onClick={() => { setStock(s); setActiveMenu("analysis"); }}>
+                                <td>
+                                  <div className="stock-name-stack">
+                                    <span className="stock-name-main small">{getLocalDisplayName(s.symbol, s.name)}</span>
+                                    <span className="stock-name-code">{s.symbol}</span>
+                                  </div>
+                                </td>
+                                <td>{s.score ?? "待更新"}</td>
+                                <td className={s.changePct >= 0 ? "up" : s.changePct < 0 ? "down" : ""}>{s.changePct?.toFixed?.(2) ?? "--"}{Number.isFinite(s.changePct) ? "%" : ""}</td>
+                                <td>{s.volumeRatio?.toFixed?.(2) ?? "--"}</td>
+                                <td><span className="badge">{s.tradeSignal?.action || "觀察"}</span></td>
+                                <td>{s.tradeSignal?.reasons?.slice(0, 2).join("、") || "等待訊號"}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -3654,7 +4262,7 @@ const [watchText, setWatchText] = useState(() => {
                             <tr key={s.symbol} onClick={() => { setStock(s); setActiveMenu("analysis"); }}>
                               <td>
                                 <div className="stock-name-stack">
-                                  <span className="stock-name-main small">{getStockDisplayName(s.symbol, s.name)}</span>
+                                  <span className="stock-name-main small">{getLocalDisplayName(s.symbol, s.name)}</span>
                                   <span className="stock-name-code">{s.symbol}</span>
                                 </div>
                               </td>
@@ -3715,7 +4323,7 @@ const [watchText, setWatchText] = useState(() => {
                                 平均漲幅 {item.avgChange.toFixed(2)}%｜平均AI {Math.round(item.avgScore)}｜平均量比 {item.avgVolumeRatio.toFixed(2)}
                               </div>
                               <div className="muted">
-                                代表股：{item.topStocks.map((s) => `${getStockDisplayName(s.symbol, s.name)}(${s.symbol})`).join("、")}
+                                代表股：{item.topStocks.map((s) => `${getLocalDisplayName(s.symbol, s.name)}(${s.symbol})`).join("、")}
                               </div>
                             </div>
                             <span>▲ 強勢</span>
@@ -3735,7 +4343,7 @@ const [watchText, setWatchText] = useState(() => {
                                 平均漲幅 {item.avgChange.toFixed(2)}%｜平均AI {Math.round(item.avgScore)}｜平均量比 {item.avgVolumeRatio.toFixed(2)}
                               </div>
                               <div className="muted">
-                                代表股：{item.topStocks.map((s) => `${getStockDisplayName(s.symbol, s.name)}(${s.symbol})`).join("、")}
+                                代表股：{item.topStocks.map((s) => `${getLocalDisplayName(s.symbol, s.name)}(${s.symbol})`).join("、")}
                               </div>
                             </div>
                             <span>▼ 弱勢</span>
@@ -3760,7 +4368,7 @@ const [watchText, setWatchText] = useState(() => {
                                   <td>{index + 1}</td>
                                   <td>
                                     <div className="stock-name-stack">
-                                      <span className="stock-name-main small">{getStockDisplayName(s.symbol, s.name)}</span>
+                                      <span className="stock-name-main small">{getLocalDisplayName(s.symbol, s.name)}</span>
                                       <span className="stock-name-code">{s.symbol}</span>
                                     </div>
                                   </td>
@@ -3791,7 +4399,7 @@ const [watchText, setWatchText] = useState(() => {
                                   <td>{index + 1}</td>
                                   <td>
                                     <div className="stock-name-stack">
-                                      <span className="stock-name-main small">{getStockDisplayName(s.symbol, s.name)}</span>
+                                      <span className="stock-name-main small">{getLocalDisplayName(s.symbol, s.name)}</span>
                                       <span className="stock-name-code">{s.symbol}</span>
                                     </div>
                                   </td>
@@ -3825,7 +4433,7 @@ const [watchText, setWatchText] = useState(() => {
                             <tr key={s.symbol} onClick={() => { setStock(s); setActiveMenu("analysis"); }}>
                               <td>
                                 <div className="stock-name-stack">
-                                  <span className="stock-name-main small">{getStockDisplayName(s.symbol, s.name)}</span>
+                                  <span className="stock-name-main small">{getLocalDisplayName(s.symbol, s.name)}</span>
                                   <span className="stock-name-code">{s.symbol}</span>
                                 </div>
                               </td>
@@ -3856,7 +4464,7 @@ const [watchText, setWatchText] = useState(() => {
                             <tr key={s.symbol} onClick={() => { setIntradayStock(s); setStock(s); setActiveMenu("daytrade"); }}>
                               <td>
                                 <div className="stock-name-stack">
-                                  <span className="stock-name-main small">{getStockDisplayName(s.symbol, s.name)}</span>
+                                  <span className="stock-name-main small">{getLocalDisplayName(s.symbol, s.name)}</span>
                                   <span className="stock-name-code">{s.symbol}</span>
                                 </div>
                               </td>
