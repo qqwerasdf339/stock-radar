@@ -891,6 +891,482 @@ function classifyStrongStock(stock) {
 }
 
 
+
+
+function klineSma(values, period, endIndex = values.length - 1) {
+  if (!values?.length || endIndex < period - 1) return null;
+  const slice = values.slice(endIndex - period + 1, endIndex + 1);
+  if (slice.length < period || slice.some((v) => !Number.isFinite(v))) return null;
+  return slice.reduce((sum, v) => sum + v, 0) / period;
+}
+
+function klineSignal(signalName, direction, strength, riskLevel, description, triggered) {
+  return {
+    signalName,
+    direction,
+    strength: Math.max(0, Math.min(100, Math.round(strength || 0))),
+    riskLevel,
+    description,
+    triggered: Boolean(triggered),
+  };
+}
+
+function enrichKlineContext(rawCandles = []) {
+  const candles = rawCandles
+    .filter((c) => Number.isFinite(c.open) && Number.isFinite(c.high) && Number.isFinite(c.low) && Number.isFinite(c.close))
+    .map((c) => ({ ...c, volume: Number(c.volume || 0) }));
+
+  const closes = candles.map((c) => c.close);
+  const highs = candles.map((c) => c.high);
+  const lows = candles.map((c) => c.low);
+  const volumes = candles.map((c) => c.volume);
+
+  return candles.map((c, i) => {
+    const ma5 = klineSma(closes, 5, i);
+    const ma10 = klineSma(closes, 10, i);
+    const ma20 = klineSma(closes, 20, i);
+    const ma60 = klineSma(closes, 60, i);
+    const volumeMA5 = klineSma(volumes, 5, i);
+    const volumeMA20 = klineSma(volumes, 20, i);
+    const prevHigh = i > 0 ? Math.max(...highs.slice(Math.max(0, i - 20), i)) : null;
+    const prevLow = i > 0 ? Math.min(...lows.slice(Math.max(0, i - 20), i)) : null;
+    const high20 = Math.max(...highs.slice(Math.max(0, i - 19), i + 1));
+    const low20 = Math.min(...lows.slice(Math.max(0, i - 19), i + 1));
+    const range20 = high20 - low20 || 1;
+    const positionRatio = (c.close - low20) / range20;
+    const trend20 = i >= 20 ? ((c.close - candles[i - 20].close) / candles[i - 20].close) * 100 : 0;
+
+    return {
+      ...c,
+      ma5,
+      ma10,
+      ma20,
+      ma60,
+      volumeMA5,
+      volumeMA20,
+      prevHigh,
+      prevLow,
+      high20,
+      low20,
+      positionRatio,
+      trend20,
+      body: Math.abs(c.close - c.open),
+      upperShadow: c.high - Math.max(c.open, c.close),
+      lowerShadow: Math.min(c.open, c.close) - c.low,
+      range: Math.max(0.0001, c.high - c.low),
+      isRed: c.close > c.open,
+      isBlack: c.close < c.open,
+      volumeRatio20: volumeMA20 ? c.volume / volumeMA20 : 0,
+    };
+  });
+}
+
+function getTrendPosition(candles) {
+  const c = candles.at(-1);
+  if (!c) return "middle";
+  if (c.positionRatio <= 0.33 || (c.trend20 <= -8 && c.close <= (c.ma20 || c.close) * 1.03)) return "low";
+  if (c.positionRatio >= 0.67 || (c.trend20 >= 10 && c.close >= (c.ma20 || c.close) * 0.98)) return "high";
+  return "middle";
+}
+
+function detectHammer(candles) {
+  const c = candles.at(-1);
+  const pos = getTrendPosition(candles);
+  const triggered = c && c.lowerShadow >= c.body * 2.2 && c.upperShadow <= c.range * 0.22 && c.body <= c.range * 0.36 && pos === "low";
+  return klineSignal("錘子線 Hammer", "bullish", 70, "medium", "低檔長下影，代表下方買盤承接。", triggered);
+}
+
+function detectHangingMan(candles) {
+  const c = candles.at(-1);
+  const pos = getTrendPosition(candles);
+  const triggered = c && c.lowerShadow >= c.body * 2.1 && c.body <= c.range * 0.38 && pos === "high";
+  return klineSignal("懸掛人 Hanging Man", "bearish", 68, "high", "高檔長下影但實體小，可能代表買盤開始不穩。", triggered);
+}
+
+function detectShootingStar(candles) {
+  const c = candles.at(-1);
+  const pos = getTrendPosition(candles);
+  const triggered = c && c.upperShadow >= c.body * 2.2 && c.lowerShadow <= c.range * 0.18 && c.body <= c.range * 0.36 && pos === "high";
+  return klineSignal("射擊星 Shooting Star", "bearish", 72, "high", "高檔長上影，代表上方賣壓明顯。", triggered);
+}
+
+function detectMorningStar(candles) {
+  if (candles.length < 3) return klineSignal("晨星 Morning Star", "bullish", 0, "medium", "", false);
+  const [a, b, c] = candles.slice(-3);
+  const triggered = a.isBlack && a.body > a.range * 0.48 && b.body < b.range * 0.32 && c.isRed && c.close > (a.open + a.close) / 2 && getTrendPosition(candles.slice(0, -2)) === "low";
+  return klineSignal("晨星 Morning Star", "bullish", 82, "low", "低檔三日反轉型態，空方動能轉弱後紅K確認。", triggered);
+}
+
+function detectEveningStar(candles) {
+  if (candles.length < 3) return klineSignal("傍晚之星 Evening Star", "bearish", 0, "high", "", false);
+  const [a, b, c] = candles.slice(-3);
+  const triggered = a.isRed && a.body > a.range * 0.45 && b.body < b.range * 0.32 && c.isBlack && c.close < (a.open + a.close) / 2 && getTrendPosition(candles.slice(0, -2)) === "high";
+  return klineSignal("傍晚之星 Evening Star", "bearish", 82, "high", "高檔三日反轉型態，多方動能轉弱後黑K確認。", triggered);
+}
+
+function detectBullishEngulfing(candles) {
+  if (candles.length < 2) return klineSignal("看漲吞噬 Bullish Engulfing", "bullish", 0, "medium", "", false);
+  const [p, c] = candles.slice(-2);
+  const triggered = p.isBlack && c.isRed && c.open <= p.close && c.close >= p.open && getTrendPosition(candles.slice(0, -1)) !== "high";
+  return klineSignal("看漲吞噬 Bullish Engulfing", "bullish", 76, "medium", "紅K吞噬前一根黑K，買盤反攻。", triggered);
+}
+
+function detectBearishEngulfing(candles) {
+  if (candles.length < 2) return klineSignal("看跌吞噬 Bearish Engulfing", "bearish", 0, "high", "", false);
+  const [p, c] = candles.slice(-2);
+  const triggered = p.isRed && c.isBlack && c.open >= p.close && c.close <= p.open && getTrendPosition(candles.slice(0, -1)) !== "low";
+  return klineSignal("看跌吞噬 Bearish Engulfing", "bearish", 76, "high", "黑K吞噬前一根紅K，賣壓反轉。", triggered);
+}
+
+function detectPiercingLine(candles) {
+  if (candles.length < 2) return klineSignal("刺透線 Piercing Line", "bullish", 0, "medium", "", false);
+  const [p, c] = candles.slice(-2);
+  const midpoint = (p.open + p.close) / 2;
+  const triggered = p.isBlack && c.isRed && c.open < p.close && c.close > midpoint && c.close < p.open && getTrendPosition(candles.slice(0, -1)) === "low";
+  return klineSignal("刺透線 Piercing Line", "bullish", 70, "medium", "低檔開低走高並收回前黑K一半以上。", triggered);
+}
+
+function detectDarkCloudCover(candles) {
+  if (candles.length < 2) return klineSignal("烏雲罩頂 Dark Cloud Cover", "bearish", 0, "high", "", false);
+  const [p, c] = candles.slice(-2);
+  const midpoint = (p.open + p.close) / 2;
+  const triggered = p.isRed && c.isBlack && c.open > p.close && c.close < midpoint && c.close > p.open && getTrendPosition(candles.slice(0, -1)) === "high";
+  return klineSignal("烏雲罩頂 Dark Cloud Cover", "bearish", 70, "high", "高檔開高走低並跌破前紅K中線。", triggered);
+}
+
+function detectThreeWhiteSoldiers(candles) {
+  if (candles.length < 3) return klineSignal("紅三兵 Three White Soldiers", "bullish", 0, "medium", "", false);
+  const last = candles.slice(-3);
+  const triggered = last.every((c) => c.isRed && c.body > c.range * 0.45) && last[0].close < last[1].close && last[1].close < last[2].close;
+  return klineSignal("紅三兵 Three White Soldiers", "bullish", 78, "medium", "連續三根強勢紅K，買盤延續。", triggered);
+}
+
+function detectThreeBlackCrows(candles) {
+  if (candles.length < 3) return klineSignal("黑三兵 Three Black Crows", "bearish", 0, "high", "", false);
+  const last = candles.slice(-3);
+  const triggered = last.every((c) => c.isBlack && c.body > c.range * 0.45) && last[0].close > last[1].close && last[1].close > last[2].close;
+  return klineSignal("黑三兵 Three Black Crows", "bearish", 78, "high", "連續三根強勢黑K，賣壓延續。", triggered);
+}
+
+function detectThreeOutsideDown(candles) {
+  if (candles.length < 3) return klineSignal("三外面朝下 Three Outside Down", "bearish", 0, "high", "", false);
+  const [a, b, c] = candles.slice(-3);
+  const engulf = a.isRed && b.isBlack && b.open >= a.close && b.close <= a.open;
+  const triggered = engulf && c.isBlack && c.close < b.close;
+  return klineSignal("三外面朝下 Three Outside Down", "bearish", 80, "high", "看跌吞噬後續跌確認。", triggered);
+}
+
+function detectBullishBreakout(candles) {
+  const c = candles.at(-1);
+  const triggered = c && c.prevHigh && c.close > c.prevHigh && c.isRed;
+  return klineSignal("看漲突破 Bullish Breakout", "bullish", 86, "medium", "收盤突破近20日前高，動能轉強。", triggered);
+}
+
+function detectGapUpBreakout(candles) {
+  if (candles.length < 2) return klineSignal("跳空突破 Gap Up Breakout", "bullish", 0, "medium", "", false);
+  const [p, c] = candles.slice(-2);
+  const triggered = c.open > p.high * 1.005 && c.close > (c.prevHigh || p.high);
+  return klineSignal("跳空突破 Gap Up Breakout", "bullish", 82, "medium", "跳空開高並突破前高，資金急速進場。", triggered);
+}
+
+function detectLongRedPlatformBreakout(candles) {
+  const c = candles.at(-1);
+  if (!c || candles.length < 25) return klineSignal("長紅突破平台", "bullish", 0, "medium", "", false);
+  const prev = candles.slice(-25, -1);
+  const platformHigh = Math.max(...prev.map((x) => x.high));
+  const platformLow = Math.min(...prev.map((x) => x.low));
+  const platformNarrow = (platformHigh - platformLow) / platformLow < 0.16;
+  const triggered = platformNarrow && c.isRed && c.body > c.range * 0.55 && c.close > platformHigh;
+  return klineSignal("長紅突破平台", "bullish", 88, "medium", "平台整理後以長紅K突破，主升段機率提升。", triggered);
+}
+
+function detectWBottomBreakout(candles) {
+  if (candles.length < 45) return klineSignal("W底突破", "bullish", 0, "medium", "", false);
+  const recent = candles.slice(-45);
+  const lows = recent.map((c, i) => ({ i, low: c.low }));
+  const sorted = lows.sort((a, b) => a.low - b.low).slice(0, 5).sort((a, b) => a.i - b.i);
+  const c = candles.at(-1);
+  const neckline = Math.max(...recent.slice(10, 35).map((x) => x.high));
+  const triggered = sorted.length >= 2 && Math.abs(sorted[0].low - sorted.at(-1).low) / sorted[0].low < 0.08 && c.close > neckline;
+  return klineSignal("W底突破", "bullish", 86, "medium", "雙底型態完成並突破頸線。", triggered);
+}
+
+function detectHeadShoulderBottom(candles) {
+  if (candles.length < 60) return klineSignal("頭肩底", "bullish", 0, "medium", "", false);
+  const c = candles.at(-1);
+  const low60 = Math.min(...candles.slice(-60).map((x) => x.low));
+  const neckline = Math.max(...candles.slice(-35, -5).map((x) => x.high));
+  const triggered = c.close > neckline && candles.slice(-35, -5).some((x) => x.low <= low60 * 1.03);
+  return klineSignal("頭肩底", "bullish", 82, "medium", "底部型態疑似完成，突破頸線。", triggered);
+}
+
+function detectStandAbove5MA(candles) {
+  const c = candles.at(-1), p = candles.at(-2);
+  const triggered = c?.ma5 && p?.ma5 && p.close <= p.ma5 && c.close > c.ma5;
+  return klineSignal("站上5MA", "bullish", 58, "low", "收盤重新站上5日均線。", triggered);
+}
+
+function detectStandAbove20MA(candles) {
+  const c = candles.at(-1), p = candles.at(-2);
+  const triggered = c?.ma20 && p?.ma20 && p.close <= p.ma20 && c.close > c.ma20;
+  return klineSignal("站上20MA", "bullish", 64, "medium", "收盤站回20日均線，中期趨勢改善。", triggered);
+}
+
+function detectGoldenCross(candles) {
+  const c = candles.at(-1), p = candles.at(-2);
+  const triggered = c?.ma5 && c?.ma20 && p?.ma5 && p?.ma20 && p.ma5 <= p.ma20 && c.ma5 > c.ma20;
+  return klineSignal("黃金交叉：MA5上穿MA20", "bullish", 76, "medium", "短均線上穿中期均線，趨勢轉強。", triggered);
+}
+
+function detectBottomVolumeLongRed(candles) {
+  const c = candles.at(-1);
+  const triggered = c && getTrendPosition(candles) === "low" && c.isRed && c.body > c.range * 0.55 && c.volumeRatio20 >= 1.5;
+  return klineSignal("底部爆量長紅", "bullish", 86, "medium", "低檔放量長紅，可能為主力進場。", triggered);
+}
+
+function detectLowDoji(candles) {
+  const c = candles.at(-1);
+  const triggered = c && getTrendPosition(candles) === "low" && c.body <= c.range * 0.12;
+  return klineSignal("低檔十字星", "bullish", 52, "medium", "低檔十字星代表賣壓暫歇，需後續紅K確認。", triggered);
+}
+
+function detectBullishHarami(candles) {
+  if (candles.length < 2) return klineSignal("多方母子線", "bullish", 0, "medium", "", false);
+  const [p, c] = candles.slice(-2);
+  const triggered = p.isBlack && c.isRed && c.high < p.open && c.low > p.close && getTrendPosition(candles.slice(0, -1)) === "low";
+  return klineSignal("多方母子線", "bullish", 58, "medium", "低檔母子線，空方動能收斂。", triggered);
+}
+
+function detectGapNotFilled(candles) {
+  if (candles.length < 2) return klineSignal("缺口不回補", "bullish", 0, "medium", "", false);
+  const [p, c] = candles.slice(-2);
+  const triggered = c.low > p.high && c.close > c.open;
+  return klineSignal("缺口不回補", "bullish", 70, "medium", "向上跳空後未回補，買盤支撐強。", triggered);
+}
+
+function detectBreakPreviousHigh(candles) {
+  const c = candles.at(-1);
+  const triggered = c?.prevHigh && c.close > c.prevHigh;
+  return klineSignal("突破前高", "bullish", 78, "medium", "收盤突破前高，趨勢延續。", triggered);
+}
+
+function detectDowntrendStop(candles) {
+  const c = candles.at(-1), p = candles.at(-2);
+  const triggered = c && p && c.trend20 < -6 && c.close > p.high && c.volumeRatio20 >= 1.2;
+  return klineSignal("碎冰中斷 / 下跌趨勢中止", "bullish", 68, "medium", "下跌趨勢中出現放量反彈並突破前一日高。", triggered);
+}
+
+function detectBullAlignment(candles) {
+  const c = candles.at(-1);
+  const triggered = c?.ma5 && c?.ma20 && c?.ma60 && c.ma5 > c.ma20 && c.ma20 > c.ma60;
+  return klineSignal("多頭排列：MA5 > MA20 > MA60", "bullish", 82, "low", "短中長均線多頭排列，趨勢偏強。", triggered);
+}
+
+function detectGapDownBreakdown(candles) {
+  if (candles.length < 2) return klineSignal("跳空跌破 Gap Down Breakdown", "bearish", 0, "high", "", false);
+  const [p, c] = candles.slice(-2);
+  const triggered = c.open < p.low * 0.995 && c.close < (c.prevLow || p.low);
+  return klineSignal("跳空跌破 Gap Down Breakdown", "bearish", 82, "high", "跳空跌破前低，賣壓急速擴大。", triggered);
+}
+
+function detectLongBlackPlatformBreakdown(candles) {
+  const c = candles.at(-1);
+  if (!c || candles.length < 25) return klineSignal("長黑跌破平台", "bearish", 0, "high", "", false);
+  const prev = candles.slice(-25, -1);
+  const platformHigh = Math.max(...prev.map((x) => x.high));
+  const platformLow = Math.min(...prev.map((x) => x.low));
+  const platformNarrow = (platformHigh - platformLow) / platformLow < 0.16;
+  const triggered = platformNarrow && c.isBlack && c.body > c.range * 0.55 && c.close < platformLow;
+  return klineSignal("長黑跌破平台", "bearish", 88, "high", "平台整理後長黑跌破，趨勢轉弱。", triggered);
+}
+
+function detectMTopBreakdown(candles) {
+  if (candles.length < 45) return klineSignal("M頭跌破", "bearish", 0, "high", "", false);
+  const recent = candles.slice(-45);
+  const c = candles.at(-1);
+  const neckline = Math.min(...recent.slice(10, 35).map((x) => x.low));
+  const highCount = recent.filter((x) => x.high >= Math.max(...recent.map((y) => y.high)) * 0.94).length;
+  const triggered = highCount >= 2 && c.close < neckline;
+  return klineSignal("M頭跌破", "bearish", 86, "high", "雙頭型態疑似完成並跌破頸線。", triggered);
+}
+
+function detectHeadShoulderTop(candles) {
+  if (candles.length < 60) return klineSignal("頭肩頂", "bearish", 0, "high", "", false);
+  const c = candles.at(-1);
+  const high60 = Math.max(...candles.slice(-60).map((x) => x.high));
+  const neckline = Math.min(...candles.slice(-35, -5).map((x) => x.low));
+  const triggered = c.close < neckline && candles.slice(-35, -5).some((x) => x.high >= high60 * 0.97);
+  return klineSignal("頭肩頂", "bearish", 82, "high", "高檔頭肩頂疑似成立並跌破頸線。", triggered);
+}
+
+function detectBreakBelow5MA(candles) {
+  const c = candles.at(-1), p = candles.at(-2);
+  const triggered = c?.ma5 && p?.ma5 && p.close >= p.ma5 && c.close < c.ma5;
+  return klineSignal("跌破5MA", "bearish", 58, "medium", "收盤跌破5日均線。", triggered);
+}
+
+function detectBreakBelow20MA(candles) {
+  const c = candles.at(-1), p = candles.at(-2);
+  const triggered = c?.ma20 && p?.ma20 && p.close >= p.ma20 && c.close < c.ma20;
+  return klineSignal("跌破20MA", "bearish", 66, "high", "收盤跌破20日均線，中期趨勢轉弱。", triggered);
+}
+
+function detectDeathCross(candles) {
+  const c = candles.at(-1), p = candles.at(-2);
+  const triggered = c?.ma5 && c?.ma20 && p?.ma5 && p?.ma20 && p.ma5 >= p.ma20 && c.ma5 < c.ma20;
+  return klineSignal("死亡交叉：MA5下穿MA20", "bearish", 76, "high", "短均線跌破中期均線，趨勢轉弱。", triggered);
+}
+
+function detectHighVolumeLongBlack(candles) {
+  const c = candles.at(-1);
+  const triggered = c && getTrendPosition(candles) === "high" && c.isBlack && c.body > c.range * 0.55 && c.volumeRatio20 >= 1.5;
+  return klineSignal("高檔爆量長黑", "bearish", 88, "high", "高檔爆量長黑，可能為主力出貨。", triggered);
+}
+
+function detectHighLongUpperShadow(candles) {
+  const c = candles.at(-1);
+  const triggered = c && getTrendPosition(candles) === "high" && c.upperShadow >= c.body * 1.8 && c.upperShadow >= c.range * 0.42;
+  return klineSignal("高檔長上影", "bearish", 76, "high", "高檔上影線偏長，上方賣壓重。", triggered);
+}
+
+function detectGapFillFail(candles) {
+  if (candles.length < 3) return klineSignal("缺口回補失敗", "bearish", 0, "high", "", false);
+  const [a, b, c] = candles.slice(-3);
+  const gapUp = b.low > a.high;
+  const triggered = gapUp && c.close < a.high;
+  return klineSignal("缺口回補失敗", "bearish", 72, "high", "向上缺口遭回補且收弱，追價動能失敗。", triggered);
+}
+
+function detectFakeBreakout(candles) {
+  const c = candles.at(-1);
+  if (!c || !c.prevHigh) return klineSignal("假突破", "bearish", 0, "high", "", false);
+  const triggered = c.high > c.prevHigh && c.close < c.prevHigh && c.upperShadow > c.body * 1.4;
+  return klineSignal("假突破", "bearish", 86, "high", "盤中突破前高但收盤跌回，留意假突破。", triggered);
+}
+
+function detectPriceVolumeDivergence(candles) {
+  if (candles.length < 6) return klineSignal("量價背離", "bearish", 0, "medium", "", false);
+  const recent = candles.slice(-6);
+  const priceNewHigh = recent.at(-1).close >= Math.max(...recent.slice(0, -1).map((x) => x.close));
+  const volumeLower = recent.at(-1).volume < klineSma(recent.map((x) => x.volume), 5, 4) * 0.75;
+  const triggered = priceNewHigh && volumeLower && getTrendPosition(candles) === "high";
+  return klineSignal("量價背離", "bearish", 62, "medium", "價格創高但量能未跟上，續航力下降。", triggered);
+}
+
+function detectBearAlignment(candles) {
+  const c = candles.at(-1);
+  const triggered = c?.ma5 && c?.ma20 && c?.ma60 && c.ma5 < c.ma20 && c.ma20 < c.ma60;
+  return klineSignal("空頭排列：MA5 < MA20 < MA60", "bearish", 82, "high", "短中長均線空頭排列，趨勢偏弱。", triggered);
+}
+
+function buildKlineRadarSignal(stock) {
+  const candles = enrichKlineContext(stock?.history || []);
+  const latest = candles.at(-1) || {};
+  const close = stock?.close || latest.close || 0;
+
+  const bullishDetectors = [
+    detectHammer, detectMorningStar, detectBullishEngulfing, detectPiercingLine,
+    detectThreeWhiteSoldiers, detectBullishBreakout, detectGapUpBreakout,
+    detectLongRedPlatformBreakout, detectWBottomBreakout, detectHeadShoulderBottom,
+    detectStandAbove5MA, detectStandAbove20MA, detectGoldenCross,
+    detectBottomVolumeLongRed, detectLowDoji, detectBullishHarami, detectGapNotFilled,
+    detectBreakPreviousHigh, detectDowntrendStop, detectBullAlignment,
+  ];
+
+  const bearishDetectors = [
+    detectHangingMan, detectShootingStar, detectEveningStar, detectBearishEngulfing,
+    detectDarkCloudCover, detectThreeBlackCrows, detectThreeOutsideDown,
+    detectGapDownBreakdown, detectLongBlackPlatformBreakdown, detectMTopBreakdown,
+    detectHeadShoulderTop, detectBreakBelow5MA, detectBreakBelow20MA, detectDeathCross,
+    detectHighVolumeLongBlack, detectHighLongUpperShadow, detectGapFillFail,
+    detectFakeBreakout, detectPriceVolumeDivergence, detectBearAlignment,
+  ];
+
+  const bullishSignals = bullishDetectors.map((fn) => fn(candles)).filter((s) => s.triggered);
+  const bearishSignals = bearishDetectors.map((fn) => fn(candles)).filter((s) => s.triggered);
+
+  const volumeRatio = latest.volumeRatio20 || Number(stock?.volumeRatio || 0);
+  const trendPosition = getTrendPosition(candles);
+  const nearHigh = latest.prevHigh ? close >= latest.prevHigh * 0.98 : false;
+
+  let bullishScore = bullishSignals.reduce((sum, s) => sum + s.strength, 0) / Math.max(1, bullishSignals.length);
+  let bearishScore = bearishSignals.reduce((sum, s) => sum + s.strength, 0) / Math.max(1, bearishSignals.length);
+
+  if (latest.close > latest.ma5) bullishScore += 8;
+  if (latest.close > latest.ma20) bullishScore += 10;
+  if (latest.ma5 > latest.ma20) bullishScore += 8;
+  if (volumeRatio >= 1.5) bullishScore += 10;
+  if (latest.prevHigh && latest.close > latest.prevHigh) bullishScore += 12;
+  if (latest.range && (latest.high - latest.close) / latest.range <= 0.18) bullishScore += 8;
+  if (latest.ma5 > latest.ma20 && latest.ma20 > latest.ma60) bullishScore += 12;
+
+  if (latest.close < latest.ma5) bearishScore += 8;
+  if (latest.close < latest.ma20) bearishScore += 12;
+  if (latest.ma5 < latest.ma20) bearishScore += 8;
+  if (latest.upperShadow > latest.body * 1.8 && trendPosition === "high") bearishScore += 10;
+  if (latest.isBlack && volumeRatio >= 1.5) bearishScore += 12;
+  if (latest.prevLow && latest.close < latest.prevLow) bearishScore += 12;
+  if (latest.ma5 < latest.ma20 && latest.ma20 < latest.ma60) bearishScore += 12;
+
+  const fakeSignal = bearishSignals.find((s) => s.signalName.includes("假突破"));
+  const riskScore = Math.max(
+    0,
+    Math.min(
+      100,
+      Math.round(bearishScore * 0.55 + (fakeSignal ? 25 : 0) + (trendPosition === "high" ? 12 : 0) + (volumeRatio >= 2 && latest.isBlack ? 14 : 0))
+    )
+  );
+
+  bullishScore = Math.round(Math.max(0, Math.min(100, bullishScore)));
+  bearishScore = Math.round(Math.max(0, Math.min(100, bearishScore)));
+
+  const marketStructure =
+    bullishScore >= 82 && trendPosition !== "high" ? "起漲初期" :
+    bullishScore >= 78 && latest.ma5 > latest.ma20 && latest.ma20 > latest.ma60 ? "主升段" :
+    trendPosition === "high" && bearishScore >= 55 ? "高檔震盪" :
+    bearishScore >= 70 ? "轉弱初期" :
+    latest.ma5 < latest.ma20 && latest.ma20 < latest.ma60 ? "空頭趨勢" :
+    "盤整";
+
+  const mainUpProbability = Math.max(0, Math.min(100, Math.round(bullishScore * 0.68 + (volumeRatio >= 1.5 ? 10 : 0) + (nearHigh ? 8 : 0) - riskScore * 0.28)));
+  const fakeBreakoutRisk = Math.max(0, Math.min(100, Math.round(riskScore + (fakeSignal ? 20 : 0))));
+
+  const signalTags = [
+    ...bullishSignals.slice(0, 4).map((s) => s.signalName.replace(/：.*$/, "").split(" ")[0]),
+    ...bearishSignals.slice(0, 3).map((s) => s.signalName.replace(/：.*$/, "").split(" ")[0]),
+  ];
+
+  const radarScore = Math.max(0, Math.min(100, Math.round(bullishScore - bearishScore * 0.35 + (volumeRatio >= 1.5 ? 8 : 0))));
+  const radarLevel =
+    radarScore >= 90 ? "S級訊號" :
+    radarScore >= 78 ? "A級觀察" :
+    radarScore >= 62 ? "B級追蹤" :
+    bearishScore > bullishScore ? "風險優先" : "一般";
+
+  return {
+    radarScore,
+    radarLevel,
+    bullishSignals,
+    bearishSignals,
+    bullishScore,
+    bearishScore,
+    riskScore,
+    marketStructure,
+    mainUpProbability,
+    fakeBreakoutRisk,
+    signalTags: [...new Set(signalTags)],
+    radarReasons: [
+      ...bullishSignals.slice(0, 2).map((s) => s.description),
+      ...bearishSignals.slice(0, 2).map((s) => s.description),
+    ].filter(Boolean),
+    candleTitle: bullishSignals[0]?.signalName || bearishSignals[0]?.signalName || stock?.candlePattern?.title || "未觸發明確型態",
+    volumeTitle: volumeRatio >= 1.5 ? `成交量放大 ${volumeRatio.toFixed(2)}倍` : stock?.volumeSignal?.title || "量能一般",
+    trendPosition,
+    nearBreakout: nearHigh,
+  };
+}
+
+
 function calcRecent3DayStrength(stock) {
   const history = stock?.history || [];
   const latest = history.at(-1);
@@ -2225,6 +2701,9 @@ const [watchText, setWatchText] = useState(() => {
   const [realtimeDayTrade, setRealtimeDayTrade] = useState(false);
   const [systemStrongList, setSystemStrongList] = useState([]);
   const [systemStrongLoading, setSystemStrongLoading] = useState(false);
+  const [klineRadarList, setKlineRadarList] = useState([]);
+  const [klineRadarLoading, setKlineRadarLoading] = useState(false);
+  const [klineRadarSort, setKlineRadarSort] = useState("score");
   const [marketBreadthList, setMarketBreadthList] = useState([]);
   const [marketBreadthUpdatedAt, setMarketBreadthUpdatedAt] = useState(null);
   const [taiwanMarketIndex, setTaiwanMarketIndex] = useState(null);
@@ -2995,6 +3474,66 @@ const [watchText, setWatchText] = useState(() => {
     }
   }
 
+  async function scanKlineRadar() {
+    setKlineRadarLoading(true);
+    setError("");
+
+    try {
+      const universeMap = new Map();
+
+      [...(typeof STOCK_MASTER_ALL !== "undefined" ? STOCK_MASTER_ALL : []), ...MARKET_STRONG_POOL]
+        .filter(Boolean)
+        .forEach((item) => {
+          const symbol = item.stockCode || item.symbol;
+          if (!symbol || !/^\d{4}$/.test(String(symbol))) return;
+          universeMap.set(symbol, {
+            symbol,
+            baseType: item.officialIndustry || item.baseType || item.subIndustry || "台股",
+            name: item.stockName || item.name,
+          });
+        });
+
+      const universe = [...universeMap.values()].slice(0, 180);
+
+      const result = (
+        await Promise.all(
+          universe.map((item) =>
+            fetchYahooHistory(item.symbol, "6mo", "1d")
+              .then((data) => {
+                const analyzed = analyzeStock(data);
+                const radar = buildKlineRadarSignal(analyzed);
+
+                return {
+                  ...analyzed,
+                  baseType: item.baseType,
+                  name: item.name || analyzed.name,
+                  ...radar,
+                };
+              })
+              .catch((err) => {
+                console.warn("kline radar scan failed", item.symbol, err);
+                return null;
+              })
+          )
+        )
+      )
+        .filter(Boolean)
+        .filter((item) => {
+          const hasVolume = (item.volumeRatio || 0) >= 1.2 || item.volumeTitle?.includes("放大") || item.volumeTitle?.includes("爆量");
+          const hasKline = (item.bullishSignals?.length || 0) > 0 || (item.bearishSignals?.length || 0) > 0 || item.nearBreakout;
+          return (item.radarScore >= 45 || item.bullishScore >= 55 || item.bearishScore >= 60) && (hasVolume || hasKline);
+        })
+        .sort((a, b) => b.radarScore - a.radarScore)
+        .slice(0, 80);
+
+      setKlineRadarList(result);
+    } catch (err) {
+      setError(err.message || "K線訊號雷達掃描失敗");
+    } finally {
+      setKlineRadarLoading(false);
+    }
+  }
+
   async function scanSystemStrongStocks() {
     setSystemStrongLoading(true);
     setError("");
@@ -3314,6 +3853,28 @@ const [watchText, setWatchText] = useState(() => {
     return list.sort(sorters[nextDaySortMode] || sorters.score);
   }, [nextDayList, nextDaySortMode]);
 
+
+  const sortedKlineRadarList = useMemo(() => {
+    const list = [...klineRadarList];
+
+    if (klineRadarSort === "volume") {
+      return list.sort((a, b) => (b.volumeRatio || 0) - (a.volumeRatio || 0));
+    }
+
+    if (klineRadarSort === "change") {
+      return list.sort((a, b) => (b.changePct || 0) - (a.changePct || 0));
+    }
+
+    if (klineRadarSort === "breakout") {
+      return list.sort((a, b) => {
+        const aBreak = a.nearBreakout ? 1 : 0;
+        const bBreak = b.nearBreakout ? 1 : 0;
+        return bBreak - aBreak || (b.radarScore || 0) - (a.radarScore || 0);
+      });
+    }
+
+    return list.sort((a, b) => (b.radarScore || 0) - (a.radarScore || 0));
+  }, [klineRadarList, klineRadarSort]);
 
   const filteredSystemStrongList = useMemo(() => {
     const list = [...systemStrongList];
@@ -3762,6 +4323,20 @@ const [watchText, setWatchText] = useState(() => {
         .logo span { color: #64748b; font-size: 11px; }
         .nav-btn { width: 100%; display: flex; align-items: center; gap: 8px; margin-bottom: 7px; background: transparent; color: #94a3b8; border: 1px solid transparent; justify-content: flex-start; padding: 10px; }
         .nav-btn.active { color: #67e8f9; background: rgba(34,211,238,.12); border-color: rgba(34,211,238,.35); }
+        .kline-radar-hero { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 12px; margin: 16px 0; }
+        .kline-radar-hero > div { border: 1px solid rgba(148,163,184,.12); background: rgba(2,6,23,.62); border-radius: 18px; padding: 16px; }
+        .kline-radar-hero span { display: block; color: #94a3b8; font-size: 12px; margin-bottom: 8px; }
+        .kline-radar-hero b { display: block; color: #f8fafc; font-size: 30px; line-height: 1; }
+        .kline-radar-hero small { display: block; color: #64748b; font-size: 11px; margin-top: 8px; }
+        .radar-score b { display: block; color: #67e8f9; font-size: 20px; }
+        .radar-score span { color: #94a3b8; font-size: 12px; }
+        .tag-list.compact { display: flex; flex-wrap: wrap; gap: 6px; }
+        .tag-list.compact span { border: 1px solid rgba(94,234,212,.18); background: rgba(94,234,212,.08); color: #ccfbf1; border-radius: 999px; padding: 4px 8px; font-size: 11px; font-weight: 800; }
+        .tag-list.compact.bearish span { border-color: rgba(255,59,92,.18); background: rgba(255,59,92,.08); color: #fecdd3; }
+        .tag-list.compact.bullish span { border-color: rgba(94,234,212,.18); background: rgba(94,234,212,.08); color: #ccfbf1; }
+        .kline-radar-table tbody tr:hover { background: rgba(34,211,238,.06); cursor: pointer; }
+        @media (max-width: 1100px) { .kline-radar-hero { grid-template-columns: repeat(2, minmax(0,1fr)); } }
+        @media (max-width: 720px) { .kline-radar-hero { grid-template-columns: 1fr; } }
         .content { padding: 16px; margin-left: 170px; }
         .top-bar { position: relative; display: grid; grid-template-columns: 240px 1fr 360px; align-items: center; gap: 16px; margin-bottom: 14px; min-height: 96px; }
         .top-back-btn { height: 58px; border-radius: 16px; background: linear-gradient(135deg, rgba(15,23,42,.98), rgba(30,41,59,.98)); color: #e2e8f0; border: 1px solid rgba(56,189,248,.28); font-size: 17px; font-weight: 900; box-shadow: 0 10px 24px rgba(0,0,0,.28); }
@@ -4044,6 +4619,7 @@ const [watchText, setWatchText] = useState(() => {
           <button className={`nav-btn ${activeMenu === "analysis" ? "active" : ""}`} onClick={() => setActiveMenu("analysis")}>📊 分析看板</button>
           <button className={`nav-btn ${activeMenu === "watchlist" ? "active" : ""}`} onClick={() => setActiveMenu("watchlist")}>⭐ 自選股票</button>
           <button className={`nav-btn ${activeMenu === "signals" ? "active" : ""}`} onClick={() => setActiveMenu("signals")}>🚨 強勢掃描</button>
+          <button className={`nav-btn ${activeMenu === "klineRadar" ? "active" : ""}`} onClick={() => setActiveMenu("klineRadar")}>📡 K線訊號雷達</button>
           <button className={`nav-btn ${activeMenu === "nextday" ? "active" : ""}`} onClick={() => setActiveMenu("nextday")}>🌙 隔日沖選股</button>
           <button className={`nav-btn ${activeMenu === "daytrade" ? "active" : ""}`} onClick={() => setActiveMenu("daytrade")}>⚡ 當沖模式</button>
           <button className="nav-btn" onClick={() => navigate("/")}>← 返回首頁</button>
@@ -4515,7 +5091,127 @@ const [watchText, setWatchText] = useState(() => {
           )}
 
 
-          {activeMenu === "nextday" && (
+          
+
+          {activeMenu === "klineRadar" && (
+            <div className="card kline-radar-page">
+              <div className="section-title">
+                <div>
+                  <h2>📡 K線訊號雷達</h2>
+                  <p className="muted">掃描今日符合 K線型態 + 成交量放大的台股，優先找突破K、長下影支撐、爆量上漲與接近20日高點的標的。</p>
+                </div>
+
+                <div className="btn-row" style={{ marginTop: 0 }}>
+                  <button onClick={scanKlineRadar} disabled={klineRadarLoading}>
+                    {klineRadarLoading ? "雷達掃描中..." : "掃描今日K線訊號"}
+                  </button>
+
+                  <select
+                    value={klineRadarSort}
+                    onChange={(e) => setKlineRadarSort(e.target.value)}
+                    style={{ width: 170 }}
+                  >
+                    <option value="score">依訊號強度</option>
+                    <option value="volume">依成交量</option>
+                    <option value="change">依漲跌幅</option>
+                    <option value="breakout">依突破型態</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="kline-radar-hero">
+                <div>
+                  <span>今日符合訊號</span>
+                  <b>{sortedKlineRadarList.length}</b>
+                  <small>K線 + 量能條件</small>
+                </div>
+                <div>
+                  <span>爆量上漲</span>
+                  <b>{sortedKlineRadarList.filter((s) => s.volumeTitle?.includes("爆量上漲")).length}</b>
+                  <small>量價同步</small>
+                </div>
+                <div>
+                  <span>突破 / 接近高點</span>
+                  <b>{sortedKlineRadarList.filter((s) => s.nearBreakout || s.candleTitle?.includes("突破K")).length}</b>
+                  <small>動能觀察</small>
+                </div>
+                <div>
+                  <span>S / A級</span>
+                  <b>{sortedKlineRadarList.filter((s) => (s.radarScore || 0) >= 78).length}</b>
+                  <small>優先名單</small>
+                </div>
+              </div>
+
+              {sortedKlineRadarList.length === 0 ? (
+                <p className="empty">
+                  {klineRadarLoading ? "正在掃描台股K線與成交量訊號..." : "按「掃描今日K線訊號」後，會列出符合K線型態與量能條件的股票。"}
+                </p>
+              ) : (
+                <div className="table-wrap kline-radar-table">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>排名</th>
+                        <th>股票</th>
+                        <th>訊號強度</th>
+                        <th>盤面結構</th>
+                        <th>看漲訊號</th>
+                        <th>看跌/風險</th>
+                        <th>主升段機率</th>
+                        <th>假突破風險</th>
+                        <th>漲跌</th>
+                        <th>量能</th>
+                        <th>觀察理由</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {sortedKlineRadarList.map((s, i) => (
+                        <tr key={s.symbol} onClick={() => { setStock(s); setActiveMenu("analysis"); }}>
+                          <td>{i + 1}</td>
+                          <td>
+                            <div className="stock-name-stack">
+                              <span className="stock-name-main">{getLocalDisplayName(s.symbol, s.name)}</span>
+                              <span className="stock-name-code">{s.symbol}｜{s.baseType || "台股"}</span>
+                            </div>
+                          </td>
+                          <td>
+                            <div className="radar-score">
+                              <b>{s.radarScore}</b>
+                              <span>{s.radarLevel}</span>
+                            </div>
+                          </td>
+                          <td><span className="badge">{s.marketStructure}</span></td>
+                          <td>
+                            <div className="tag-list compact bullish">
+                              {(s.bullishSignals || []).slice(0, 3).map((sig) => (
+                                <span key={sig.signalName}>{sig.signalName}</span>
+                              ))}
+                              {!(s.bullishSignals || []).length && <span>--</span>}
+                            </div>
+                          </td>
+                          <td>
+                            <div className="tag-list compact bearish">
+                              {(s.bearishSignals || []).slice(0, 2).map((sig) => (
+                                <span key={sig.signalName}>{sig.signalName}</span>
+                              ))}
+                              {!(s.bearishSignals || []).length && <span>--</span>}
+                            </div>
+                          </td>
+                          <td>{s.mainUpProbability ?? "--"}%</td>
+                          <td className={(s.fakeBreakoutRisk || 0) >= 60 ? "down" : ""}>{s.fakeBreakoutRisk ?? "--"}%</td>
+                          <td className={s.changePct >= 0 ? "up" : "down"}>{s.changePct?.toFixed?.(2) ?? "--"}%</td>
+                          <td>{s.volumeTitle || "--"}</td>
+                          <td>{(s.radarReasons || []).slice(0, 2).join("、")}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
+{activeMenu === "nextday" && (
             <div className="card">
               <div className="section-title">
                 <div>
