@@ -19,6 +19,200 @@ const NAME_TO_CODE = {
   廣達: "2382",
   台灣50: "0050",
   元大台灣50: "0050",
+
+  // 常用中文搜尋別名
+  雷科: "6207",
+  中鋼: "2002",
+  聯詠: "3034",
+  創意: "3443",
+  世芯: "3661",
+  世芯KY: "3661",
+  "世芯-KY": "3661",
+  智原: "3035",
+  譜瑞: "4966",
+  譜瑞KY: "4966",
+  "譜瑞-KY": "4966",
+  矽力: "6415",
+  矽力KY: "6415",
+  "矽力-KY": "6415",
+  元太: "8069",
+  南電: "8046",
+  欣興: "3037",
+  緯穎: "6669",
+  仁寶: "2324",
+  技嘉: "2376",
+  微星: "2377",
+  奇鋐: "3017",
+  雙鴻: "3324",
+  華邦電: "2344",
+  南亞科: "2408",
+  群創: "3481",
+  友達: "2409",
+  彩晶: "6116",
+  長榮: "2603",
+  陽明: "2609",
+  萬海: "2615",
+  國泰金: "2882",
+  富邦金: "2881",
+  中信金: "2891",
+  兆豐金: "2886",
+
+  鈦昇: "8027",
+  鈦昇科技: "8027",
+  中探針: "6217",
+  雷科科技: "6207",
+
+  "元大高股息": "0056",
+  "富邦台50": "006208",
+  "國泰永續高股息": "00878",
+  "國泰台灣5G+": "00881",
+  "中信關鍵半導體": "00891",
+  "富邦台灣半導體": "00892",
+  "群益台灣精選高息": "00919",
+  "國泰台灣領袖50": "00922",
+  "復華台灣科技優息": "00929",
+  "野村臺灣新科技50": "00935",
+  "統一台灣高息動能": "00939",
+  "元大台灣價值高息": "00940",
+  "凱基台灣AI50": "00952",
+  "台泥": "1101",
+  "亞泥": "1102",
+  "嘉泥": "1103",
+  "環泥": "1104",
+  "幸福": "1108",
+  "信大": "1109",
+  "卜蜂": "1215",
+  "統一": "1216",
+  "聯華": "1229",
+  "聯華食": "1231",
+  "大統益": "1232",
+  "黑松": "1234",
+  "台塑": "1301",
+  "台聚": "1304",
+  "華夏": "1305",
+  "國喬": "1312",
+  "中石化": "1314",
+  "台化": "1326",
+  "儒鴻": "1476",
+  "聚陽": "1477",
+  "東元": "1504",
+  "中興電": "1513",
+  "亞力": "1514",
+  "和大": "1536",
+  "華新": "1605",
+  "大亞": "1609",
+  "南僑": "1702",
+  "葡萄王": "1707",
+  "長興": "1717",
+  "台肥": "1722",
+  "台玻": "1802",
+  "正隆": "1904",
+  "永豐餘": "1907",
+  "中鴻": "2014",
+  "燁輝": "2023",
+  "大成鋼": "2027",
+  "新光鋼": "2031",
+  "正新": "2105",
+  "建大": "2106",
+  "和泰車": "2207",
+  "裕日車": "2227",
+  "光寶科": "2301",
+  "聯電": "2303",
+  "國巨": "2327",
+  "智邦": "2345",
+  "聯強": "2347",
+  "宏碁": "2353",
+  "鴻準": "2354",
+  "英業達": "2356",
+  "華碩": "2357",
+  "金像電": "2368",
+  "大同": "2371",
+  "瑞昱": "2379",
+  "台光電": "2383",
+  "研華": "2395",
+  "漢唐": "2404",
+  "國碩": "2406",
+  "中華電": "2412",
+  "建準": "2421",
+  "鉅祥": "2476",
+  "瑞軒": "2489",
+  "興富發": "2542",
+  "華固": "2548",
+  "裕民": "2606",
+  "華航": "2610",
+  "長榮航": "2618",
+  "慧洋-KY": "2637",
+  "國賓": "2704",
+  "晶華": "2707",
+  "王品": "2727",
+  "彰銀": "2801",
+  "開發金": "2883",
+  "玉山金": "2884",
+  "元大金": "2885",
+  "台新金": "2887",
+  "永豐金": "2890",
+  "第一金": "2892",
+  "統一超": "2912",
+  "零壹": "3029",
+  "文曄": "3036",
+  "穩懋": "3105",
+  "景碩": "3189",
+  "全科": "3209",
+  "優群": "3217",
+  "原相": "3227",
+  "緯創": "3231",
+  "光環": "3234",
+  "威剛": "3260",
+  "欣銓": "3264",
+  "精材": "3374",
+  "揚明光": "3504",
+  "智易": "3596",
+  "健策": "3653",
+  "日月光投控": "3711",
+  "東洋": "4105",
+  "遠傳": "4904",
+  "太極": "4934",
+  "茂林-KY": "4935",
+  "和碩": "4938",
+  "臻鼎-KY": "4958",
+  "訊連": "5203",
+  "信驊": "5274",
+  "世界": "5347",
+  "中磊": "5388",
+  "台半": "5425",
+  "中美晶": "5483",
+  "長虹": "5534",
+  "四維航": "5608",
+  "中租-KY": "5871",
+  "合庫金": "5880",
+  "寶雅": "5904",
+  "新普": "6121",
+  "頎邦": "6147",
+  "合晶": "6182",
+  "萬潤": "6187",
+  "帆宣": "6196",
+  "聯茂": "6213",
+  "超眾": "6230",
+  "系微": "6231",
+  "台燿": "6274",
+  "矽力*-KY": "6415",
+  "環球晶": "6488",
+  "台塑化": "6505",
+  "愛普*": "6531",
+  "高端疫苗": "6547",
+  "森崴能源": "6806",
+  "品安": "8088",
+  "群聯": "8299",
+  "金居": "8358",
+  "台汽電": "8926",
+  "全國": "9937",
+  "世紀鋼": "9958",
+  "中租KY": "5871",
+  "日月光": "3711",
+  "日月光控股": "3711",
+    "元大50": "0050",
+  "群益精選高息": "00919",
+  "國泰5G": "00881",
 };
 
 
@@ -56,23 +250,257 @@ const EXTRA_STOCK_CHINESE_NAMES = {
   "00935": "野村臺灣新科技50",
   "00939": "統一台灣高息動能",
   "00952": "凱基台灣AI50",
-};
+
+
+  "6207": "雷科",
+  "6217": "中探針",
+  "8027": "鈦昇",
+
+  "0050": "元大台灣50",
+  "0056": "元大高股息",
+  "00878": "國泰永續高股息",
+  "00919": "群益台灣精選高息",
+  "00929": "復華台灣科技優息",
+  "00940": "元大台灣價值高息",
+  "1101": "台泥",
+  "1102": "亞泥",
+  "1103": "嘉泥",
+  "1104": "環泥",
+  "1108": "幸福",
+  "1109": "信大",
+  "1215": "卜蜂",
+  "1216": "統一",
+  "1229": "聯華",
+  "1231": "聯華食",
+  "1232": "大統益",
+  "1234": "黑松",
+  "1301": "台塑",
+  "1303": "南亞",
+  "1304": "台聚",
+  "1305": "華夏",
+  "1312": "國喬",
+  "1314": "中石化",
+  "1326": "台化",
+  "1476": "儒鴻",
+  "1477": "聚陽",
+  "1504": "東元",
+  "1513": "中興電",
+  "1514": "亞力",
+  "1536": "和大",
+  "1605": "華新",
+  "1609": "大亞",
+  "1702": "南僑",
+  "1707": "葡萄王",
+  "1717": "長興",
+  "1722": "台肥",
+  "1802": "台玻",
+  "1904": "正隆",
+  "1907": "永豐餘",
+  "2002": "中鋼",
+  "2014": "中鴻",
+  "2023": "燁輝",
+  "2027": "大成鋼",
+  "2031": "新光鋼",
+  "2105": "正新",
+  "2106": "建大",
+  "2207": "和泰車",
+  "2227": "裕日車",
+  "2303": "聯電",
+  "2308": "台達電",
+  "2317": "鴻海",
+  "2324": "仁寶",
+  "2327": "國巨",
+  "2330": "台積電",
+  "2344": "華邦電",
+  "2345": "智邦",
+  "2347": "聯強",
+  "2356": "英業達",
+  "2357": "華碩",
+  "2368": "金像電",
+  "2371": "大同",
+  "2376": "技嘉",
+  "2377": "微星",
+  "2379": "瑞昱",
+  "2382": "廣達",
+  "2383": "台光電",
+  "2404": "漢唐",
+  "2408": "南亞科",
+  "2412": "中華電",
+  "2421": "建準",
+  "2454": "聯發科",
+  "2542": "興富發",
+  "2548": "華固",
+  "2603": "長榮",
+  "2606": "裕民",
+  "2609": "陽明",
+  "2615": "萬海",
+  "2704": "國賓",
+  "2707": "晶華",
+  "2727": "王品",
+  "2881": "富邦金",
+  "2882": "國泰金",
+  "2883": "開發金",
+  "2884": "玉山金",
+  "2885": "元大金",
+  "2886": "兆豐金",
+  "2887": "台新金",
+  "2891": "中信金",
+  "2892": "第一金",
+  "2912": "統一超",
+  "3017": "奇鋐",
+  "3029": "零壹",
+  "3034": "聯詠",
+  "3036": "文曄",
+  "3037": "欣興",
+  "3105": "穩懋",
+  "3189": "景碩",
+  "3209": "全科",
+  "3217": "優群",
+  "3227": "原相",
+  "3231": "緯創",
+  "3234": "光環",
+  "3260": "威剛",
+  "3264": "欣銓",
+  "3374": "精材",
+  "3443": "創意",
+  "3481": "群創",
+  "3596": "智易",
+  "3653": "健策",
+  "3661": "世芯-KY",
+  "3711": "日月光投控",
+  "4105": "東洋",
+  "4904": "遠傳",
+  "4938": "和碩",
+  "4958": "臻鼎-KY",
+  "5203": "訊連",
+  "5274": "信驊",
+  "5347": "世界",
+  "5388": "中磊",
+  "5425": "台半",
+  "5483": "中美晶",
+  "5534": "長虹",
+  "5871": "中租-KY",
+  "5880": "合庫金",
+  "5904": "寶雅",
+  "6121": "新普",
+  "6147": "頎邦",
+  "6182": "合晶",
+  "6187": "萬潤",
+  "6196": "帆宣",
+  "6230": "超眾",
+  "6231": "系微",
+  "6274": "台燿",
+  "6488": "環球晶",
+  "6531": "愛普*",
+  "6547": "高端疫苗",
+  "6669": "緯穎",
+  "6806": "森崴能源",
+  "8046": "南電",
+  "8069": "元太",
+  "8088": "品安",
+  "8299": "群聯",
+  "8358": "金居",
+  "8926": "台汽電",
+  "9937": "全國",
+  "9958": "世紀鋼",
+
+  "6285": "啟碁",
+  "8422": "可寧衛*",};
+
+
+const TW_NAME_CACHE_KEY = "tw_stock_name_cache_v2";
+
+function readTwNameCache() {
+  try {
+    return JSON.parse(localStorage.getItem(TW_NAME_CACHE_KEY) || "{}");
+  } catch {
+    return {};
+  }
+}
+
+function writeTwNameCache(cache) {
+  try {
+    localStorage.setItem(TW_NAME_CACHE_KEY, JSON.stringify(cache || {}));
+  } catch {}
+}
+
+async function fetchTaiwanRealtimeName(code) {
+  const clean = String(code || "").replace(/\D/g, "").slice(0, 6);
+  if (!/^\d{4,6}$/.test(clean)) return "";
+
+  const cache = readTwNameCache();
+  if (cache[clean]) return cache[clean];
+
+  const tryList = [
+    `https://mis.twse.com.tw/stock/api/getStockInfo.jsp?json=1&delay=0&ex_ch=tse_${clean}.tw`,
+    `https://mis.twse.com.tw/stock/api/getStockInfo.jsp?json=1&delay=0&ex_ch=otc_${clean}.tw`,
+  ];
+
+  for (const url of tryList) {
+    try {
+      const res = await fetch(url, { cache: "no-store" });
+      if (!res.ok) continue;
+      const json = await res.json();
+      const row = json?.msgArray?.[0];
+      const name = String(row?.n || row?.nf || "").trim();
+
+      if (name && /[一-龥]/.test(name)) {
+        const fixed = name.replace(/\s+/g, "");
+        cache[clean] = fixed;
+        writeTwNameCache(cache);
+        return fixed;
+      }
+    } catch (err) {
+      console.warn("fetchTaiwanRealtimeName failed", clean, err);
+    }
+  }
+
+  return "";
+}
+
+async function getBestDisplayName(symbol, fallback = "") {
+  const local = getLocalDisplayName(symbol, fallback);
+  const key = String(symbol || "").toUpperCase().replace(/\.(TW|TWO)$/i, "");
+  const looksCodeOnly = local === key || /^\d{4,6}$/.test(local);
+  const looksEnglishOnly = /[A-Za-z]{4,}/.test(local) && !/[一-龥]/.test(local);
+
+  if (!looksCodeOnly && !looksEnglishOnly) return local;
+
+  const liveName = await fetchTaiwanRealtimeName(key);
+  if (liveName) {
+    EXTRA_STOCK_CHINESE_NAMES[key] = liveName;
+    return liveName;
+  }
+
+  return local;
+}
 
 function getLocalDisplayName(symbol, fallback = "") {
-  const key = String(symbol || "").toUpperCase();
-  const mapped = EXTRA_STOCK_CHINESE_NAMES[key];
+  const rawSymbol = String(symbol || "").trim();
+  const key = rawSymbol.toUpperCase().replace(/\.(TW|TWO)$/i, "");
+
+  const cached = readTwNameCache?.()?.[key];
+  const mapped = EXTRA_STOCK_CHINESE_NAMES[key] || EXTRA_STOCK_CHINESE_NAMES[rawSymbol.toUpperCase()] || cached;
   if (mapped) return mapped;
 
-  const name = getStockDisplayName(symbol, fallback || symbol);
-  const raw = String(name || "").trim();
+  // 優先從 stockMaster 找中文名，避免 Yahoo meta.longName 顯示英文公司名。
+  if (typeof STOCK_MASTER_ALL !== "undefined") {
+    const master = STOCK_MASTER_ALL.find((item) => item.stockCode === key || `${item.stockCode}.TW` === rawSymbol.toUpperCase());
+    if (master?.stockName) return master.stockName;
+  }
 
-  if (!raw || raw === key || raw === String(symbol || "").trim()) return mapped || raw || key;
+  const importedName = getStockDisplayName(symbol, "");
+  const importedRaw = String(importedName || "").trim();
+  if (importedRaw && /[一-龥]/.test(importedRaw)) return importedRaw;
 
+  const raw = String(fallback || "").trim();
   const looksEnglishOnly =
     /[A-Za-z]{4,}/.test(raw) &&
     !/[一-龥]/.test(raw);
 
-  if (looksEnglishOnly && mapped) return mapped;
+  // 如果 Yahoo 只回英文，又沒有對照表，寧可顯示代碼，避免頁面充滿英文公司全名。
+  if (!raw || raw === key || raw === rawSymbol || looksEnglishOnly) return mapped || key;
+
   return raw;
 }
 
@@ -1427,17 +1855,92 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function normalizeSearchText(value) {
+  return String(value || "")
+    .trim()
+    .replace(/\s+/g, "")
+    .replace(/[＊*]/g, "")
+    .replace(/[－—–]/g, "-")
+    .replace(/\.TW$/i, "")
+    .replace(/\.TWO$/i, "")
+    .toUpperCase();
+}
+
+function buildChineseNameIndex() {
+  const rows = [];
+
+  Object.entries(NAME_TO_CODE || {}).forEach(([name, code]) => {
+    rows.push({ code: String(code), name });
+  });
+
+  Object.entries(EXTRA_STOCK_CHINESE_NAMES || {}).forEach(([code, name]) => {
+    rows.push({ code: String(code), name });
+  });
+
+  if (typeof STOCK_MASTER_ALL !== "undefined") {
+    STOCK_MASTER_ALL.forEach((stock) => {
+      rows.push({ code: stock.stockCode, name: stock.stockName });
+      rows.push({ code: stock.stockCode, name: stock.stockName?.replace("-KY", "KY") });
+      rows.push({ code: stock.stockCode, name: stock.stockName?.replace("*-KY", "KY") });
+    });
+  }
+
+  if (typeof MARKET_STRONG_POOL !== "undefined") {
+    MARKET_STRONG_POOL.forEach((stock) => {
+      if (stock.name) rows.push({ code: stock.symbol, name: stock.name });
+      const localName = EXTRA_STOCK_CHINESE_NAMES?.[stock.symbol];
+      if (localName) rows.push({ code: stock.symbol, name: localName });
+    });
+  }
+
+  return rows
+    .filter((row) => row.code && row.name)
+    .map((row) => ({
+      code: String(row.code),
+      name: String(row.name),
+      key: normalizeSearchText(row.name),
+    }));
+}
+
 function resolveSymbol(input) {
   const raw = String(input || "").trim();
   if (!raw) return "";
+
+  const cleaned = raw.replace(/\s+/g, "");
+  const upper = cleaned.toUpperCase();
+
+  // 代碼 / 美股 / 已經是 Yahoo 格式
+  if (/^[A-Z]{1,6}$/.test(upper)) return upper;
+  if (/^\d{4,6}$/.test(upper)) return upper;
+  if (/^\d{4,6}\.(TW|TWO)$/i.test(upper)) return upper;
+  if (/^[A-Z]{1,6}\.(TW|TWO)$/i.test(upper)) return upper;
+
+  // 允許使用「雷科.TW」「台積電.TW」這類輸入，先移除市場後綴再查中文名。
+  const key = normalizeSearchText(raw);
+
   if (NAME_TO_CODE[raw]) return NAME_TO_CODE[raw];
-  const upper = raw.toUpperCase();
-  if (upper.endsWith(".TW") || upper.endsWith(".TWO")) return upper;
+  if (NAME_TO_CODE[key]) return NAME_TO_CODE[key];
+
+  const nameIndex = buildChineseNameIndex();
+
+  // 完全匹配優先
+  const exact = nameIndex.find((row) => row.key === key);
+  if (exact) return exact.code;
+
+  // 模糊匹配：輸入「台積」「矽力」也能找到
+  if (/[\u4e00-\u9fff]/.test(raw)) {
+    const partial =
+      nameIndex.find((row) => row.key.includes(key)) ||
+      nameIndex.find((row) => key.includes(row.key) && row.key.length >= 2);
+
+    if (partial) return partial.code;
+  }
+
   const code = upper.match(/\d{4,6}[A-Z]?/)?.[0];
   if (code) return code;
+
   return upper;
 }
-
 
 function getKlineRequest(klineType, selectedRange = "1y") {
   const map = {
@@ -2277,9 +2780,13 @@ function TradingChart({
 }) {
   const containerRef = useRef(null);
   const overlayRef = useRef(null);
+  const chartRef = useRef(null);
+  const candleSeriesRef = useRef(null);
   const visibleRangeRef = useRef(null);
   const lastChartKeyRef = useRef(null);
   const [draftDrawing, setDraftDrawing] = useState(null);
+  const [overlaySize, setOverlaySize] = useState({ width: 1, height: 560 });
+  const [overlayTick, setOverlayTick] = useState(0);
 
   useEffect(() => {
     if (!containerRef.current || !stock?.history?.length) return;
@@ -2300,6 +2807,8 @@ function TradingChart({
       crosshair: { mode: 1 },
     });
 
+    chartRef.current = chart;
+
     const candleSeries = chart.addSeries(CandlestickSeries, {
       upColor: "#ef4444",
       downColor: "#22c55e",
@@ -2308,6 +2817,8 @@ function TradingChart({
       wickUpColor: "#ef4444",
       wickDownColor: "#22c55e",
     });
+
+    candleSeriesRef.current = candleSeries;
 
     const ma5Series = chart.addSeries(LineSeries, { color: "#facc15", lineWidth: 2, priceLineVisible: false });
     const ma20Series = chart.addSeries(LineSeries, { color: "#60a5fa", lineWidth: 2, priceLineVisible: false });
@@ -2450,8 +2961,6 @@ function TradingChart({
     } else {
       chart.timeScale().fitContent();
 
-      // 分K如果資料筆數太少，lightweight-charts 會把單根K棒放超大；
-      // 這裡強制給一段可視範圍，避免當沖K線擠成一根巨棒。
       if (candles.length < 40) {
         chart.timeScale().applyOptions({
           barSpacing: 8,
@@ -2465,45 +2974,95 @@ function TradingChart({
       }
     }
 
+    const syncOverlay = () => {
+      const box = containerRef.current?.getBoundingClientRect();
+      if (box) setOverlaySize({ width: Math.max(1, box.width), height: Math.max(1, box.height) });
+      setOverlayTick((n) => n + 1);
+    };
+
+    const onRangeChange = () => syncOverlay();
+    chart.timeScale().subscribeVisibleLogicalRangeChange(onRangeChange);
+
     const resizeObserver = new ResizeObserver(() => {
       if (containerRef.current) chart.applyOptions({ width: containerRef.current.clientWidth });
+      syncOverlay();
     });
     resizeObserver.observe(containerRef.current);
+    syncOverlay();
 
     return () => {
       visibleRangeRef.current = chart.timeScale().getVisibleLogicalRange();
       lastChartKeyRef.current = currentChartKey;
+      chart.timeScale().unsubscribeVisibleLogicalRangeChange(onRangeChange);
       resizeObserver.disconnect();
       chart.remove();
+      chartRef.current = null;
+      candleSeriesRef.current = null;
     };
   }, [stock, showMA5, showMA20, showMA60, showBollinger, chartKey, drawingLines]);
 
-  function getNormalizedPoint(event) {
+  function getChartPoint(event) {
     const box = overlayRef.current?.getBoundingClientRect();
+    const chart = chartRef.current;
+    const candleSeries = candleSeriesRef.current;
     if (!box) return null;
+
+    const x = Math.max(0, Math.min(box.width, event.clientX - box.left));
+    const y = Math.max(0, Math.min(box.height, event.clientY - box.top));
+    const fallback = {
+      x: box.width ? x / box.width : 0,
+      y: box.height ? y / box.height : 0,
+    };
+
+    const logical = chart?.timeScale?.().coordinateToLogical?.(x);
+    const price = candleSeries?.coordinateToPrice?.(y);
+
     return {
-      x: Math.max(0, Math.min(1, (event.clientX - box.left) / box.width)),
-      y: Math.max(0, Math.min(1, (event.clientY - box.top) / box.height)),
+      ...fallback,
+      px: x,
+      py: y,
+      logical: Number.isFinite(logical) ? logical : null,
+      price: Number.isFinite(price) ? price : null,
+      anchored: Number.isFinite(logical) && Number.isFinite(price),
+    };
+  }
+
+  function pointToPixel(point) {
+    const chart = chartRef.current;
+    const candleSeries = candleSeriesRef.current;
+
+    if (point?.anchored && Number.isFinite(point.logical) && Number.isFinite(point.price)) {
+      const x = chart?.timeScale?.().logicalToCoordinate?.(point.logical);
+      const y = candleSeries?.priceToCoordinate?.(point.price);
+
+      if (Number.isFinite(x) && Number.isFinite(y)) {
+        return { x, y };
+      }
+    }
+
+    return {
+      x: (point?.x ?? 0) * overlaySize.width,
+      y: (point?.y ?? 0) * overlaySize.height,
     };
   }
 
   function handlePointerDown(event) {
     if (!drawingEnabled) return;
-    const point = getNormalizedPoint(event);
+    const point = getChartPoint(event);
     if (!point) return;
     event.preventDefault();
     event.stopPropagation();
 
     if (drawingTool === "brush") {
-      setDraftDrawing({ id: "draft", tool: "brush", points: [point] });
+      setDraftDrawing({ id: "draft", tool: "brush", points: [point], anchoredToKline: true });
     } else {
-      setDraftDrawing({ id: "draft", tool: drawingTool, start: point, end: point });
+      setDraftDrawing({ id: "draft", tool: drawingTool, start: point, end: point, anchoredToKline: true });
     }
   }
 
   function handlePointerMove(event) {
     if (!drawingEnabled || !draftDrawing) return;
-    const point = getNormalizedPoint(event);
+    const point = getChartPoint(event);
     if (!point) return;
     event.preventDefault();
     event.stopPropagation();
@@ -2521,25 +3080,33 @@ function TradingChart({
     event.stopPropagation();
 
     const completed = { ...draftDrawing, id: `${Date.now()}-${Math.random().toString(16).slice(2)}` };
+    const startPx = completed.start ? pointToPixel(completed.start) : null;
+    const endPx = completed.end ? pointToPixel(completed.end) : null;
     const isValidBrush = completed.tool === "brush" && completed.points?.length >= 2;
     const isValidShape =
       completed.tool !== "brush" &&
-      completed.start &&
-      completed.end &&
-      (Math.abs(completed.start.x - completed.end.x) > 0.005 ||
-        Math.abs(completed.start.y - completed.end.y) > 0.005);
+      startPx &&
+      endPx &&
+      (Math.abs(startPx.x - endPx.x) > 4 || Math.abs(startPx.y - endPx.y) > 4);
 
     if (isValidBrush || isValidShape) onCreateDrawing?.(completed);
     setDraftDrawing(null);
   }
 
   function renderDrawing(item, isDraft = false) {
+    overlayTick;
     const color = item.tool === "rect" ? "#a855f7" : item.tool === "brush" ? "#facc15" : "#38bdf8";
     const strokeWidth = isDraft ? 2.5 : 2;
 
     if (item.tool === "brush") {
       const points = item.points || [];
-      const d = points.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x * 100} ${p.y * 100}`).join(" ");
+      const d = points
+        .map((p, i) => {
+          const px = pointToPixel(p);
+          return `${i === 0 ? "M" : "L"} ${px.x} ${px.y}`;
+        })
+        .join(" ");
+
       return (
         <path key={item.id} d={d} fill="none" stroke={color} strokeWidth={strokeWidth}
           strokeLinecap="round" strokeLinejoin="round" opacity={isDraft ? 0.75 : 0.95}
@@ -2547,11 +3114,15 @@ function TradingChart({
       );
     }
 
+    const start = pointToPixel(item.start);
+    const end = pointToPixel(item.end);
+
     if (item.tool === "rect") {
-      const x = Math.min(item.start.x, item.end.x) * 100;
-      const y = Math.min(item.start.y, item.end.y) * 100;
-      const width = Math.abs(item.start.x - item.end.x) * 100;
-      const height = Math.abs(item.start.y - item.end.y) * 100;
+      const x = Math.min(start.x, end.x);
+      const y = Math.min(start.y, end.y);
+      const width = Math.abs(start.x - end.x);
+      const height = Math.abs(start.y - end.y);
+
       return (
         <rect key={item.id} x={x} y={y} width={width} height={height}
           fill="rgba(168,85,247,.12)" stroke={color} strokeWidth={strokeWidth}
@@ -2560,8 +3131,8 @@ function TradingChart({
     }
 
     return (
-      <line key={item.id} x1={item.start.x * 100} y1={item.start.y * 100}
-        x2={item.end.x * 100} y2={item.end.y * 100}
+      <line key={item.id} x1={start.x} y1={start.y}
+        x2={end.x} y2={end.y}
         stroke={color} strokeWidth={strokeWidth} strokeLinecap="round"
         strokeDasharray={isDraft ? "6 4" : "0"} vectorEffect="non-scaling-stroke" />
     );
@@ -2573,7 +3144,9 @@ function TradingChart({
       <svg
         ref={overlayRef}
         className="chart-free-draw-overlay"
-        viewBox="0 0 100 100"
+        width={overlaySize.width}
+        height={overlaySize.height}
+        viewBox={`0 0 ${overlaySize.width} ${overlaySize.height}`}
         preserveAspectRatio="none"
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
@@ -3365,20 +3938,68 @@ const [watchText, setWatchText] = useState(() => {
   }
 
   async function searchOne(input = query) {
-    const target = String(input || "").trim();
-    if (!target) return;
-    setQuery(target);
-    rememberSearchKeyword(target);
+    const rawInput = String(input || "").trim();
+    if (!rawInput) return;
+
+    const target = resolveSymbol(rawInput);
+    setQuery(target || rawInput);
+    rememberSearchKeyword(rawInput);
+    if (target && target !== rawInput) rememberSearchKeyword(target);
+
     setLoading(true);
     setError("");
     try {
-      const data = await fetchYahooHistory(target, range, "1d");
+      const data = await fetchYahooHistory(target || rawInput, range, "1d");
       const analyzed = analyzeStock(data);
-      setStock(analyzed);
+      const displayName = await getBestDisplayName(analyzed.symbol, analyzed.name);
+      setStock({
+        ...analyzed,
+        name: displayName,
+      });
+      setQuery(analyzed.symbol || target || rawInput);
       setActiveMenu("analysis");
     } catch (err) {
       console.error(err);
       setError(err.message || "查詢失敗");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function openStockAnalysisFromList(item) {
+    if (!item) return;
+
+    const target = String(item.symbol || item.stockCode || item.code || "").trim();
+    if (!target) return;
+
+    setQuery(target);
+    rememberSearchKeyword(target);
+    setActiveMenu("analysis");
+    setLoading(true);
+    setError("");
+
+    try {
+      // 清單掃描為了速度很多只抓 5d，所以點進分析看板時一定重新抓完整K線。
+      // 這樣系統篩選 / K線雷達 / 隔日沖 / 產業清單點進去，都不會只剩5根K棒。
+      const request = getKlineRequest(klineType, range);
+      const safeRequest =
+        request.interval === "1d" && ["1d", "5d"].includes(request.range)
+          ? { range: range || "1y", interval: "1d" }
+          : request;
+
+      const data = await fetchYahooHistory(target, safeRequest.range, safeRequest.interval);
+      const analyzed = analyzeStock(data);
+      const displayName = await getBestDisplayName(analyzed.symbol, item.name || analyzed.name);
+
+      setStock({
+        ...analyzed,
+        baseType: item.baseType || item.officialIndustry || analyzed.baseType,
+        name: displayName,
+      });
+    } catch (err) {
+      console.warn("openStockAnalysisFromList failed, fallback to existing item", target, err);
+      setStock(item);
+      setError(err.message || "股票完整K線載入失敗，暫時顯示清單快取資料");
     } finally {
       setLoading(false);
     }
@@ -4339,6 +4960,29 @@ const [watchText, setWatchText] = useState(() => {
         @media (max-width: 720px) { .kline-radar-hero { grid-template-columns: 1fr; } }
         .content { padding: 16px; margin-left: 170px; }
         .top-bar { position: relative; display: grid; grid-template-columns: 240px 1fr 360px; align-items: center; gap: 16px; margin-bottom: 14px; min-height: 96px; }
+        .floating-header {
+          position: sticky;
+          top: 0;
+          z-index: 9999;
+          backdrop-filter: blur(18px);
+          -webkit-backdrop-filter: blur(18px);
+          background: linear-gradient(to bottom, rgba(2,6,23,.94), rgba(2,6,23,.78));
+          border: 1px solid rgba(148,163,184,.08);
+          border-top: 0;
+          border-radius: 0 0 20px 20px;
+          padding: 12px 14px;
+          box-shadow: 0 14px 34px rgba(0,0,0,.26), 0 1px 0 rgba(255,255,255,.03) inset;
+        }
+        .floating-header::after {
+          content: "";
+          position: absolute;
+          left: 18px;
+          right: 18px;
+          bottom: 0;
+          height: 1px;
+          background: linear-gradient(90deg, transparent, rgba(94,234,212,.18), transparent);
+          pointer-events: none;
+        }
         .top-back-btn { height: 58px; border-radius: 16px; background: linear-gradient(135deg, rgba(15,23,42,.98), rgba(30,41,59,.98)); color: #e2e8f0; border: 1px solid rgba(56,189,248,.28); font-size: 17px; font-weight: 900; box-shadow: 0 10px 24px rgba(0,0,0,.28); }
         .top-back-btn:hover { background: linear-gradient(135deg, rgba(8,47,73,.98), rgba(15,118,110,.98)); border-color: rgba(34,211,238,.55); }
         .top-title { text-align: center; justify-self: center; }
@@ -4544,6 +5188,7 @@ const [watchText, setWatchText] = useState(() => {
         .chart-free-draw-overlay { position: absolute; inset: 0; width: 100%; height: 560px; pointer-events: none; z-index: 10; }
         .chart-drawing-wrap.drawing-active .chart-free-draw-overlay { pointer-events: auto; cursor: crosshair; touch-action: none; }
         .chart-drawing-wrap.drawing-active .trading-chart { user-select: none; }
+        .chart-free-draw-overlay line, .chart-free-draw-overlay path, .chart-free-draw-overlay rect { pointer-events: none; }
         .drawing-chip.line { border-color: rgba(56,189,248,.5); color: #67e8f9; }
         .drawing-chip.brush { border-color: rgba(250,204,21,.55); color: #fde68a; }
         .drawing-chip.rect { border-color: rgba(168,85,247,.5); color: #d8b4fe; }
@@ -4626,7 +5271,7 @@ const [watchText, setWatchText] = useState(() => {
         </aside>
 
         <section className="content">
-          <header className="top-bar">
+          <header className="top-bar floating-header">
             <button className="top-back-btn" onClick={goBackToPreviousView}>
               ← 返回上一個畫面
             </button>
@@ -4653,12 +5298,17 @@ const [watchText, setWatchText] = useState(() => {
                   list="stock-search-history"
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
-                  placeholder="2330、00919、AAPL、SPY"
+                  placeholder="2330、台積電、雷科、矽力-KY、AAPL"
                   onKeyDown={(e) => e.key === "Enter" && searchOne()}
                 />
                 <datalist id="stock-search-history">
                   {searchHistory.map((item) => (
                     <option key={item} value={item} />
+                  ))}
+                  {buildChineseNameIndex().slice(0, 260).map((item) => (
+                    <option key={`${item.code}-${item.name}`} value={item.name}>
+                      {item.code}
+                    </option>
                   ))}
                 </datalist>
 
@@ -4977,7 +5627,7 @@ const [watchText, setWatchText] = useState(() => {
                   <thead><tr><th>代號</th><th>市場</th><th>價格</th><th>漲跌</th><th>AI</th><th>勝率</th><th>量比</th><th>訊號</th><th>操作</th></tr></thead>
                   <tbody>
                     {displayedWatchList.map((s) => (
-                      <tr key={s.symbol} onClick={() => { setStock(s); setActiveMenu("analysis"); }}>
+                      <tr key={s.symbol} onClick={() => openStockAnalysisFromList(s)}>
                         <td>
                             <div className="stock-name-stack">
                               <span className="stock-name-main">{getLocalDisplayName(s.symbol, s.name)}</span>
@@ -5065,7 +5715,7 @@ const [watchText, setWatchText] = useState(() => {
                     </thead>
                     <tbody>
                       {filteredSystemStrongList.map((s, i) => (
-                        <tr key={s.symbol} onClick={() => { setStock(s); setActiveMenu("analysis"); }}>
+                        <tr key={s.symbol} onClick={() => openStockAnalysisFromList(s)}>
                           <td>{i + 1}</td>
                           <td>
                             <div className="stock-name-stack">
@@ -5166,7 +5816,7 @@ const [watchText, setWatchText] = useState(() => {
                     </thead>
                     <tbody>
                       {sortedKlineRadarList.map((s, i) => (
-                        <tr key={s.symbol} onClick={() => { setStock(s); setActiveMenu("analysis"); }}>
+                        <tr key={s.symbol} onClick={() => openStockAnalysisFromList(s)}>
                           <td>{i + 1}</td>
                           <td>
                             <div className="stock-name-stack">
@@ -5649,7 +6299,7 @@ const [watchText, setWatchText] = useState(() => {
                           </thead>
                           <tbody>
                             {selectedIndustryDetail.stocks.map((s) => (
-                              <tr key={s.symbol} onClick={() => { setStock(s); setActiveMenu("analysis"); }}>
+                              <tr key={s.symbol} onClick={() => openStockAnalysisFromList(s)}>
                                 <td>
                                   <div className="stock-name-stack">
                                     <span className="stock-name-main small">{getLocalDisplayName(s.symbol, s.name)}</span>
@@ -5682,7 +6332,7 @@ const [watchText, setWatchText] = useState(() => {
                         <thead><tr><th>股票</th><th>AI分數</th><th>趨勢</th><th>觀察</th><th>量比</th></tr></thead>
                         <tbody>
                           {usTechWatchList.map((s) => (
-                            <tr key={s.symbol} onClick={() => { setStock(s); setActiveMenu("analysis"); }}>
+                            <tr key={s.symbol} onClick={() => openStockAnalysisFromList(s)}>
                               <td>
                                 <div className="stock-name-stack">
                                   <span className="stock-name-main small">{getLocalDisplayName(s.symbol, s.name)}</span>
@@ -5787,7 +6437,7 @@ const [watchText, setWatchText] = useState(() => {
                             <thead><tr><th>排名</th><th>股票</th><th>產業</th><th>AI</th><th>漲幅</th><th>量比</th><th>訊號</th></tr></thead>
                             <tbody>
                               {reportStrongTop50.map((s, index) => (
-                                <tr key={s.symbol} onClick={() => { setStock(s); setActiveMenu("analysis"); }}>
+                                <tr key={s.symbol} onClick={() => openStockAnalysisFromList(s)}>
                                   <td>{index + 1}</td>
                                   <td>
                                     <div className="stock-name-stack">
@@ -5818,7 +6468,7 @@ const [watchText, setWatchText] = useState(() => {
                             <thead><tr><th>排名</th><th>股票</th><th>產業</th><th>AI</th><th>跌幅</th><th>量比</th><th>訊號</th></tr></thead>
                             <tbody>
                               {reportWeakTop50.map((s, index) => (
-                                <tr key={s.symbol} onClick={() => { setStock(s); setActiveMenu("analysis"); }}>
+                                <tr key={s.symbol} onClick={() => openStockAnalysisFromList(s)}>
                                   <td>{index + 1}</td>
                                   <td>
                                     <div className="stock-name-stack">
@@ -5853,7 +6503,7 @@ const [watchText, setWatchText] = useState(() => {
                         <thead><tr><th>股票</th><th>分數</th><th>開高率</th><th>訊號</th><th>假突破</th></tr></thead>
                         <tbody>
                           {reportNextDayCandidates.map((s) => (
-                            <tr key={s.symbol} onClick={() => { setStock(s); setActiveMenu("analysis"); }}>
+                            <tr key={s.symbol} onClick={() => openStockAnalysisFromList(s)}>
                               <td>
                                 <div className="stock-name-stack">
                                   <span className="stock-name-main small">{getLocalDisplayName(s.symbol, s.name)}</span>
