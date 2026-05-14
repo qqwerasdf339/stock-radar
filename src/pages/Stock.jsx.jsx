@@ -4461,6 +4461,56 @@ const [watchText, setWatchText] = useState(() => {
     return [...dayTradeList].sort((a, b) => (b.dayTrade?.score || 0) - (a.dayTrade?.score || 0));
   }, [dayTradeList]);
 
+  const calcClosePositionPct = (item) => {
+    const last = item?.history?.at?.(-1);
+    if (!last || !Number.isFinite(last.high) || !Number.isFinite(last.low) || last.high === last.low) return null;
+    return Math.round(((last.close - last.low) / (last.high - last.low)) * 100);
+  };
+
+  const buildAutoTradeAdvice = (item) => {
+    const change = Number(item?.changePct || 0);
+    const volumeRatio = Number(item?.volumeRatio || 0);
+    const closePos = calcClosePositionPct(item);
+    const nextScore = Number(item?.nextDay?.nextDayScore ?? item?.radarScore ?? item?.score ?? 0);
+    const gap = Number(item?.nextDay?.gapUpProbability ?? item?.mainUpProbability ?? item?.winRatePredict ?? 0);
+    const fakeRisk = Number(item?.nextDay?.fakeBreakout ? 82 : item?.fakeBreakoutRisk ?? item?.riskScore ?? 0);
+
+    const tags = [];
+    tags.push(`今日漲幅 ${change.toFixed(2)}%`);
+    tags.push(volumeRatio >= 2 ? `成交量大幅放大 ${volumeRatio.toFixed(2)}倍` : volumeRatio >= 1.3 ? `成交量放大 ${volumeRatio.toFixed(2)}倍` : `量能 ${volumeRatio ? volumeRatio.toFixed(2) + "倍" : "待確認"}`);
+    tags.push(closePos != null ? `收盤位置 ${closePos}%` : "收盤位置待確認");
+    tags.push(item?.tradeSignal?.action === "BUY" || item?.nextDay?.nextDaySignal?.includes("候選") ? "符合強勢候選" : "強勢條件待確認");
+    tags.push(change >= 9.5 ? "接近漲停 / 已漲停" : "未鎖漲停");
+    tags.push(item?.nextDay?.fakeBreakout || fakeRisk >= 65 ? "假突破風險偏高" : "假突破風險可控");
+    if (item?.candlePattern?.title?.includes("長上影") || item?.bearishSignals?.some?.((s) => s.signalName?.includes("長上影"))) {
+      tags.push("爆量長上影風險");
+    } else {
+      tags.push("未見明顯爆量長上影");
+    }
+    tags.push(`評分 ${Math.round(nextScore)}`);
+
+    const openHighProbability = Math.max(0, Math.min(100, Math.round(gap || (50 + change * 2 + Math.min(volumeRatio, 3) * 5 - fakeRisk * 0.15))));
+    const continueProbability = Math.max(0, Math.min(100, Math.round((item?.mainUpProbability || 0) || (45 + nextScore * 0.35 + (closePos || 50) * 0.15 + Math.min(volumeRatio, 3) * 5 - fakeRisk * 0.25))));
+    const sellRisk = Math.max(0, Math.min(100, Math.round(fakeRisk + (change >= 9 ? 12 : 0) + (closePos != null && closePos < 55 ? 10 : 0))));
+
+    const strategy =
+      sellRisk >= 70
+        ? "風險偏高，只觀察不追高，等回測或5分K轉強"
+        : openHighProbability >= 70 && continueProbability >= 65
+        ? "只追開盤5分K強勢，不追高；量縮或跌破開盤低點就退出"
+        : openHighProbability >= 58
+        ? "可列觀察，等待開盤量能確認後再進場"
+        : "續強條件不足，先放觀察名單";
+
+    return {
+      conditionTags: tags,
+      openHighProbability,
+      continueProbability,
+      sellRisk,
+      strategy,
+    };
+  };
+
   const sortedNextDayList = useMemo(() => {
     const list = [...nextDayList];
 
@@ -4956,6 +5006,17 @@ const [watchText, setWatchText] = useState(() => {
         .tag-list.compact.bearish span { border-color: rgba(255,59,92,.18); background: rgba(255,59,92,.08); color: #fecdd3; }
         .tag-list.compact.bullish span { border-color: rgba(94,234,212,.18); background: rgba(94,234,212,.08); color: #ccfbf1; }
         .kline-radar-table tbody tr:hover { background: rgba(34,211,238,.06); cursor: pointer; }
+        .auto-criteria-panel { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 12px 0 16px; }
+        .auto-criteria-panel > div { border: 1px solid rgba(148,163,184,.14); background: rgba(2,6,23,.42); border-radius: 16px; padding: 13px 15px; }
+        .auto-criteria-panel b { display: block; color: #f8fafc; margin-bottom: 6px; }
+        .auto-criteria-panel span { color: #94a3b8; line-height: 1.6; font-size: 13px; }
+        .condition-mini-list { display: flex; flex-wrap: wrap; gap: 6px; max-width: 310px; }
+        .condition-mini-list span { border: 1px solid rgba(56,189,248,.18); background: rgba(56,189,248,.07); color: #dbeafe; border-radius: 999px; padding: 4px 8px; font-size: 11px; font-weight: 800; }
+        .advice-mini { display: grid; gap: 4px; min-width: 260px; max-width: 340px; }
+        .advice-mini b { color: #f8fafc; font-size: 12px; }
+        .advice-mini span { color: #fbbf24; font-size: 12px; }
+        .advice-mini em { color: #cbd5e1; font-style: normal; font-size: 12px; line-height: 1.45; }
+        @media (max-width: 900px) { .auto-criteria-panel { grid-template-columns: 1fr; } }
         @media (max-width: 1100px) { .kline-radar-hero { grid-template-columns: repeat(2, minmax(0,1fr)); } }
         @media (max-width: 720px) { .kline-radar-hero { grid-template-columns: 1fr; } }
         .content { padding: 16px; margin-left: 170px; }
@@ -5693,6 +5754,17 @@ const [watchText, setWatchText] = useState(() => {
 
                 <button className="ghost" onClick={scanSystemStrongStocks}>重新整理</button>
               </div>
+              <div className="auto-criteria-panel">
+                <div>
+                  <b>系統判斷條件</b>
+                  <span>今日漲幅、成交量放大、收盤位置、是否強停、是否鎖漲停、爆量長上影、分數與假突破風險。</span>
+                </div>
+                <div>
+                  <b>每檔股票建議</b>
+                  <span>自動顯示開高機率、續強機率、出貨風險與建議策略；不用手動調整篩選條件。</span>
+                </div>
+              </div>
+
 
               {filteredSystemStrongList.length === 0 ? (
                 <p className="empty">按「掃描近3日台股強勢前50」後，會自動列出台股強勢股與分類。</p>
@@ -5710,6 +5782,8 @@ const [watchText, setWatchText] = useState(() => {
                         <th>勝率</th>
                         <th>量比</th>
                         <th>訊號</th>
+                        <th>判斷條件</th>
+                        <th>建議</th>
                         <th>理由</th>
                       </tr>
                     </thead>
@@ -5730,6 +5804,18 @@ const [watchText, setWatchText] = useState(() => {
                           <td>{s.winRatePredict}%</td>
                           <td>{s.volumeRatio?.toFixed(2) ?? "--"}</td>
                           <td><span className="badge">{s.tradeSignal.action}</span></td>
+                          <td>
+                            <div className="condition-mini-list">
+                              {buildAutoTradeAdvice(s).conditionTags.slice(0, 4).map((tag) => <span key={tag}>{tag}</span>)}
+                            </div>
+                          </td>
+                          <td>
+                            <div className="advice-mini">
+                              <b>開高 {buildAutoTradeAdvice(s).openHighProbability}%｜續強 {buildAutoTradeAdvice(s).continueProbability}%</b>
+                              <span>出貨風險 {buildAutoTradeAdvice(s).sellRisk}%</span>
+                              <em>{buildAutoTradeAdvice(s).strategy}</em>
+                            </div>
+                          </td>
                           <td>{s.tradeSignal.reasons.slice(0, 2).join("、")}</td>
                         </tr>
                       ))}
@@ -5766,6 +5852,16 @@ const [watchText, setWatchText] = useState(() => {
                     <option value="change">依漲跌幅</option>
                     <option value="breakout">依突破型態</option>
                   </select>
+                </div>
+              </div>
+              <div className="auto-criteria-panel">
+                <div>
+                  <b>系統判斷條件</b>
+                  <span>今日漲幅、成交量放大、收盤位置、是否強停、是否鎖漲停、爆量長上影、分數與假突破風險。</span>
+                </div>
+                <div>
+                  <b>每檔股票建議</b>
+                  <span>自動顯示開高機率、續強機率、出貨風險與建議策略；不用手動調整篩選條件。</span>
                 </div>
               </div>
 
@@ -5811,6 +5907,8 @@ const [watchText, setWatchText] = useState(() => {
                         <th>假突破風險</th>
                         <th>漲跌</th>
                         <th>量能</th>
+                        <th>判斷條件</th>
+                        <th>建議</th>
                         <th>觀察理由</th>
                       </tr>
                     </thead>
@@ -5851,6 +5949,18 @@ const [watchText, setWatchText] = useState(() => {
                           <td className={(s.fakeBreakoutRisk || 0) >= 60 ? "down" : ""}>{s.fakeBreakoutRisk ?? "--"}%</td>
                           <td className={s.changePct >= 0 ? "up" : "down"}>{s.changePct?.toFixed?.(2) ?? "--"}%</td>
                           <td>{s.volumeTitle || "--"}</td>
+                          <td>
+                            <div className="condition-mini-list">
+                              {buildAutoTradeAdvice(s).conditionTags.slice(0, 4).map((tag) => <span key={tag}>{tag}</span>)}
+                            </div>
+                          </td>
+                          <td>
+                            <div className="advice-mini">
+                              <b>開高 {buildAutoTradeAdvice(s).openHighProbability}%｜續強 {buildAutoTradeAdvice(s).continueProbability}%</b>
+                              <span>出貨風險 {buildAutoTradeAdvice(s).sellRisk}%</span>
+                              <em>{buildAutoTradeAdvice(s).strategy}</em>
+                            </div>
+                          </td>
                           <td>{(s.radarReasons || []).slice(0, 2).join("、")}</td>
                         </tr>
                       ))}
@@ -5882,6 +5992,16 @@ const [watchText, setWatchText] = useState(() => {
                     <option value="change">依漲幅</option>
                     <option value="volume">依量比</option>
                   </select>
+                </div>
+              </div>
+              <div className="auto-criteria-panel">
+                <div>
+                  <b>系統判斷條件</b>
+                  <span>今日漲幅、成交量放大、收盤位置、是否強停、是否鎖漲停、爆量長上影、分數與假突破風險。</span>
+                </div>
+                <div>
+                  <b>每檔股票建議</b>
+                  <span>自動顯示開高機率、續強機率、出貨風險與建議策略；不用手動調整篩選條件。</span>
                 </div>
               </div>
 
@@ -5921,6 +6041,8 @@ const [watchText, setWatchText] = useState(() => {
                         <th>漲跌</th>
                         <th>量比</th>
                         <th>假突破</th>
+                        <th>判斷條件</th>
+                        <th>建議</th>
                         <th>觀察標籤</th>
                       </tr>
                     </thead>
@@ -5928,10 +6050,7 @@ const [watchText, setWatchText] = useState(() => {
                       {sortedNextDayList.map((s) => (
                         <tr
                           key={s.symbol}
-                          onClick={() => {
-                            setStock(s);
-                            setActiveMenu("analysis");
-                          }}
+                          onClick={() => openStockAnalysisFromList(s)}
                         >
                           <td>
                             <div className="stock-name-stack">
@@ -5952,6 +6071,18 @@ const [watchText, setWatchText] = useState(() => {
                           <td>{s.volumeRatio?.toFixed?.(2) ?? "--"}</td>
                           <td className={s.nextDay?.fakeBreakout ? "down" : "up"}>
                             {s.nextDay?.fakeBreakout ? "有風險" : "通過"}
+                          </td>
+                          <td>
+                            <div className="condition-mini-list">
+                              {buildAutoTradeAdvice(s).conditionTags.slice(0, 5).map((tag) => <span key={tag}>{tag}</span>)}
+                            </div>
+                          </td>
+                          <td>
+                            <div className="advice-mini">
+                              <b>開高 {buildAutoTradeAdvice(s).openHighProbability}%｜續強 {buildAutoTradeAdvice(s).continueProbability}%</b>
+                              <span>出貨風險 {buildAutoTradeAdvice(s).sellRisk}%</span>
+                              <em>{buildAutoTradeAdvice(s).strategy}</em>
+                            </div>
                           </td>
                           <td>{s.tags?.slice(0, 3).join("、") || s.volumeSignal?.title || "等待確認"}</td>
                         </tr>
