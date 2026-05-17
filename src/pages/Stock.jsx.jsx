@@ -1,4 +1,7 @@
-import { getStockDisplayName, initStockNameMap } from "../utils/stockName";
+// 停用舊版 twStockNames OpenAPI 抓取，避免 CORS 造成部分分頁黑屏或卡住。
+// 中文名改由 stockUniverse + Yahoo K線資料混合處理。
+const getStockDisplayName = (symbol, fallback = "") => fallback || symbol;
+const initStockNameMap = async () => true;
 import {
   fetchStockUniverse,
   getFallbackStockUniverse,
@@ -16,6 +19,9 @@ import {
   LineSeries,
 } from "lightweight-charts";
 import "../App.css";
+import { TW_STOCK_NAMES_FALLBACK, fetchTwStockNamesFromOpenApi } from "../data/twStockNames";
+import { US_STOCK_NAMES } from "../data/usStockNames";
+import { ETF_NAMES } from "../data/etfNames";
 
 const API_BASE = "https://stock-radar-api-os48.onrender.com";
 
@@ -468,6 +474,129 @@ async function fetchTaiwanRealtimeName(code) {
   return "";
 }
 
+
+async function fetchJsonDirectOrProxy(url) {
+  const candidates = [
+    url,
+    `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+  ];
+
+  for (const targetUrl of candidates) {
+    try {
+      const res = await fetch(targetUrl, { cache: "no-store" });
+      if (!res.ok) continue;
+      return await res.json();
+    } catch (err) {
+      console.warn("fetchJsonDirectOrProxy failed", targetUrl, err);
+    }
+  }
+
+  return null;
+}
+
+async function fetchYahooLocalizedName(symbolOrCode) {
+  const raw = String(symbolOrCode || "").trim().toUpperCase();
+  const code = raw.replace(/\.(TW|TWO)$/i, "");
+
+  if (!code) return "";
+
+  const cache = readTwNameCache();
+  if (cache[`YH_${code}`]) return cache[`YH_${code}`];
+
+  const yahooQueries = /^\d{4,6}$/.test(code)
+    ? [`${code}.TW`, `${code}.TWO`, code]
+    : [code];
+
+  for (const q of yahooQueries) {
+    const url =
+      `https://query1.finance.yahoo.com/v1/finance/search` +
+      `?q=${encodeURIComponent(q)}` +
+      `&quotesCount=8&newsCount=0&lang=zh-Hant-TW&region=TW`;
+
+    const json = await fetchJsonDirectOrProxy(url);
+    const quotes = Array.isArray(json?.quotes) ? json.quotes : [];
+
+    const matched =
+      quotes.find((item) => String(item.symbol || "").toUpperCase() === q.toUpperCase()) ||
+      quotes.find((item) => String(item.symbol || "").toUpperCase().startsWith(`${code}.`)) ||
+      quotes.find((item) => String(item.symbol || "").toUpperCase() === code);
+
+    const candidates = [
+      matched?.shortname,
+      matched?.longname,
+      matched?.displayName,
+      matched?.name,
+    ].map((x) => String(x || "").trim()).filter(Boolean);
+
+    const chineseName = candidates.find((name) => /[一-龥]/.test(name));
+
+    if (chineseName) {
+      const fixed = chineseName
+        .replace(/\s+/g, "")
+        .replace(/股份有限公司/g, "")
+        .replace(/有限公司/g, "");
+
+      cache[`YH_${code}`] = fixed;
+      cache[code] = fixed;
+      writeTwNameCache(cache);
+      EXTRA_STOCK_CHINESE_NAMES[code] = fixed;
+      return fixed;
+    }
+  }
+
+  return "";
+}
+
+
+function getLocalDisplayName(symbol, fallback = "") {
+  const rawSymbol = String(symbol || "").trim();
+  const key = rawSymbol.toUpperCase().replace(/\.(TW|TWO)$/i, "");
+
+  // 1. stockUniverse（generated.js，執行腳本後有完整資料）
+  const universe = STOCK_UNIVERSE_RUNTIME?.length ? STOCK_UNIVERSE_RUNTIME : getFallbackStockUniverse();
+  const fromUniverse = getStockDisplayNameByCode(key, universe);
+  if (fromUniverse && fromUniverse !== key && /[一-龥]/.test(fromUniverse)) return fromUniverse;
+
+  // 2. localStorage cache（曾抓取過的，包含 TWSE 完整清單）
+  const cache = readTwNameCache?.() || {};
+  const cached = cache[key] || cache[`YH_${key}`];
+  if (cached && /[一-龥]/.test(cached)) return cached;
+
+  // 2b. TWSE OpenAPI 抓下來的完整清單（key: stockRadarTwStockNamesV1）
+  try {
+    const twseCache = JSON.parse(localStorage.getItem("stockRadarTwStockNamesV1") || "{}");
+    const twseName = twseCache[key];
+    if (twseName && /[一-龥]/.test(twseName)) return twseName;
+  } catch {}
+
+  // 3. Stock.jsx 內硬寫的對照表
+  const mapped = EXTRA_STOCK_CHINESE_NAMES?.[key] || EXTRA_STOCK_CHINESE_NAMES?.[rawSymbol.toUpperCase()];
+  if (mapped) return mapped;
+
+  // 4. twStockNames.js 的台股 fallback（幾百筆）
+  if (TW_STOCK_NAMES_FALLBACK[key]) return TW_STOCK_NAMES_FALLBACK[key];
+
+  // 5. 美股 ETF 名稱（ETF_NAMES）
+  if (ETF_NAMES[key]) return ETF_NAMES[key];
+
+  // 6. 美股個股名稱（US_STOCK_NAMES）
+  if (US_STOCK_NAMES[key]) return US_STOCK_NAMES[key];
+
+  if (typeof STOCK_MASTER_ALL !== "undefined") {
+    const master = STOCK_MASTER_ALL.find(
+      (item) => String(item.stockCode) === key || `${item.stockCode}.TW` === rawSymbol.toUpperCase()
+    );
+    if (master?.stockName) return master.stockName;
+  }
+
+  const raw = String(fallback || "").trim();
+  const looksEnglishOnly = /[A-Za-z]{4,}/.test(raw) && !/[一-龥]/.test(raw);
+
+  if (!raw || raw === key || raw === rawSymbol || looksEnglishOnly) return key;
+
+  return raw;
+}
+
 async function getBestDisplayName(symbol, fallback = "") {
   const local = getLocalDisplayName(symbol, fallback);
   const key = String(symbol || "").toUpperCase().replace(/\.(TW|TWO)$/i, "");
@@ -476,863 +605,18 @@ async function getBestDisplayName(symbol, fallback = "") {
 
   if (!looksCodeOnly && !looksEnglishOnly) return local;
 
-  const liveName = await fetchTaiwanRealtimeName(key);
-  if (liveName) {
-    EXTRA_STOCK_CHINESE_NAMES[key] = liveName;
-    return liveName;
-  }
+  const cache = readTwNameCache?.() || {};
+  const cached = cache[key] || cache[`YH_${key}`];
+  if (cached && /[一-龥]/.test(cached)) return cached;
+
+  // 找不到中文名時，自動向 Yahoo Finance 查詢並快取
+  try {
+    const yahooName = await fetchYahooLocalizedName(key);
+    if (yahooName && /[一-龥]/.test(yahooName)) return yahooName;
+  } catch {}
 
   return local;
 }
-
-function getLocalDisplayName(symbol, fallback = "") {
-  const rawSymbol = String(symbol || "").trim();
-  const key = rawSymbol.toUpperCase().replace(/\.(TW|TWO)$/i, "");
-
-  const universeName = getStockDisplayNameByCode(key, STOCK_UNIVERSE_RUNTIME?.length ? STOCK_UNIVERSE_RUNTIME : getFallbackStockUniverse());
-  if (universeName && universeName !== key && /[一-龥]/.test(universeName)) return universeName;
-
-  const cached = readTwNameCache?.()?.[key];
-  const mapped = EXTRA_STOCK_CHINESE_NAMES[key] || EXTRA_STOCK_CHINESE_NAMES[rawSymbol.toUpperCase()] || cached;
-  if (mapped) return mapped;
-
-  // 優先從 stockMaster 找中文名，避免 Yahoo meta.longName 顯示英文公司名。
-  if (typeof STOCK_MASTER_ALL !== "undefined") {
-    const master = STOCK_MASTER_ALL.find((item) => item.stockCode === key || `${item.stockCode}.TW` === rawSymbol.toUpperCase());
-    if (master?.stockName) return master.stockName;
-  }
-
-  const importedName = getStockDisplayName(symbol, "");
-  const importedRaw = String(importedName || "").trim();
-  if (importedRaw && /[一-龥]/.test(importedRaw)) return importedRaw;
-
-  const raw = String(fallback || "").trim();
-  const looksEnglishOnly =
-    /[A-Za-z]{4,}/.test(raw) &&
-    !/[一-龥]/.test(raw);
-
-  // 如果 Yahoo 只回英文，又沒有對照表，寧可顯示代號，避免頁面充滿英文公司全名。
-  if (!raw || raw === key || raw === rawSymbol || looksEnglishOnly) return mapped || key;
-
-  return raw;
-}
-
-
-const FAVORITE_GROUPS = ["選單1", "選單2", "選單3", "選單4", "選單5"];
-
-const MARKET_STRONG_POOL = [
-  // 上市：權值、電子、AI、金融、傳產
-  { symbol: "2330", baseType: "上市權值" },
-  { symbol: "2317", baseType: "上市電子" },
-  { symbol: "2454", baseType: "上市IC設計" },
-  { symbol: "2308", baseType: "上市電源" },
-  { symbol: "2382", baseType: "上市AI伺服器" },
-  { symbol: "2344", baseType: "上市記憶體" },
-  { symbol: "2303", baseType: "上市半導體" },
-  { symbol: "2408", baseType: "上市記憶體" },
-  { symbol: "3034", baseType: "上市網通" },
-  { symbol: "2379", baseType: "上市IC設計" },
-  { symbol: "3661", baseType: "上市IC設計" },
-  { symbol: "3443", baseType: "上市IC設計" },
-  { symbol: "6669", baseType: "上市伺服器" },
-  { symbol: "3711", baseType: "上市科技控股" },
-  { symbol: "2357", baseType: "上市電腦" },
-  { symbol: "2327", baseType: "上市被動元件" },
-  { symbol: "4938", baseType: "上市電子零組件" },
-  { symbol: "3017", baseType: "上市散熱" },
-  { symbol: "2409", baseType: "上市面板" },
-  { symbol: "3481", baseType: "上市面板" },
-  { symbol: "6116", baseType: "上市面板" },
-  { symbol: "2489", baseType: "上市面板" },
-  { symbol: "3504", baseType: "上市光電" },
-  { symbol: "4935", baseType: "上市光電" },
-  { symbol: "2406", baseType: "上市面板" },
-  { symbol: "2476", baseType: "上市面板零組件" },
-  { symbol: "4934", baseType: "上市面板零組件" },
-
-  { symbol: "3234", baseType: "上市中小型強勢" },
-  { symbol: "2603", baseType: "上市航運" },
-  { symbol: "2609", baseType: "上市航運" },
-  { symbol: "2615", baseType: "上市航運" },
-  { symbol: "2002", baseType: "上市鋼鐵" },
-  { symbol: "1101", baseType: "上市水泥" },
-  { symbol: "1102", baseType: "上市水泥" },
-  { symbol: "1301", baseType: "上市塑化" },
-  { symbol: "1303", baseType: "上市塑化" },
-  { symbol: "1216", baseType: "上市食品" },
-  { symbol: "2412", baseType: "上市電信" },
-  { symbol: "2881", baseType: "上市金融" },
-  { symbol: "2882", baseType: "上市金融" },
-  { symbol: "2883", baseType: "上市金融" },
-  { symbol: "2884", baseType: "上市金融" },
-  { symbol: "2885", baseType: "上市金融" },
-  { symbol: "2886", baseType: "上市金融" },
-  { symbol: "2887", baseType: "上市金融" },
-  { symbol: "2891", baseType: "上市金融" },
-  { symbol: "2892", baseType: "上市金融" },
-  { symbol: "5871", baseType: "上市金融" },
-  { symbol: "5880", baseType: "上市金融" },
-  { symbol: "0050", baseType: "上市ETF" },
-  { symbol: "0056", baseType: "上市ETF" },
-  { symbol: "00878", baseType: "上市ETF" },
-  { symbol: "00919", baseType: "上市高股息ETF" },
-  { symbol: "00929", baseType: "上市高股息ETF" },
-  { symbol: "00940", baseType: "上市高股息ETF" },
-  // 上櫃：半導體、IC設計、生技、電子零組件
-  { symbol: "3105", baseType: "上櫃IC設計" },
-  { symbol: "3264", baseType: "上櫃IC設計" },
-  { symbol: "3324", baseType: "上櫃IC設計" },
-  { symbol: "3374", baseType: "上櫃IC設計" },
-  { symbol: "3227", baseType: "上櫃IC設計" },
-  { symbol: "3217", baseType: "上櫃IC設計" },
-  { symbol: "5274", baseType: "上櫃半導體" },
-  { symbol: "5347", baseType: "上櫃半導體" },
-  { symbol: "5483", baseType: "上櫃半導體" },
-  { symbol: "5425", baseType: "上櫃光電" },
-  { symbol: "6121", baseType: "上櫃電子" },
-  { symbol: "6147", baseType: "上櫃電子" },
-  { symbol: "6182", baseType: "上櫃電子零組件" },
-  { symbol: "6187", baseType: "上櫃電子零組件" },
-  { symbol: "6231", baseType: "上櫃電子零組件" },
-  { symbol: "6274", baseType: "上櫃電子零組件" },
-  { symbol: "6488", baseType: "上櫃生技" },
-  { symbol: "6547", baseType: "上櫃生技" },
-  { symbol: "8069", baseType: "上櫃通路" },
-  { symbol: "8299", baseType: "上櫃電子" },
-
-  // 補充：各產業常見相關股，讓產業點入後不只顯示一兩檔。
-  { symbol: "3035", baseType: "IC設計" },
-  { symbol: "4966", baseType: "IC設計" },
-  { symbol: "6415", baseType: "IC設計" },
-  { symbol: "3653", baseType: "散熱" },
-  { symbol: "2421", baseType: "散熱" },
-  { symbol: "3037", baseType: "電子零組件" },
-  { symbol: "6213", baseType: "電子零組件" },
-  { symbol: "2890", baseType: "金融" },
-  { symbol: "2801", baseType: "金融" },
-  { symbol: "006208", baseType: "ETF" },
-  { symbol: "00939", baseType: "ETF" },
-  { symbol: "00922", baseType: "ETF" },
-  { symbol: "00881", baseType: "ETF" },
-  { symbol: "00891", baseType: "ETF" },
-  { symbol: "00892", baseType: "ETF" },
-  { symbol: "00935", baseType: "ETF" },
-  { symbol: "00952", baseType: "ETF" },
-  { symbol: "2610", baseType: "航運" },
-  { symbol: "2618", baseType: "航運" },
-  { symbol: "2606", baseType: "航運" },
-  { symbol: "2637", baseType: "航運" },
-  { symbol: "5608", baseType: "航運" },
-  { symbol: "1103", baseType: "水泥" },
-  { symbol: "1104", baseType: "水泥" },
-  { symbol: "1108", baseType: "水泥" },
-  { symbol: "1109", baseType: "水泥" },
-  { symbol: "1326", baseType: "塑化" },
-  { symbol: "6505", baseType: "塑化" },
-  { symbol: "1314", baseType: "塑化" },
-  { symbol: "1312", baseType: "塑化" },
-  { symbol: "1304", baseType: "塑化" },
-  { symbol: "1305", baseType: "塑化" },
-  { symbol: "2014", baseType: "鋼鐵" },
-  { symbol: "2027", baseType: "鋼鐵" },
-  { symbol: "2023", baseType: "鋼鐵" },
-  { symbol: "2031", baseType: "鋼鐵" },
-  { symbol: "9958", baseType: "鋼鐵" },
-  { symbol: "3045", baseType: "電信" },
-  { symbol: "4904", baseType: "電信" },
-  { symbol: "1215", baseType: "食品" },
-  { symbol: "1229", baseType: "食品" },
-  { symbol: "1231", baseType: "食品" },
-  { symbol: "1232", baseType: "食品" },
-  { symbol: "1234", baseType: "食品" },
-  { symbol: "1702", baseType: "食品" },
-  { symbol: "2301", baseType: "電子" },
-  { symbol: "2353", baseType: "電子" },
-  { symbol: "2354", baseType: "電子" },
-  { symbol: "2395", baseType: "電子" },
-];
-
-
-const STOCK_PROFILE_MAP = {
-  "2330": { industry: "半導體 / 晶圓代工", business: "晶圓代工、先進製程、封裝測試、AI/HPC晶片製造" },
-  "2317": { industry: "電子代工 / AI伺服器", business: "電子製造服務、伺服器、雲端設備、消費電子組裝" },
-  "2454": { industry: "IC設計", business: "手機晶片、Wi-Fi、藍牙、電視晶片、車用與邊緣AI晶片" },
-  "2308": { industry: "電源 / 工業自動化", business: "電源供應器、散熱、電動車電源、工業自動化與能源管理" },
-  "2382": { industry: "AI伺服器 / 筆電代工", business: "筆電、雲端伺服器、AI伺服器、企業資料中心設備" },
-  "2379": { industry: "IC設計 / 網通晶片", business: "乙太網路晶片、音效晶片、網通控制晶片" },
-  "3034": { industry: "IC設計", business: "顯示驅動IC、影像處理晶片、車用與消費電子晶片" },
-  "3443": { industry: "ASIC / IC設計服務", business: "ASIC設計服務、SoC設計、AI/HPC客製化晶片" },
-  "3661": { industry: "高速運算IC設計", business: "高速傳輸晶片、ASIC設計、資料中心與AI應用晶片" },
-  "6669": { industry: "AI伺服器", business: "雲端伺服器、AI伺服器、資料中心解決方案" },
-  "3017": { industry: "散熱", business: "伺服器散熱、風扇、熱導管、液冷與散熱模組" },
-  "3374": { industry: "半導體 / 封測", business: "晶圓測試、封裝測試、影像感測器與IC測試服務" },
-  "6121": { industry: "電池模組 / 電子", business: "電池模組、電源管理、消費電子與工業應用電池" },
-  "2881": { industry: "金融控股", business: "銀行、保險、證券、資產管理與金融服務" },
-  "2891": { industry: "金融控股", business: "銀行、證券、保險、信用卡與金融投資服務" },
-  "0050": { industry: "ETF", business: "追蹤台灣50大型權值股表現" },
-  "0056": { industry: "ETF", business: "追蹤台灣高股息股票投資組合" },
-  "00878": { industry: "ETF", business: "台灣ESG與高股息投資組合" },
-  "00919": { industry: "ETF", business: "台灣精選高息股票投資組合" },
-  "2409": { industry: "面板 / 顯示器", business: "TFT-LCD面板、顯示器面板、車用顯示、商用顯示與面板模組" },
-  "3481": { industry: "面板 / 顯示器", business: "TFT-LCD面板、電視與顯示器面板、車用與工控顯示面板" },
-  "6116": { industry: "面板 / 顯示器", business: "中小尺寸面板、顯示器面板、車用與工業應用顯示模組" },
-  "2489": { industry: "面板零組件", business: "偏光板、光學膜、顯示器關鍵材料與面板零組件" },
-  "3504": { industry: "背光模組 / 光電", business: "背光模組、顯示器模組、車用與工控顯示應用" },
-  "4935": { industry: "面板模組 / 光電", business: "LCD顯示模組、觸控顯示模組、車用與工業顯示產品" },
-  "2406": { industry: "面板 / 顯示器", business: "中小尺寸顯示面板、觸控面板與顯示模組" },
-  "2476": { industry: "面板零組件", business: "背光模組、導光板、光學膜片與顯示器零組件" },
-  "4934": { industry: "面板零組件", business: "觸控面板、保護玻璃、顯示器零組件與模組" },
-};
-
-function getStockProfile(stock) {
-  const symbol = String(stock?.symbol || "").toUpperCase();
-  const base = STOCK_PROFILE_MAP[symbol];
-  const pool = MARKET_STRONG_POOL.find((item) => item.symbol === symbol);
-  const industry = base?.industry || stock?.baseType || stock?.strongType || pool?.baseType || (stock?.currency === "USD" ? "美股 / ETF" : "未分類產業");
-  const business = base?.business || (industry.includes("ETF") ? "ETF投資組合，主要追蹤指數或特定主題標的。" : "主要業務資料尚未完整建檔，可先依產業分類、K線、量價與法人籌碼綜合判斷。");
-  return { industry, business };
-}
-
-
-
-const MARKET_GROUPS_FROM_EXCHANGE_VIEW = [
-  "電零組", "紡織", "汽車", "化學生醫", "金融", "鋼鐵", "ETN",
-  "航運", "電器電纜", "存託憑證", "水泥", "油電燃氣", "造紙", "營建",
-  "數位雲端", "生技醫療", "資訊服務", "塑膠", "電腦週邊", "觀光", "化學",
-  "受益證券", "居家生活", "ETF", "電子通路", "電機", "通信網路", "電子",
-  "貿易百貨", "橡膠", "其它電子", "綠能環保", "光電", "塑化類", "食品",
-  "其他", "半導體", "海外第一", "玻璃", "運動休閒",
-  "農業科技業", "文創類", "半導體業", "電子通路業", "航運業", "鋼鐵工業",
-  "其他電子業", "金融業", "電腦及週邊設備業", "通信網路業", "文化創意業",
-  "綠能環保", "生技醫療業", "紡織纖維"
-];
-
-const GROUP_ALIAS_MAP = {
-  "電零組": "電子零組件業",
-  "電子零組件": "電子零組件業",
-  "電子零組件業": "電子零組件業",
-  "半導體": "半導體業",
-  "半導體業": "半導體業",
-  "金融": "金融保險業",
-  "金融業": "金融保險業",
-  "金融保險": "金融保險業",
-  "金融保險業": "金融保險業",
-  "電腦週邊": "電腦及週邊設備業",
-  "電腦及週邊設備": "電腦及週邊設備業",
-  "電腦及週邊設備業": "電腦及週邊設備業",
-  "其它電子": "其他電子業",
-  "其他電子": "其他電子業",
-  "其他電子業": "其他電子業",
-  "電子通路": "電子通路業",
-  "電子通路業": "電子通路業",
-  "通信網路": "通信網路業",
-  "通信網路業": "通信網路業",
-  "光電": "光電業",
-  "光電業": "光電業",
-  "航運": "航運業",
-  "航運業": "航運業",
-  "鋼鐵": "鋼鐵工業",
-  "鋼鐵工業": "鋼鐵工業",
-  "水泥": "水泥工業",
-  "水泥工業": "水泥工業",
-  "塑膠": "塑膠工業",
-  "塑膠工業": "塑膠工業",
-  "塑化類": "塑化",
-  "塑化": "塑化",
-  "化學": "化學工業",
-  "化學工業": "化學工業",
-  "化學生醫": "化學生醫",
-  "生技醫療": "生技醫療業",
-  "生技醫療業": "生技醫療業",
-  "食品": "食品工業",
-  "食品工業": "食品工業",
-  "紡織": "紡織纖維",
-  "紡織纖維": "紡織纖維",
-  "汽車": "汽車工業",
-  "汽車工業": "汽車工業",
-  "電機": "電機機械",
-  "電機機械": "電機機械",
-  "電器電纜": "電器電纜",
-  "油電燃氣": "油電燃氣業",
-  "油電燃氣業": "油電燃氣業",
-  "造紙": "造紙工業",
-  "造紙工業": "造紙工業",
-  "營建": "建材營造",
-  "建材營造": "建材營造",
-  "觀光": "觀光事業",
-  "觀光事業": "觀光事業",
-  "橡膠": "橡膠工業",
-  "橡膠工業": "橡膠工業",
-  "玻璃": "玻璃陶瓷",
-  "玻璃陶瓷": "玻璃陶瓷",
-  "資訊服務": "資訊服務業",
-  "資訊服務業": "資訊服務業",
-  "貿易百貨": "貿易百貨業",
-  "貿易百貨業": "貿易百貨業",
-  "居家生活": "居家生活",
-  "運動休閒": "運動休閒",
-  "數位雲端": "數位雲端",
-  "綠能環保": "綠能環保",
-  "農業科技業": "農業科技業",
-  "文化創意業": "文化創意業",
-  "文創類": "文化創意業",
-  "海外第一": "海外第一",
-  "電子": "電子",
-  "其他": "其他"
-};
-
-function normalizeGroupName(groupName = "") {
-  const raw = String(groupName || "").trim();
-  return GROUP_ALIAS_MAP[raw] || raw.replace(/^上市/, "").replace(/^上櫃/, "") || raw;
-}
-
-const EXTRA_MARKET_GROUP_STOCKS = [
-  // 電子零組件 / PCB / 被動元件
-  { stockCode: "2327", stockName: "國巨", market: "上市", officialIndustry: "電子零組件業", subIndustry: "被動元件", themeTags: ["電零組", "被動元件"], isETF: false, isWarrant: false },
-  { stockCode: "2383", stockName: "台光電", market: "上市", officialIndustry: "電子零組件業", subIndustry: "銅箔基板", themeTags: ["電零組", "PCB", "CCL", "AI"], isETF: false, isWarrant: false },
-  { stockCode: "2368", stockName: "金像電", market: "上市", officialIndustry: "電子零組件業", subIndustry: "PCB", themeTags: ["電零組", "PCB", "AI"], isETF: false, isWarrant: false },
-  { stockCode: "3189", stockName: "景碩", market: "上市", officialIndustry: "電子零組件業", subIndustry: "載板", themeTags: ["電零組", "PCB", "ABF"], isETF: false, isWarrant: false },
-  { stockCode: "8358", stockName: "金居", market: "上櫃", officialIndustry: "電子零組件業", subIndustry: "銅箔", themeTags: ["電零組", "PCB", "CCL"], isETF: false, isWarrant: false },
-  { stockCode: "4958", stockName: "臻鼎-KY", market: "上市", officialIndustry: "電子零組件業", subIndustry: "PCB", themeTags: ["電零組", "PCB"], isETF: false, isWarrant: false },
-
-  // 電腦週邊 / 其他電子 / 通信網路 / 資訊服務
-  { stockCode: "2357", stockName: "華碩", market: "上市", officialIndustry: "電腦及週邊設備業", subIndustry: "品牌電腦", themeTags: ["電腦週邊"], isETF: false, isWarrant: false },
-  { stockCode: "2376", stockName: "技嘉", market: "上市", officialIndustry: "電腦及週邊設備業", subIndustry: "板卡", themeTags: ["電腦週邊", "AI"], isETF: false, isWarrant: false },
-  { stockCode: "2377", stockName: "微星", market: "上市", officialIndustry: "電腦及週邊設備業", subIndustry: "板卡", themeTags: ["電腦週邊", "AI"], isETF: false, isWarrant: false },
-  { stockCode: "2395", stockName: "研華", market: "上市", officialIndustry: "電腦及週邊設備業", subIndustry: "工業電腦", themeTags: ["電腦週邊", "AI"], isETF: false, isWarrant: false },
-  { stockCode: "2404", stockName: "漢唐", market: "上市", officialIndustry: "其他電子業", subIndustry: "廠務工程", themeTags: ["其他電子", "半導體設備"], isETF: false, isWarrant: false },
-  { stockCode: "6196", stockName: "帆宣", market: "上市", officialIndustry: "其他電子業", subIndustry: "廠務工程", themeTags: ["其他電子", "半導體設備"], isETF: false, isWarrant: false },
-  { stockCode: "2345", stockName: "智邦", market: "上市", officialIndustry: "通信網路業", subIndustry: "網通設備", themeTags: ["通信網路", "AI", "CPO"], isETF: false, isWarrant: false },
-  { stockCode: "3596", stockName: "智易", market: "上市", officialIndustry: "通信網路業", subIndustry: "網通設備", themeTags: ["通信網路"], isETF: false, isWarrant: false },
-  { stockCode: "5388", stockName: "中磊", market: "上櫃", officialIndustry: "通信網路業", subIndustry: "網通設備", themeTags: ["通信網路"], isETF: false, isWarrant: false },
-  { stockCode: "3029", stockName: "零壹", market: "上市", officialIndustry: "資訊服務業", subIndustry: "系統整合", themeTags: ["資訊服務", "數位雲端"], isETF: false, isWarrant: false },
-  { stockCode: "5203", stockName: "訊連", market: "上櫃", officialIndustry: "資訊服務業", subIndustry: "軟體", themeTags: ["資訊服務", "AI"], isETF: false, isWarrant: false },
-
-  // 傳產與金融
-  { stockCode: "1476", stockName: "儒鴻", market: "上市", officialIndustry: "紡織纖維", subIndustry: "成衣", themeTags: ["紡織"], isETF: false, isWarrant: false },
-  { stockCode: "1477", stockName: "聚陽", market: "上市", officialIndustry: "紡織纖維", subIndustry: "成衣", themeTags: ["紡織"], isETF: false, isWarrant: false },
-  { stockCode: "2207", stockName: "和泰車", market: "上市", officialIndustry: "汽車工業", subIndustry: "汽車銷售", themeTags: ["汽車"], isETF: false, isWarrant: false },
-  { stockCode: "2227", stockName: "裕日車", market: "上市", officialIndustry: "汽車工業", subIndustry: "汽車銷售", themeTags: ["汽車"], isETF: false, isWarrant: false },
-  { stockCode: "1536", stockName: "和大", market: "上市", officialIndustry: "電機機械", subIndustry: "汽車零組件", themeTags: ["汽車", "電機"], isETF: false, isWarrant: false },
-  { stockCode: "1707", stockName: "葡萄王", market: "上市", officialIndustry: "生技醫療業", subIndustry: "保健食品", themeTags: ["生技醫療"], isETF: false, isWarrant: false },
-  { stockCode: "4105", stockName: "東洋", market: "上櫃", officialIndustry: "生技醫療業", subIndustry: "製藥", themeTags: ["生技醫療"], isETF: false, isWarrant: false },
-  { stockCode: "1717", stockName: "長興", market: "上市", officialIndustry: "化學工業", subIndustry: "化工材料", themeTags: ["化學"], isETF: false, isWarrant: false },
-  { stockCode: "1722", stockName: "台肥", market: "上市", officialIndustry: "化學工業", subIndustry: "肥料", themeTags: ["化學", "農業科技業"], isETF: false, isWarrant: false },
-  { stockCode: "2912", stockName: "統一超", market: "上市", officialIndustry: "貿易百貨業", subIndustry: "零售通路", themeTags: ["貿易百貨", "居家生活"], isETF: false, isWarrant: false },
-  { stockCode: "5904", stockName: "寶雅", market: "上櫃", officialIndustry: "貿易百貨業", subIndustry: "生活百貨", themeTags: ["貿易百貨", "居家生活"], isETF: false, isWarrant: false },
-  { stockCode: "2105", stockName: "正新", market: "上市", officialIndustry: "橡膠工業", subIndustry: "輪胎", themeTags: ["橡膠"], isETF: false, isWarrant: false },
-  { stockCode: "2106", stockName: "建大", market: "上市", officialIndustry: "橡膠工業", subIndustry: "輪胎", themeTags: ["橡膠"], isETF: false, isWarrant: false },
-  { stockCode: "1802", stockName: "台玻", market: "上市", officialIndustry: "玻璃陶瓷", subIndustry: "玻璃", themeTags: ["玻璃"], isETF: false, isWarrant: false },
-  { stockCode: "1904", stockName: "正隆", market: "上市", officialIndustry: "造紙工業", subIndustry: "工紙", themeTags: ["造紙"], isETF: false, isWarrant: false },
-  { stockCode: "1907", stockName: "永豐餘", market: "上市", officialIndustry: "造紙工業", subIndustry: "造紙", themeTags: ["造紙"], isETF: false, isWarrant: false },
-  { stockCode: "2542", stockName: "興富發", market: "上市", officialIndustry: "建材營造", subIndustry: "營建", themeTags: ["營建"], isETF: false, isWarrant: false },
-  { stockCode: "2548", stockName: "華固", market: "上市", officialIndustry: "建材營造", subIndustry: "營建", themeTags: ["營建"], isETF: false, isWarrant: false },
-  { stockCode: "5534", stockName: "長虹", market: "上市", officialIndustry: "建材營造", subIndustry: "營建", themeTags: ["營建"], isETF: false, isWarrant: false },
-  { stockCode: "2707", stockName: "晶華", market: "上市", officialIndustry: "觀光事業", subIndustry: "飯店", themeTags: ["觀光"], isETF: false, isWarrant: false },
-  { stockCode: "2727", stockName: "王品", market: "上市", officialIndustry: "觀光事業", subIndustry: "餐飲", themeTags: ["觀光"], isETF: false, isWarrant: false },
-  { stockCode: "1103", stockName: "嘉泥", market: "上市", officialIndustry: "水泥工業", subIndustry: "水泥", themeTags: ["水泥"], isETF: false, isWarrant: false },
-  { stockCode: "1104", stockName: "環泥", market: "上市", officialIndustry: "水泥工業", subIndustry: "水泥", themeTags: ["水泥"], isETF: false, isWarrant: false },
-  { stockCode: "6505", stockName: "台塑化", market: "上市", officialIndustry: "油電燃氣業", subIndustry: "油品", themeTags: ["油電燃氣", "塑化"], isETF: false, isWarrant: false },
-  { stockCode: "9937", stockName: "全國", market: "上市", officialIndustry: "油電燃氣業", subIndustry: "油品通路", themeTags: ["油電燃氣"], isETF: false, isWarrant: false },
-  { stockCode: "1513", stockName: "中興電", market: "上市", officialIndustry: "電機機械", subIndustry: "重電", themeTags: ["電機", "重電", "電力設備"], isETF: false, isWarrant: false },
-  { stockCode: "1514", stockName: "亞力", market: "上市", officialIndustry: "電機機械", subIndustry: "重電", themeTags: ["電機", "重電", "電力設備"], isETF: false, isWarrant: false },
-  { stockCode: "1605", stockName: "華新", market: "上市", officialIndustry: "電器電纜", subIndustry: "電纜", themeTags: ["電器電纜", "重電"], isETF: false, isWarrant: false },
-  { stockCode: "1609", stockName: "大亞", market: "上市", officialIndustry: "電器電纜", subIndustry: "電纜", themeTags: ["電器電纜", "重電"], isETF: false, isWarrant: false },
-  { stockCode: "2704", stockName: "國賓", market: "上市", officialIndustry: "觀光事業", subIndustry: "飯店", themeTags: ["觀光"], isETF: false, isWarrant: false },
-  { stockCode: "8926", stockName: "台汽電", market: "上櫃", officialIndustry: "油電燃氣業", subIndustry: "汽電共生", themeTags: ["油電燃氣", "綠能環保"], isETF: false, isWarrant: false },
-  { stockCode: "6806", stockName: "森崴能源", market: "上市", officialIndustry: "綠能環保", subIndustry: "再生能源", themeTags: ["綠能環保", "重電"], isETF: false, isWarrant: false },
-];
-
-function normalizeIndustryName(name = "") {
-  const raw = String(name || "其他").trim();
-  const alias = normalizeGroupName(raw);
-
-  if (GROUP_ALIAS_MAP[raw]) return GROUP_ALIAS_MAP[raw];
-  if (alias !== raw) return alias;
-
-  if (raw.includes("面板") || raw.includes("光電")) return "光電業";
-  if (raw.includes("AI伺服器") || raw.includes("伺服器")) return "AI伺服器";
-  if (raw.includes("IC設計")) return "IC設計";
-  if (raw.includes("半導體") || raw.includes("晶圓") || raw.includes("封測")) return "半導體業";
-  if (raw.includes("金融")) return "金融保險業";
-  if (raw.includes("ETF")) return "ETF";
-  if (raw.includes("ETN")) return "ETN";
-  if (raw.includes("航運")) return "航運業";
-  if (raw.includes("水泥")) return "水泥工業";
-  if (raw.includes("塑化")) return "塑化";
-  if (raw.includes("塑膠")) return "塑膠工業";
-  if (raw.includes("鋼鐵")) return "鋼鐵工業";
-  if (raw.includes("電子零組件") || raw.includes("電零組")) return "電子零組件業";
-  if (raw.includes("電子通路")) return "電子通路業";
-  if (raw.includes("通信網路")) return "通信網路業";
-  if (raw.includes("電腦")) return "電腦及週邊設備業";
-  if (raw.includes("其他電子") || raw.includes("其它電子")) return "其他電子業";
-  if (raw.includes("生技")) return "生技醫療業";
-  if (raw.includes("電信")) return "通信網路業";
-  if (raw.includes("食品")) return "食品工業";
-
-  return raw.replace(/^上市/, "").replace(/^上櫃/, "") || raw;
-}
-
-
-
-const STOCK_MASTER = [
-  // 半導體 / IC設計
-  { stockCode: "2330", stockName: "台積電", market: "上市", officialIndustry: "半導體業", subIndustry: "晶圓代工", themeTags: ["半導體", "AI", "先進製程"], isETF: false, isWarrant: false },
-  { stockCode: "2303", stockName: "聯電", market: "上市", officialIndustry: "半導體業", subIndustry: "晶圓代工", themeTags: ["半導體"], isETF: false, isWarrant: false },
-  { stockCode: "2454", stockName: "聯發科", market: "上市", officialIndustry: "半導體業", subIndustry: "IC設計", themeTags: ["IC設計", "手機晶片"], isETF: false, isWarrant: false },
-  { stockCode: "2379", stockName: "瑞昱", market: "上市", officialIndustry: "半導體業", subIndustry: "IC設計", themeTags: ["IC設計", "網通晶片"], isETF: false, isWarrant: false },
-  { stockCode: "3034", stockName: "聯詠", market: "上市", officialIndustry: "半導體業", subIndustry: "IC設計", themeTags: ["IC設計", "面板驅動IC"], isETF: false, isWarrant: false },
-  { stockCode: "3443", stockName: "創意", market: "上市", officialIndustry: "半導體業", subIndustry: "ASIC", themeTags: ["IC設計", "ASIC", "AI"], isETF: false, isWarrant: false },
-  { stockCode: "3661", stockName: "世芯-KY", market: "上市", officialIndustry: "半導體業", subIndustry: "ASIC", themeTags: ["IC設計", "ASIC", "AI"], isETF: false, isWarrant: false },
-  { stockCode: "3035", stockName: "智原", market: "上市", officialIndustry: "半導體業", subIndustry: "ASIC", themeTags: ["IC設計", "ASIC"], isETF: false, isWarrant: false },
-  { stockCode: "4966", stockName: "譜瑞-KY", market: "上市", officialIndustry: "半導體業", subIndustry: "高速傳輸IC", themeTags: ["IC設計", "高速傳輸"], isETF: false, isWarrant: false },
-  { stockCode: "6415", stockName: "矽力*-KY", market: "上市", officialIndustry: "半導體業", subIndustry: "電源管理IC", themeTags: ["IC設計", "電源管理"], isETF: false, isWarrant: false },
-  { stockCode: "3227", stockName: "原相", market: "上櫃", officialIndustry: "半導體業", subIndustry: "感測IC", themeTags: ["IC設計", "感測器"], isETF: false, isWarrant: false },
-  { stockCode: "3264", stockName: "欣銓", market: "上櫃", officialIndustry: "半導體業", subIndustry: "IC測試", themeTags: ["半導體", "封測"], isETF: false, isWarrant: false },
-  { stockCode: "5274", stockName: "信驊", market: "上櫃", officialIndustry: "半導體業", subIndustry: "伺服器管理晶片", themeTags: ["IC設計", "AI伺服器"], isETF: false, isWarrant: false },
-  { stockCode: "8299", stockName: "群聯", market: "上櫃", officialIndustry: "半導體業", subIndustry: "儲存控制IC", themeTags: ["IC設計", "儲存"], isETF: false, isWarrant: false },
-
-  // AI伺服器 / 散熱 / 電子零組件
-  { stockCode: "2382", stockName: "廣達", market: "上市", officialIndustry: "電腦及週邊設備業", subIndustry: "伺服器代工", themeTags: ["AI伺服器", "伺服器"], isETF: false, isWarrant: false },
-  { stockCode: "3231", stockName: "緯創", market: "上市", officialIndustry: "電腦及週邊設備業", subIndustry: "伺服器代工", themeTags: ["AI伺服器", "伺服器"], isETF: false, isWarrant: false },
-  { stockCode: "6669", stockName: "緯穎", market: "上市", officialIndustry: "電腦及週邊設備業", subIndustry: "雲端伺服器", themeTags: ["AI伺服器", "雲端"], isETF: false, isWarrant: false },
-  { stockCode: "2356", stockName: "英業達", market: "上市", officialIndustry: "電腦及週邊設備業", subIndustry: "伺服器代工", themeTags: ["AI伺服器", "伺服器"], isETF: false, isWarrant: false },
-  { stockCode: "2317", stockName: "鴻海", market: "上市", officialIndustry: "其他電子業", subIndustry: "EMS", themeTags: ["AI伺服器", "電子代工"], isETF: false, isWarrant: false },
-  { stockCode: "3017", stockName: "奇鋐", market: "上市", officialIndustry: "電腦及週邊設備業", subIndustry: "散熱", themeTags: ["散熱", "AI"], isETF: false, isWarrant: false },
-  { stockCode: "3324", stockName: "雙鴻", market: "上櫃", officialIndustry: "電腦及週邊設備業", subIndustry: "散熱", themeTags: ["散熱", "AI"], isETF: false, isWarrant: false },
-  { stockCode: "3653", stockName: "健策", market: "上市", officialIndustry: "電子零組件業", subIndustry: "散熱 / 均熱片", themeTags: ["散熱", "AI"], isETF: false, isWarrant: false },
-  { stockCode: "6230", stockName: "尼得科超眾", market: "上市", officialIndustry: "電腦及週邊設備業", subIndustry: "散熱", themeTags: ["散熱"], isETF: false, isWarrant: false },
-  { stockCode: "2327", stockName: "國巨", market: "上市", officialIndustry: "電子零組件業", subIndustry: "被動元件", themeTags: ["被動元件"], isETF: false, isWarrant: false },
-  { stockCode: "3037", stockName: "欣興", market: "上市", officialIndustry: "電子零組件業", subIndustry: "PCB", themeTags: ["PCB", "ABF"], isETF: false, isWarrant: false },
-  { stockCode: "8046", stockName: "南電", market: "上市", officialIndustry: "電子零組件業", subIndustry: "載板", themeTags: ["PCB", "ABF"], isETF: false, isWarrant: false },
-  { stockCode: "6213", stockName: "聯茂", market: "上市", officialIndustry: "電子零組件業", subIndustry: "銅箔基板", themeTags: ["PCB", "CCL"], isETF: false, isWarrant: false },
-
-  // 面板 / 光電
-  { stockCode: "2409", stockName: "友達", market: "上市", officialIndustry: "光電業", subIndustry: "面板", themeTags: ["面板"], isETF: false, isWarrant: false },
-  { stockCode: "3481", stockName: "群創", market: "上市", officialIndustry: "光電業", subIndustry: "面板", themeTags: ["面板"], isETF: false, isWarrant: false },
-  { stockCode: "6116", stockName: "彩晶", market: "上市", officialIndustry: "光電業", subIndustry: "面板", themeTags: ["面板"], isETF: false, isWarrant: false },
-  { stockCode: "2489", stockName: "瑞軒", market: "上市", officialIndustry: "光電業", subIndustry: "顯示器", themeTags: ["面板", "顯示器"], isETF: false, isWarrant: false },
-  { stockCode: "3504", stockName: "揚明光", market: "上市", officialIndustry: "光電業", subIndustry: "光學元件", themeTags: ["光電"], isETF: false, isWarrant: false },
-  { stockCode: "4935", stockName: "茂林-KY", market: "上市", officialIndustry: "光電業", subIndustry: "背光模組", themeTags: ["面板", "背光模組"], isETF: false, isWarrant: false },
-  { stockCode: "5425", stockName: "台半", market: "上櫃", officialIndustry: "半導體業", subIndustry: "二極體", themeTags: ["半導體"], isETF: false, isWarrant: false },
-
-  // 傳產 / 金融
-  { stockCode: "2603", stockName: "長榮", market: "上市", officialIndustry: "航運業", subIndustry: "貨櫃航運", themeTags: ["航運"], isETF: false, isWarrant: false },
-  { stockCode: "2609", stockName: "陽明", market: "上市", officialIndustry: "航運業", subIndustry: "貨櫃航運", themeTags: ["航運"], isETF: false, isWarrant: false },
-  { stockCode: "2615", stockName: "萬海", market: "上市", officialIndustry: "航運業", subIndustry: "貨櫃航運", themeTags: ["航運"], isETF: false, isWarrant: false },
-  { stockCode: "2610", stockName: "華航", market: "上市", officialIndustry: "航運業", subIndustry: "航空", themeTags: ["航運", "航空"], isETF: false, isWarrant: false },
-  { stockCode: "2618", stockName: "長榮航", market: "上市", officialIndustry: "航運業", subIndustry: "航空", themeTags: ["航運", "航空"], isETF: false, isWarrant: false },
-  { stockCode: "1101", stockName: "台泥", market: "上市", officialIndustry: "水泥工業", subIndustry: "水泥", themeTags: ["水泥"], isETF: false, isWarrant: false },
-  { stockCode: "1102", stockName: "亞泥", market: "上市", officialIndustry: "水泥工業", subIndustry: "水泥", themeTags: ["水泥"], isETF: false, isWarrant: false },
-  { stockCode: "1301", stockName: "台塑", market: "上市", officialIndustry: "塑膠工業", subIndustry: "塑化", themeTags: ["塑化"], isETF: false, isWarrant: false },
-  { stockCode: "1303", stockName: "南亞", market: "上市", officialIndustry: "塑膠工業", subIndustry: "塑化", themeTags: ["塑化"], isETF: false, isWarrant: false },
-  { stockCode: "1326", stockName: "台化", market: "上市", officialIndustry: "塑膠工業", subIndustry: "塑化", themeTags: ["塑化"], isETF: false, isWarrant: false },
-  { stockCode: "2002", stockName: "中鋼", market: "上市", officialIndustry: "鋼鐵工業", subIndustry: "鋼鐵", themeTags: ["鋼鐵"], isETF: false, isWarrant: false },
-  { stockCode: "2881", stockName: "富邦金", market: "上市", officialIndustry: "金融保險業", subIndustry: "金控", themeTags: ["金融"], isETF: false, isWarrant: false },
-  { stockCode: "2882", stockName: "國泰金", market: "上市", officialIndustry: "金融保險業", subIndustry: "金控", themeTags: ["金融"], isETF: false, isWarrant: false },
-  { stockCode: "2886", stockName: "兆豐金", market: "上市", officialIndustry: "金融保險業", subIndustry: "金控", themeTags: ["金融"], isETF: false, isWarrant: false },
-  { stockCode: "2891", stockName: "中信金", market: "上市", officialIndustry: "金融保險業", subIndustry: "金控", themeTags: ["金融"], isETF: false, isWarrant: false },
-  { stockCode: "1216", stockName: "統一", market: "上市", officialIndustry: "食品工業", subIndustry: "食品", themeTags: ["食品"], isETF: false, isWarrant: false },
-  { stockCode: "2412", stockName: "中華電", market: "上市", officialIndustry: "通信網路業", subIndustry: "電信", themeTags: ["電信"], isETF: false, isWarrant: false },
-
-  // 補充：概念族群 stockMaster 成分股（官方產業仍維持官方分類，概念放 themeTags）
-  { stockCode: "6435", stockName: "大中", market: "上櫃", officialIndustry: "半導體業", subIndustry: "MOSFET / 電源元件", themeTags: ["電源管理", "MOSFET", "IC設計"], isETF: false, isWarrant: false },
-  { stockCode: "6651", stockName: "全宇昕", market: "上櫃", officialIndustry: "半導體業", subIndustry: "功率半導體", themeTags: ["電源管理", "功率元件"], isETF: false, isWarrant: false },
-  { stockCode: "3317", stockName: "尼克森", market: "上櫃", officialIndustry: "半導體業", subIndustry: "MOSFET", themeTags: ["電源管理", "MOSFET"], isETF: false, isWarrant: false },
-  { stockCode: "6138", stockName: "茂達", market: "上櫃", officialIndustry: "半導體業", subIndustry: "電源管理IC", themeTags: ["電源管理", "IC設計"], isETF: false, isWarrant: false },
-  { stockCode: "3588", stockName: "通嘉", market: "上市", officialIndustry: "半導體業", subIndustry: "電源管理IC", themeTags: ["電源管理", "IC設計"], isETF: false, isWarrant: false },
-  { stockCode: "8261", stockName: "富鼎", market: "上櫃", officialIndustry: "半導體業", subIndustry: "MOSFET / 電源元件", themeTags: ["電源管理", "MOSFET"], isETF: false, isWarrant: false },
-  { stockCode: "5299", stockName: "杰力", market: "上櫃", officialIndustry: "半導體業", subIndustry: "電源管理IC", themeTags: ["電源管理", "IC設計"], isETF: false, isWarrant: false },
-  { stockCode: "4952", stockName: "凌通", market: "上市", officialIndustry: "半導體業", subIndustry: "MCU / 消費IC", themeTags: ["IC設計", "手機晶片"], isETF: false, isWarrant: false },
-  { stockCode: "2436", stockName: "偉詮電", market: "上市", officialIndustry: "半導體業", subIndustry: "電源管理IC", themeTags: ["電源管理", "IC設計"], isETF: false, isWarrant: false },
-  { stockCode: "4923", stockName: "力士", market: "上櫃", officialIndustry: "半導體業", subIndustry: "功率半導體", themeTags: ["電源管理", "功率元件"], isETF: false, isWarrant: false },
-  { stockCode: "6693", stockName: "廣閎科", market: "上櫃", officialIndustry: "半導體業", subIndustry: "電源管理IC", themeTags: ["電源管理", "IC設計"], isETF: false, isWarrant: false },
-  { stockCode: "6531", stockName: "愛普*", market: "上市", officialIndustry: "半導體業", subIndustry: "記憶體 / IP", themeTags: ["ASIC", "高速傳輸", "IC設計", "AI"], isETF: false, isWarrant: false },
-  { stockCode: "8016", stockName: "矽創", market: "上市", officialIndustry: "半導體業", subIndustry: "驅動IC", themeTags: ["IC設計", "面板驅動IC"], isETF: false, isWarrant: false },
-  { stockCode: "2401", stockName: "凌陽", market: "上市", officialIndustry: "半導體業", subIndustry: "多媒體IC", themeTags: ["IC設計", "消費IC"], isETF: false, isWarrant: false },
-  { stockCode: "5269", stockName: "祥碩", market: "上市", officialIndustry: "半導體業", subIndustry: "高速傳輸IC", themeTags: ["高速傳輸", "IC設計"], isETF: false, isWarrant: false },
-  { stockCode: "3260", stockName: "威剛", market: "上市", officialIndustry: "電子通路業", subIndustry: "記憶體模組", themeTags: ["儲存", "記憶體"], isETF: false, isWarrant: false },
-  { stockCode: "8088", stockName: "品安", market: "上櫃", officialIndustry: "半導體業", subIndustry: "記憶體模組", themeTags: ["儲存", "記憶體"], isETF: false, isWarrant: false },
-];
-
-
-const conceptMap = {
-  "電源管理": [
-    "6415", "6435", "6651", "3317", "6138", "3588",
-    "8261", "2454", "5299", "4952", "2436", "4923", "6693"
-  ],
-  "IC設計": [
-    "2454", "3034", "6415", "2379", "3443", "5274",
-    "3227", "4966", "6531", "8016", "2401"
-  ],
-  "ASIC": [
-    "3661", "3443", "3035", "4966", "6531"
-  ],
-  "AI": [
-    "2382", "3231", "2356", "3017", "3324", "6669",
-    "2376", "2377", "2454", "3443", "3661"
-  ],
-  "高速傳輸": [
-    "3443", "3661", "5269", "4966", "6531", "2379"
-  ],
-  "手機晶片": [
-    "2454", "3034", "3443", "6415", "2379"
-  ],
-  "儲存": [
-    "2408", "2344", "3260", "8299", "6488", "8088"
-  ]
-
-  ,
-  "ABF": ["3037", "8046", "3189", "8358", "6153", "2383", "2368", "4958"],
-  "PCB": ["3037", "8046", "3189", "8358", "6153", "2383", "2368", "4958", "6213"],
-  "電子零組件業": ["2327", "2383", "4938", "3037", "8046", "6274", "6231", "6187", "3217", "6213", "3189", "8358", "6153"],
-  "通路": ["8069", "3702", "2347", "3036", "3209", "3260"],
-  "重電": ["1513", "1514", "1609", "1605", "1504", "2371"],
-  "配電盤": ["1513", "1514", "2371"],
-  "電力設備": ["1513", "1514", "1609", "1605", "1504", "2371"],
-  "面板": ["2409", "3481", "6116", "2489", "3504", "4935", "2406", "2476", "4934"],
-  "光電": ["2409", "3481", "6116", "2489", "3504", "4935", "2406", "2476", "4934", "8069"],
-  "散熱": ["3017", "3324", "3653", "6230"],
-  "AI伺服器": ["2382", "3231", "6669", "2356", "2317", "3017", "3324", "3653"],
-  "航運": ["2603", "2609", "2615", "2610", "2618"],
-  "金融": ["2881", "2882", "2886", "2891"],
-  "半導體業": ["2330", "2303", "2454", "2379", "3034", "3443", "3661", "3035", "4966", "6415", "3227", "3264", "5274", "8299", "6435", "6651", "3317", "6138", "3588", "8261", "5299", "2436", "4923", "6693"]
-
-  ,
-  "電零組": ["2327", "2383", "2368", "3037", "8046", "3189", "8358", "4958", "6213"],
-  "紡織": ["1476", "1477", "1402"],
-  "紡織纖維": ["1476", "1477", "1402"],
-  "汽車": ["2207", "2227", "1536"],
-  "汽車工業": ["2207", "2227", "1536"],
-  "化學生醫": ["1717", "1722", "1707", "4105"],
-  "金融保險業": ["2881", "2882", "2886", "2891"],
-  "鋼鐵工業": ["2002"],
-  "航運業": ["2603", "2609", "2615", "2610", "2618"],
-  "電器電纜": ["1605", "1609"],
-  "水泥工業": ["1101", "1102", "1103", "1104"],
-  "油電燃氣業": ["6505", "9937", "8926"],
-  "造紙工業": ["1904", "1907"],
-  "營建": ["2542", "2548", "5534"],
-  "建材營造": ["2542", "2548", "5534"],
-  "數位雲端": ["3029", "5203"],
-  "生技醫療業": ["1707", "4105"],
-  "資訊服務業": ["3029", "5203"],
-  "塑膠工業": ["1301", "1303", "1326"],
-  "電腦及週邊設備業": ["2382", "3231", "2356", "2357", "2376", "2377", "2395"],
-  "觀光事業": ["2707", "2727", "2704"],
-  "化學工業": ["1717", "1722"],
-  "居家生活": ["2912", "5904"],
-  "電子通路業": ["3702", "2347", "3036", "3209", "3260"],
-  "電機機械": ["1513", "1514", "1504", "1536"],
-  "通信網路業": ["2412", "3045", "4904", "2345", "3596", "5388"],
-  "電子": ["2330", "2454", "2382", "2327", "2317", "2345"],
-  "貿易百貨業": ["2912", "5904"],
-  "橡膠工業": ["2105", "2106"],
-  "其他電子業": ["2317", "2404", "6196"],
-  "綠能環保": ["6806", "8926"],
-  "光電業": ["2409", "3481", "6116", "2489", "3504", "4935", "8069"],
-  "食品工業": ["1216"],
-  "海外第一": [],
-  "玻璃陶瓷": ["1802"],
-  "運動休閒": [],
-  "農業科技業": ["1722"],
-  "文化創意業": [],
-  "文創類": []
-};
-
-function getStocksByGroup(groupName) {
-  const rawKey = String(groupName || "").trim();
-  const key = normalizeGroupName(rawKey);
-
-  return STOCK_MASTER_ALL.filter((stock) => {
-    if (!isCommonTaiwanStock(stock)) return false;
-
-    return (
-      stock.officialIndustry === key ||
-      stock.officialIndustry === rawKey ||
-      normalizeGroupName(stock.officialIndustry) === key ||
-      stock.subIndustry === key ||
-      stock.subIndustry === rawKey ||
-      stock.themeTags?.includes(key) ||
-      stock.themeTags?.includes(rawKey)
-    );
-  });
-}
-
-function resolveGroupStocks(groupName) {
-  const rawKey = String(groupName || "").trim();
-  const key = normalizeGroupName(rawKey);
-  const conceptCodes = conceptMap[rawKey] || conceptMap[key];
-
-  if (conceptCodes) {
-    const codeSet = new Set(conceptCodes.filter((code) => /^\d{4}$/.test(String(code))));
-    const result = STOCK_MASTER_ALL.filter((stock) => {
-      return isCommonTaiwanStock(stock) && codeSet.has(stock.stockCode);
-    });
-
-    if (result.length < 5 && conceptCodes.length >= 5) {
-      console.warn("此分類可能被誤判為 officialIndustry，請檢查 themeTags 或 conceptMap。", rawKey, result);
-    }
-
-    return result;
-  }
-
-  const result = getStocksByGroup(key);
-
-  if (result.length < 5) {
-    console.warn("此分類可能被誤判為 officialIndustry，請檢查 themeTags 或 conceptMap。", rawKey, result);
-  }
-
-  return result;
-}
-
-/*
-後端 API 建議：
-GET /api/industry-groups
-  回傳 sourceA 產業強弱資料。
-
-GET /api/groups/:groupName/stocks
-  const masters = resolveGroupStocks(req.params.groupName)
-  const quotes = await getRealtimeQuotes(masters.map(s => s.stockCode))
-  res.json(masters.map(master => mergeRealtimeQuote(master, new Map(quotes.map(q => [q.symbol, q])))))
-
-SQL schema:
-CREATE TABLE stock_master (
-  stock_code VARCHAR(4) PRIMARY KEY,
-  stock_name TEXT NOT NULL,
-  market TEXT NOT NULL,
-  official_industry TEXT NOT NULL,
-  theme_tags JSON NOT NULL,
-  is_etf BOOLEAN DEFAULT FALSE,
-  is_warrant BOOLEAN DEFAULT FALSE
-);
-*/
-function mergeRealtimeQuote(master, quoteMap) {
-  const quote = quoteMap?.get?.(master.stockCode);
-
-  if (!quote) {
-    return {
-      symbol: master.stockCode,
-      name: master.stockName,
-      officialIndustry: master.officialIndustry,
-      subIndustry: master.subIndustry,
-      themeTags: master.themeTags,
-      score: null,
-      changePct: null,
-      volume: null,
-      volumeRatio: null,
-      tradeSignal: {
-        action: "待更新",
-        reasons: ["stockMaster 成分股，等待即時行情資料"],
-      },
-    };
-  }
-
-  return {
-    ...quote,
-    symbol: master.stockCode,
-    name: master.stockName,
-    officialIndustry: master.officialIndustry,
-    subIndustry: master.subIndustry,
-    themeTags: master.themeTags,
-  };
-}
-
-
-const EXTRA_STOCK_MASTER = [
-  // ABF / PCB / 電子零組件
-  { stockCode: "3189", stockName: "景碩", market: "上市", officialIndustry: "電子零組件業", subIndustry: "載板", themeTags: ["PCB", "ABF"], isETF: false, isWarrant: false },
-  { stockCode: "8358", stockName: "金居", market: "上櫃", officialIndustry: "電子零組件業", subIndustry: "銅箔", themeTags: ["PCB", "CCL"], isETF: false, isWarrant: false },
-  { stockCode: "6153", stockName: "嘉聯益", market: "上市", officialIndustry: "電子零組件業", subIndustry: "軟板", themeTags: ["PCB"], isETF: false, isWarrant: false },
-  { stockCode: "2383", stockName: "台光電", market: "上市", officialIndustry: "電子零組件業", subIndustry: "銅箔基板", themeTags: ["PCB", "CCL", "AI"], isETF: false, isWarrant: false },
-  { stockCode: "2368", stockName: "金像電", market: "上市", officialIndustry: "電子零組件業", subIndustry: "PCB", themeTags: ["PCB", "AI"], isETF: false, isWarrant: false },
-  { stockCode: "4958", stockName: "臻鼎-KY", market: "上市", officialIndustry: "電子零組件業", subIndustry: "PCB", themeTags: ["PCB"], isETF: false, isWarrant: false },
-
-  // 通路 / 記憶體通路
-  { stockCode: "8069", stockName: "元太", market: "上櫃", officialIndustry: "光電業", subIndustry: "電子紙", themeTags: ["電子紙", "通路"], isETF: false, isWarrant: false },
-  { stockCode: "3702", stockName: "大聯大", market: "上市", officialIndustry: "電子通路業", subIndustry: "電子零組件通路", themeTags: ["通路"], isETF: false, isWarrant: false },
-  { stockCode: "2347", stockName: "聯強", market: "上市", officialIndustry: "電子通路業", subIndustry: "資訊通路", themeTags: ["通路"], isETF: false, isWarrant: false },
-  { stockCode: "3036", stockName: "文曄", market: "上市", officialIndustry: "電子通路業", subIndustry: "半導體通路", themeTags: ["通路", "半導體"], isETF: false, isWarrant: false },
-  { stockCode: "3209", stockName: "全科", market: "上市", officialIndustry: "電子通路業", subIndustry: "電子零組件通路", themeTags: ["通路"], isETF: false, isWarrant: false },
-
-  // 重電 / 配電盤 / 電力設備
-  { stockCode: "1513", stockName: "中興電", market: "上市", officialIndustry: "電機機械", subIndustry: "重電", themeTags: ["重電", "配電盤", "電力設備"], isETF: false, isWarrant: false },
-  { stockCode: "1514", stockName: "亞力", market: "上市", officialIndustry: "電機機械", subIndustry: "重電", themeTags: ["重電", "配電盤", "電力設備"], isETF: false, isWarrant: false },
-  { stockCode: "1609", stockName: "大亞", market: "上市", officialIndustry: "電器電纜", subIndustry: "電纜", themeTags: ["重電", "電力設備", "電纜"], isETF: false, isWarrant: false },
-  { stockCode: "1605", stockName: "華新", market: "上市", officialIndustry: "電器電纜", subIndustry: "電纜", themeTags: ["重電", "電纜"], isETF: false, isWarrant: false },
-  { stockCode: "1504", stockName: "東元", market: "上市", officialIndustry: "電機機械", subIndustry: "馬達", themeTags: ["重電", "電力設備"], isETF: false, isWarrant: false },
-  { stockCode: "2371", stockName: "大同", market: "上市", officialIndustry: "電機機械", subIndustry: "重電", themeTags: ["重電", "電力設備"], isETF: false, isWarrant: false },
-
-  // 電源管理 / PMIC
-  { stockCode: "6435", stockName: "大中", market: "上櫃", officialIndustry: "半導體業", subIndustry: "MOSFET / 電源元件", themeTags: ["電源管理", "MOSFET", "IC設計"], isETF: false, isWarrant: false },
-  { stockCode: "6651", stockName: "全宇昕", market: "上櫃", officialIndustry: "半導體業", subIndustry: "功率半導體", themeTags: ["電源管理", "功率元件"], isETF: false, isWarrant: false },
-  { stockCode: "3317", stockName: "尼克森", market: "上櫃", officialIndustry: "半導體業", subIndustry: "MOSFET", themeTags: ["電源管理", "MOSFET"], isETF: false, isWarrant: false },
-  { stockCode: "6138", stockName: "茂達", market: "上櫃", officialIndustry: "半導體業", subIndustry: "電源管理IC", themeTags: ["電源管理", "IC設計"], isETF: false, isWarrant: false },
-  { stockCode: "3588", stockName: "通嘉", market: "上市", officialIndustry: "半導體業", subIndustry: "電源管理IC", themeTags: ["電源管理", "IC設計"], isETF: false, isWarrant: false },
-  { stockCode: "8261", stockName: "富鼎", market: "上櫃", officialIndustry: "半導體業", subIndustry: "MOSFET / 電源元件", themeTags: ["電源管理", "MOSFET"], isETF: false, isWarrant: false },
-  { stockCode: "5299", stockName: "杰力", market: "上櫃", officialIndustry: "半導體業", subIndustry: "電源管理IC", themeTags: ["電源管理", "IC設計"], isETF: false, isWarrant: false },
-  { stockCode: "4952", stockName: "凌通", market: "上市", officialIndustry: "半導體業", subIndustry: "MCU / 消費IC", themeTags: ["IC設計", "手機晶片"], isETF: false, isWarrant: false },
-  { stockCode: "2436", stockName: "偉詮電", market: "上市", officialIndustry: "半導體業", subIndustry: "電源管理IC", themeTags: ["電源管理", "IC設計"], isETF: false, isWarrant: false },
-  { stockCode: "4923", stockName: "力士", market: "上櫃", officialIndustry: "半導體業", subIndustry: "功率半導體", themeTags: ["電源管理", "功率元件"], isETF: false, isWarrant: false },
-  { stockCode: "6693", stockName: "廣閎科", market: "上櫃", officialIndustry: "半導體業", subIndustry: "電源管理IC", themeTags: ["電源管理", "IC設計"], isETF: false, isWarrant: false },
-
-  // ASIC / 高速傳輸 / 儲存
-  { stockCode: "6531", stockName: "愛普*", market: "上市", officialIndustry: "半導體業", subIndustry: "記憶體 / IP", themeTags: ["ASIC", "高速傳輸", "IC設計", "AI"], isETF: false, isWarrant: false },
-  { stockCode: "5269", stockName: "祥碩", market: "上市", officialIndustry: "半導體業", subIndustry: "高速傳輸IC", themeTags: ["高速傳輸", "IC設計"], isETF: false, isWarrant: false },
-  { stockCode: "3260", stockName: "威剛", market: "上市", officialIndustry: "電子通路業", subIndustry: "記憶體模組", themeTags: ["儲存", "記憶體"], isETF: false, isWarrant: false },
-  { stockCode: "8088", stockName: "品安", market: "上櫃", officialIndustry: "半導體業", subIndustry: "記憶體模組", themeTags: ["儲存", "記憶體"], isETF: false, isWarrant: false },
-];
-
-const STOCK_MASTER_ALL = [
-  ...STOCK_MASTER,
-  ...EXTRA_STOCK_MASTER.filter((extra) => !STOCK_MASTER.some((base) => base.stockCode === extra.stockCode)),
-  ...EXTRA_MARKET_GROUP_STOCKS.filter((extra) => {
-    return !STOCK_MASTER.some((base) => base.stockCode === extra.stockCode) &&
-      !EXTRA_STOCK_MASTER.some((base) => base.stockCode === extra.stockCode);
-  }),
-];
-
-function isCommonTaiwanStock(master) {
-  return (
-    master &&
-    /^\d{4}$/.test(master.stockCode) &&
-    !master.isETF &&
-    !master.isWarrant &&
-    master.stockName &&
-    /[一-龥]/.test(master.stockName) &&
-    !/^[A-Za-z0-9\s.-]+$/.test(master.stockName)
-  );
-}
-
-function getMasterByCode(code) {
-  const key = String(code || "").replace(/\D/g, "").slice(0, 4);
-  return STOCK_MASTER_ALL.find((item) => item.stockCode === key);
-}
-
-function getIndustryKeyFromMaster(master) {
-  if (!master) return "其他";
-
-  const priorityConcepts = [
-    "電源管理", "ASIC", "AI", "高速傳輸", "手機晶片", "儲存",
-    "ABF", "PCB", "面板", "AI伺服器", "散熱", "IC設計",
-    "電零組", "紡織", "汽車", "化學生醫", "金融", "鋼鐵",
-    "航運", "電器電纜", "水泥", "油電燃氣", "造紙", "營建",
-    "數位雲端", "生技醫療", "資訊服務", "塑膠", "電腦週邊",
-    "觀光", "化學", "居家生活", "電子通路", "電機", "通信網路",
-    "電子", "貿易百貨", "橡膠", "其他電子", "綠能環保", "光電",
-    "食品", "玻璃", "運動休閒", "農業科技業", "文化創意業"
-  ];
-  const matchedConcept = priorityConcepts.find((tag) => master.themeTags?.includes(tag));
-
-  return matchedConcept || master.officialIndustry;
-}
-
-function getIndustryMembers(industryName) {
-  return resolveGroupStocks(industryName);
-}
-
-const INDUSTRY_RELATED_STOCKS = {
-  "上市面板 / 光電": [
-    "2409", "3481", "6116", "2489", "3504", "4935", "2406", "2476", "4934"
-  ],
-  "IC設計": [
-    "2454", "2379", "3034", "3443", "3661", "3035", "4966", "3227", "3264", "5274", "8299", "6415"
-  ],
-  "半導體": [
-    "2330", "2303", "3711", "2408", "2344", "2379", "3034", "3443", "3661", "5274", "5347", "5483", "6488", "3105", "3264"
-  ],
-  "AI伺服器": [
-    "2382", "3231", "6669", "2356", "2317", "2357", "2376", "2377", "3017", "3324", "3653", "6274", "6231"
-  ],
-  "散熱": [
-    "3017", "3324", "3653", "2421", "3338", "6275", "6230"
-  ],
-  "電子零組件": [
-    "2327", "2383", "4938", "3037", "8046", "6274", "6231", "6187", "3217", "6213"
-  ],
-  "金融": [
-    "2881", "2882", "2883", "2884", "2885", "2886", "2887", "2890", "2891", "2892", "2801", "5871", "5880"
-  ],
-  "ETF": [
-    "0050", "0056", "006208", "00878", "00919", "00929", "00940", "00939", "00922", "00881", "00891", "00892", "00935", "00952"
-  ],
-  "航運": [
-    "2603", "2609", "2615", "2610", "2618", "2606", "2637", "5608"
-  ],
-  "水泥": [
-    "1101", "1102", "1103", "1104", "1108", "1109"
-  ],
-  "塑化": [
-    "1301", "1303", "1326", "6505", "1314", "1312", "1304", "1305"
-  ],
-  "鋼鐵": [
-    "2002", "2014", "2027", "2023", "2031", "9958", "5009"
-  ],
-  "電信": [
-    "2412", "3045", "4904"
-  ],
-  "食品": [
-    "1216", "1215", "1229", "1231", "1232", "1234", "1702"
-  ],
-  "電子": [
-    "2301", "2353", "2354", "2356", "2357", "2395", "2324", "4938", "2382"
-  ],
-};
-
-function getRelatedSymbolsForIndustry(industryName = "") {
-  const normalized = normalizeIndustryName(industryName);
-  if (INDUSTRY_RELATED_STOCKS[normalized]) return INDUSTRY_RELATED_STOCKS[normalized];
-
-  const foundKey = Object.keys(INDUSTRY_RELATED_STOCKS).find((key) => {
-    return normalized.includes(key) || key.includes(normalized);
-  });
-
-  return foundKey ? INDUSTRY_RELATED_STOCKS[foundKey] : [];
-}
-
-function buildInstitutionalFlow(stock) {
-  const symbol = String(stock?.symbol || "0000");
-  const volume = Number(stock?.volume || stock?.history?.at?.(-1)?.volume || 0);
-  const seed = [...symbol].reduce((sum, ch) => sum + ch.charCodeAt(0), 0);
-  const unit = volume > 0 ? Math.max(1, Math.round(volume / 1000)) : 1000;
-
-  const foreignBuy = Math.round(unit * (0.32 + (seed % 17) / 100));
-  const foreignSell = Math.round(unit * (0.30 + (seed % 13) / 100));
-  const trustBuy = Math.round(unit * (0.08 + (seed % 7) / 100));
-  const trustSell = Math.round(unit * (0.07 + (seed % 5) / 100));
-  const dealerBuy = Math.round(unit * (0.06 + (seed % 6) / 100));
-  const dealerSell = Math.round(unit * (0.055 + (seed % 4) / 100));
-
-  const rows = [
-    { name: "外資", buy: foreignBuy, sell: foreignSell },
-    { name: "投信", buy: trustBuy, sell: trustSell },
-    { name: "自營商", buy: dealerBuy, sell: dealerSell },
-  ].map((row) => ({ ...row, net: row.buy - row.sell }));
-
-  const totalNet = rows.reduce((sum, row) => sum + row.net, 0);
-
-  return {
-    rows,
-    totalNet,
-    tone: totalNet > 0 ? "偏多" : totalNet < 0 ? "偏空" : "中性",
-    source: "暫用量能估算模型；若需正式法人資料，後續可接 TWSE / TPEx 三大法人 API。",
-  };
-}
-
-
-function classifyStrongStock(stock) {
-  if (!stock) return "待觀察";
-  if ((stock.volumeRatio || 0) >= 1.5 && stock.changePct > 0) return "爆量上漲";
-  if (stock.score >= 80) return "AI強勢";
-  if (stock.changePct >= 2) return "漲幅強勢";
-  if ((stock.volumeRatio || 0) >= 1.3) return "量能強勢";
-  if (stock.tradeSignal?.action === "BUY") return "買進訊號";
-  return stock.baseType || "系統候選";
-}
-
-
-
 
 function klineSma(values, period, endIndex = values.length - 1) {
   if (!values?.length || endIndex < period - 1) return null;
@@ -1990,18 +1274,52 @@ function cleanNumber(value) {
   return Number.isFinite(n) ? n : null;
 }
 
-async function fetchYahooHistory(input, range = "6mo", interval = "1d") {
-  const symbol = resolveSymbol(input);
-  if (!symbol) throw new Error("請輸入股票代碼或名稱");
 
+function buildYahooSymbolCandidates(input) {
+  const raw = String(input || "").trim().toUpperCase();
+  const resolved = resolveSymbol(raw);
+  const base = String(resolved || raw).trim().toUpperCase();
+  const noSuffix = base.replace(/\.(TW|TWO)$/i, "");
+
+  const list = [];
+  if (base) list.push(base);
+
+  if (/^\d{4,6}$/.test(noSuffix)) {
+    list.push(`${noSuffix}.TW`);
+    list.push(`${noSuffix}.TWO`);
+  }
+
+  return [...new Set(list.filter(Boolean))];
+}
+
+async function fetchYahooChartResult(symbol, range = "6mo", interval = "1d") {
   const url = `${API_BASE}/api/yahoo/chart/${encodeURIComponent(symbol)}?range=${range}&interval=${interval}&_=${Date.now()}`;
   const res = await fetch(url);
-  if (!res.ok) throw new Error(`Yahoo 資料抓取失敗：${symbol}`);
+  if (!res.ok) return null;
 
   const json = await res.json();
   const result = json?.chart?.result?.[0];
-  if (!result) throw new Error(`找不到股票資料：${symbol}`);
+  return result ? { result, symbol } : null;
+}
 
+async function fetchYahooHistory(input, range = "6mo", interval = "1d") {
+  const candidates = buildYahooSymbolCandidates(input);
+  if (!candidates.length) throw new Error("請輸入股票代碼或名稱");
+
+  let payload = null;
+  let lastTried = "";
+
+  for (const candidate of candidates) {
+    lastTried = candidate;
+    payload = await fetchYahooChartResult(candidate, range, interval);
+    if (payload?.result) break;
+  }
+
+  if (!payload?.result) {
+    throw new Error(`Yahoo 資料抓取失敗：${lastTried || input}`);
+  }
+
+  const { result, symbol } = payload;
   const timestamps = result.timestamp || [];
   const quote = result.indicators?.quote?.[0] || {};
   const meta = result.meta || {};
@@ -2033,8 +1351,11 @@ async function fetchYahooHistory(input, range = "6mo", interval = "1d") {
     })
     .filter((x) => x.open && x.high && x.low && x.close);
 
+  if (!history.length) throw new Error(`找不到有效K線資料：${symbol}`);
+
   return {
-    symbol,
+    symbol: String(symbol || "").replace(/\.(TW|TWO)$/i, ""),
+    yahooSymbol: symbol,
     name: getLocalDisplayName(symbol, meta.longName || meta.shortName || symbol),
     currency: meta.currency || "TWD",
     regularMarketPrice: meta.regularMarketPrice || history.at(-1)?.close || null,
@@ -3185,6 +2506,222 @@ function TradingChart({
   );
 }
 
+
+
+function buildInstitutionalFlow(stock) {
+  const symbol = String(stock?.symbol || stock?.stockCode || "").replace(/\.(TW|TWO)$/i, "");
+  const seed = Number(symbol.replace(/\D/g, "").slice(-4)) || 2330;
+  const change = Number(stock?.changePct || 0);
+  const volumeRatio = Number(stock?.volumeRatio || 1);
+
+  // 目前前端沒有穩定法人 API 時，先用量價做估算展示，避免頁面因函式缺失崩潰。
+  // 後續若接到真實外資/投信/自營商 API，只要把這裡改成 API 回傳即可。
+  const foreignNet = Math.round((change * 120 + (volumeRatio - 1) * 80 + (seed % 97) - 48) * 10);
+  const trustNet = Math.round((change * 45 + (seed % 31) - 15) * 6);
+  const dealerNet = Math.round((change * 35 + (volumeRatio - 1) * 50 + (seed % 23) - 11) * 5);
+
+  const rows = [
+    {
+      name: "外資",
+      buy: Math.max(0, 1200 + foreignNet),
+      sell: Math.max(0, 1200 - foreignNet),
+      net: foreignNet,
+    },
+    {
+      name: "投信",
+      buy: Math.max(0, 420 + trustNet),
+      sell: Math.max(0, 420 - trustNet),
+      net: trustNet,
+    },
+    {
+      name: "自營商",
+      buy: Math.max(0, 360 + dealerNet),
+      sell: Math.max(0, 360 - dealerNet),
+      net: dealerNet,
+    },
+  ];
+
+  const totalNet = rows.reduce((sum, row) => sum + row.net, 0);
+
+  return {
+    rows,
+    totalNet,
+    bias: totalNet > 0 ? "偏多" : totalNet < 0 ? "偏空" : "中性",
+  };
+}
+
+
+
+const conceptMap = {
+  AI: ["2382", "3231", "2356", "3017", "3324", "6669", "2376", "2377", "2454", "3443", "3661"],
+  ASIC: ["3661", "3443", "3035", "4966", "6531", "2379"],
+  IC設計: ["2454", "3034", "6415", "2379", "3443", "5274", "3227", "4966", "6531", "8016", "2401"],
+  電源管理: ["6415", "6435", "6651", "3317", "6138", "3588", "8261", "2454", "5299", "4952", "2436", "4923", "6693"],
+  高速傳輸: ["3443", "3661", "5269", "4966", "6531", "2379"],
+  手機晶片: ["2454", "3034", "3443", "6415", "2379"],
+  儲存: ["2408", "2344", "3260", "8299", "6488", "8088"],
+  面板: ["2409", "3481", "6116", "2489", "5425"],
+  PCB: ["3037", "8046", "3189", "2368", "2383", "6274", "8358"],
+  散熱: ["3017", "3324", "2421", "6230", "3653"],
+  CPO: ["3234", "3450", "3081", "4979", "3163"],
+};
+
+function normalizeGroupName(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  return raw
+    .replace(/業$/g, "")
+    .replace(/工業$/g, "")
+    .replace(/類$/g, "")
+    .replace(/\s+/g, "");
+}
+
+function getIndustryKeyFromMaster(master) {
+  const industry = normalizeGroupName(master?.officialIndustry || master?.industry || master?.baseType);
+  const name = String(master?.stockName || master?.name || "");
+  const code = String(master?.stockCode || master?.symbol || "");
+
+  if (conceptMap.面板.includes(code) || /友達|群創|彩晶|面板/.test(name)) return "面板";
+  if (conceptMap.PCB.includes(code)) return "PCB";
+  if (conceptMap.散熱.includes(code)) return "散熱";
+  if (conceptMap.AI.includes(code)) return "AI";
+  if (conceptMap.ASIC.includes(code)) return "ASIC";
+  if (conceptMap.IC設計.includes(code)) return "IC設計";
+
+  if (industry.includes("半導體")) return "半導體";
+  if (industry.includes("電子零組件")) return "電子零組件";
+  if (industry.includes("光電")) return "光電";
+  if (industry.includes("電腦")) return "電腦週邊";
+  if (industry.includes("通信")) return "通信網路";
+  if (industry.includes("航運")) return "航運";
+  if (industry.includes("金融")) return "金融";
+  if (industry.includes("鋼鐵")) return "鋼鐵";
+  if (industry.includes("食品")) return "食品";
+  if (industry.includes("其他電子")) return "其他電子";
+
+  return industry || "未分類";
+}
+
+
+function resolveGroupStocks(groupName, universeInput = null) {
+  const group = String(groupName || "").trim();
+  if (!group) return [];
+
+  const universe = universeInput?.length
+    ? universeInput
+    : STOCK_UNIVERSE_RUNTIME?.length
+    ? STOCK_UNIVERSE_RUNTIME
+    : getFallbackStockUniverse();
+
+  const codes = conceptMap?.[group];
+
+  if (Array.isArray(codes)) {
+    return universe.filter((stock) =>
+      codes.includes(String(stock.stockCode || stock.symbol || "").replace(/\.(TW|TWO)$/i, ""))
+    );
+  }
+
+  return universe.filter((stock) => {
+    const code = String(stock.stockCode || stock.symbol || "").replace(/\.(TW|TWO)$/i, "");
+    const official = String(stock.officialIndustry || stock.baseType || "");
+    const normalizedOfficial = normalizeGroupName(official);
+    const tags = Array.isArray(stock.themeTags) ? stock.themeTags : [];
+
+    return (
+      official === group ||
+      normalizedOfficial === normalizeGroupName(group) ||
+      tags.includes(group) ||
+      getIndustryKeyFromMaster(stock) === group ||
+      conceptMap?.[group]?.includes(code)
+    );
+  });
+}
+
+function mergeRealtimeQuote(stock, quoteMap = new Map()) {
+  const code = String(stock?.stockCode || stock?.symbol || "").replace(/\.(TW|TWO)$/i, "");
+  const quote = quoteMap instanceof Map ? quoteMap.get(code) : null;
+
+  return {
+    ...stock,
+    ...(quote || {}),
+    symbol: code,
+    stockCode: code,
+    name: stock?.stockName || stock?.name || quote?.name || code,
+    stockName: stock?.stockName || stock?.name || quote?.name || code,
+    officialIndustry: stock?.officialIndustry || quote?.officialIndustry || "未分類產業",
+    themeTags: stock?.themeTags || quote?.themeTags || [],
+  };
+}
+
+function getMasterByCode(code) {
+  const key = String(code || "").trim().toUpperCase().replace(/\.(TW|TWO)$/i, "");
+  if (!key) return null;
+
+  const universe = STOCK_UNIVERSE_RUNTIME?.length ? STOCK_UNIVERSE_RUNTIME : getFallbackStockUniverse();
+  const fromUniverse = universe.find((item) => String(item.stockCode).toUpperCase() === key);
+  if (fromUniverse) return fromUniverse;
+
+  if (typeof STOCK_MASTER_ALL !== "undefined") {
+    const fromMaster = STOCK_MASTER_ALL.find((item) => String(item.stockCode).toUpperCase() === key);
+    if (fromMaster) return fromMaster;
+  }
+
+  return null;
+}
+
+function isCommonTaiwanStock(stock) {
+  if (!stock) return false;
+  const code = String(stock.stockCode || stock.symbol || "").replace(/\.(TW|TWO)$/i, "");
+  if (!/^\d{4}$/.test(code)) return false;
+  if (stock.isETF || stock.isWarrant) return false;
+
+  const name = String(stock.stockName || stock.name || "");
+  if (/ETF|ETN|權證|牛|熊|特別股|受益|存託/i.test(name)) return false;
+
+  return true;
+}
+
+function getStockProfile(stock) {
+  const code = String(stock?.symbol || stock?.stockCode || "").replace(/\.(TW|TWO)$/i, "");
+  const universe = STOCK_UNIVERSE_RUNTIME?.length ? STOCK_UNIVERSE_RUNTIME : getFallbackStockUniverse();
+  const info =
+    universe.find((item) => String(item.stockCode) === code) ||
+    (typeof STOCK_MASTER_ALL !== "undefined"
+      ? STOCK_MASTER_ALL.find((item) => String(item.stockCode) === code)
+      : null);
+
+  const industry =
+    stock?.officialIndustry ||
+    stock?.baseType ||
+    info?.officialIndustry ||
+    info?.industry ||
+    "未分類產業";
+
+  const products =
+    stock?.mainProducts ||
+    info?.mainProducts ||
+    info?.business ||
+    (Array.isArray(info?.themeTags) && info.themeTags.length
+      ? info.themeTags.join("、")
+      : "主要業務資料尚未完整建檔，可先依產業分類、K線、量價與法人籌碼綜合判斷。");
+
+  return {
+    code,
+    name: stock?.name || info?.stockName || code,
+    industry,
+    products,
+    market: stock?.market || info?.market || "台股",
+    themeTags: stock?.themeTags || info?.themeTags || [],
+  };
+}
+
+
+// 自選股分組設定
+// 若你的舊版 Stock.jsx 有使用 FAVORITE_GROUPS，但新拆檔時沒有帶到，就會造成頁面黑屏。
+const FAVORITE_GROUPS = ["選單1", "選單2", "選單3", "選單4", "選單5"];
+
+const DEFAULT_FAVORITE_GROUP = FAVORITE_GROUPS[0];
+
 export default function Stock() {
   const navigate = useNavigate();
   const { symbol } = useParams();
@@ -3199,46 +2736,8 @@ export default function Stock() {
 });
 
 useEffect(() => {
-  initStockNameMap().then(() => {
-    setStock((prev) =>
-      prev
-        ? {
-            ...prev,
-            name: getLocalDisplayName(prev.symbol, prev.name),
-          }
-        : prev
-    );
-
-    setWatchList((prev) =>
-      prev.map((item) => ({
-        ...item,
-        name: getLocalDisplayName(item.symbol, item.name),
-      }))
-    );
-
-    setSystemStrongList((prev) =>
-      prev.map((item) => ({
-        ...item,
-        name: getLocalDisplayName(item.symbol, item.name),
-      }))
-    );
-
-    setNextDayList((prev) =>
-      prev.map((item) => ({
-        ...item,
-        name: getLocalDisplayName(item.symbol, item.name),
-      }))
-    );
-
-    setDayTradeList((prev) =>
-      prev.map((item) => ({
-        ...item,
-        name: getLocalDisplayName(item.symbol, item.name),
-      }))
-    );
-  });
-
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // 舊版 twStockNames OpenAPI 已停用，避免 CORS 造成分頁黑屏。
+  // 股票名稱改由 stockUniverse / Yahoo K線資料流程處理。
 }, []);
 
 const [watchText, setWatchText] = useState(() => {
@@ -3325,7 +2824,7 @@ const [watchText, setWatchText] = useState(() => {
       setStockUniverse(fallback);
 
       try {
-        const universe = await fetchStockUniverse();
+        const universe = await fetchStockUniverse({ forceRefresh: false });
         if (!alive || !universe?.length) return;
 
         STOCK_UNIVERSE_RUNTIME = universe;
@@ -3343,6 +2842,22 @@ const [watchText, setWatchText] = useState(() => {
     }
 
     loadStockUniverse();
+
+    // 從自己的後端 proxy 抓取 TWSE 完整台股名稱清單，存進 localStorage
+    // 後端已設好 CORS，不會被擋，且有 1 小時快取
+    (async () => {
+      try {
+        const res = await fetch("https://stock-radar-api-os48.onrender.com/api/twse/list");
+        if (!res.ok) return;
+        const map = await res.json();
+        if (map && typeof map === "object" && Object.keys(map).length > 0) {
+          localStorage.setItem("stockRadarTwStockNamesV1", JSON.stringify(map));
+          console.log("TWSE 名稱清單載入完成，共", Object.keys(map).length, "筆");
+        }
+      } catch (e) {
+        console.warn("TWSE 名稱清單載入失敗", e);
+      }
+    })();
 
     return () => {
       alive = false;
@@ -3997,21 +3512,23 @@ const [watchText, setWatchText] = useState(() => {
   }
 
   async function ensureStockUniverseReady() {
-    const fallback = stockUniverse?.length ? stockUniverse : getFallbackStockUniverse();
+    const current = stockUniverse?.length ? stockUniverse : getFallbackStockUniverse();
+    STOCK_UNIVERSE_RUNTIME = current;
+
+    if (current.length > 200) return current;
 
     try {
-      const universe = await fetchStockUniverse();
+      const universe = await fetchStockUniverse({ forceRefresh: false });
       if (universe?.length) {
         STOCK_UNIVERSE_RUNTIME = universe;
         setStockUniverse(universe);
         return universe;
       }
     } catch (err) {
-      console.warn("即時更新 stockUniverse 失敗，改用目前本地資料", err);
+      console.warn("stockUniverse 快取載入失敗，暫用 fallback", err);
     }
 
-    STOCK_UNIVERSE_RUNTIME = fallback;
-    return fallback;
+    return current;
   }
 
   async function searchOne(input = query) {
@@ -4035,17 +3552,36 @@ const [watchText, setWatchText] = useState(() => {
 
       const data = await fetchYahooHistory(target || rawInput, range, "1d");
       const analyzed = analyzeStock(data);
+
+      // 從 Yahoo K線 meta 裡取中文名（yahooName 可能是「旭暉應材股份有限公司」這樣的完整名稱）
+      const yahooRawName = String(analyzed.yahooName || "").trim();
+      const yahooChineseName = /[一-龥]/.test(yahooRawName)
+        ? yahooRawName.replace(/股份有限公司/g, "").replace(/有限公司/g, "").replace(/\s+/g, "")
+        : "";
+
       const merged = mergeStockNameIntoQuote(
         {
           ...analyzed,
           stockCode: analyzed.symbol,
-          name: stockInfo?.stockName || analyzed.name,
+          name: stockInfo?.stockName || yahooChineseName || analyzed.name,
           officialIndustry: stockInfo?.officialIndustry || analyzed.officialIndustry,
           market: stockInfo?.market || analyzed.market,
           isETF: stockInfo?.isETF ?? analyzed.isETF,
         },
         universe
       );
+
+      // 如果 Yahoo 回傳了中文名，存進 cache 讓下次直接用
+      if (yahooChineseName) {
+        const key = String(analyzed.symbol || "").toUpperCase().replace(/\.(TW|TWO)$/i, "");
+        const cache = readTwNameCache();
+        if (!cache[key]) {
+          cache[key] = yahooChineseName;
+          cache["YH_" + key] = yahooChineseName;
+          writeTwNameCache(cache);
+        }
+      }
+
       const displayName = await getBestDisplayName(merged.symbol, merged.name);
 
       setStock({
@@ -4086,6 +3622,22 @@ const [watchText, setWatchText] = useState(() => {
 
       const data = await fetchYahooHistory(target, safeRequest.range, safeRequest.interval);
       const analyzed = analyzeStock(data);
+
+      const yahooRawName2 = String(analyzed.yahooName || "").trim();
+      const yahooChineseName2 = /[一-龥]/.test(yahooRawName2)
+        ? yahooRawName2.replace(/股份有限公司/g, "").replace(/有限公司/g, "").replace(/\s+/g, "")
+        : "";
+
+      if (yahooChineseName2) {
+        const key2 = String(analyzed.symbol || "").toUpperCase().replace(/\.(TW|TWO)$/i, "");
+        const cache2 = readTwNameCache();
+        if (!cache2[key2]) {
+          cache2[key2] = yahooChineseName2;
+          cache2["YH_" + key2] = yahooChineseName2;
+          writeTwNameCache(cache2);
+        }
+      }
+
       const merged = mergeStockNameIntoQuote(
         {
           ...analyzed,
@@ -4096,7 +3648,7 @@ const [watchText, setWatchText] = useState(() => {
         },
         universe
       );
-      const displayName = await getBestDisplayName(merged.symbol, item.name || info?.stockName || merged.name);
+      const displayName = await getBestDisplayName(merged.symbol, item.name || info?.stockName || yahooChineseName2 || merged.name);
 
       setStock({
         ...merged,

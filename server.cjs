@@ -72,28 +72,44 @@ app.get("/api/twse/list", async (req, res) => {
       return res.json(cache);
     }
 
-    const url = "https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL";
-
-    const response = await axios.get(url, {
-      timeout: 8000,
-    });
-
     const map = {};
 
-    response.data.forEach((item) => {
-      if (item.Code && item.Name) {
-        map[item.Code] = item.Name;
-      }
-    });
+    // 來源1：TWSE 上市股票（含ETF）—— 用公司基本資料，全天都有效
+    try {
+      const r1 = await axios.get("https://openapi.twse.com.tw/v1/opendata/t187ap03_L", { timeout: 8000 });
+      (r1.data || []).forEach((item) => {
+        const code = item["公司代號"] || item.Code || "";
+        const name = item["公司簡稱"] || item.Name || "";
+        if (code && name) map[code] = name;
+      });
+    } catch (e) { console.warn("TWSE listed failed:", e.message); }
 
-    cache = map;
-    lastFetch = now;
+    // 來源2：TPEx 上櫃股票
+    try {
+      const r2 = await axios.get("https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap03_O", { timeout: 8000 });
+      (r2.data || []).forEach((item) => {
+        const code = item["公司代號"] || item.SecuritiesCompanyCode || "";
+        const name = item["公司簡稱"] || item.CompanyName || "";
+        if (code && name) map[code] = name;
+      });
+    } catch (e) { console.warn("TPEx OTC failed:", e.message); }
 
-    res.json(map);
+    // 來源3：TWSE 每日交易（盤後補充，可能為空但沒關係）
+    try {
+      const r3 = await axios.get("https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL", { timeout: 8000 });
+      (r3.data || []).forEach((item) => {
+        if (item.Code && item.Name && !map[item.Code]) map[item.Code] = item.Name;
+      });
+    } catch (e) { console.warn("TWSE day all failed:", e.message); }
+
+    if (Object.keys(map).length > 0) {
+      cache = map;
+      lastFetch = now;
+    }
+
+    res.json(cache || map);
   } catch (err) {
     console.error("TWSE error:", err.message);
-
-    // ❗ 重點：不要回 500
     res.json({});
   }
 });
