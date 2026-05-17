@@ -1,4 +1,12 @@
 import { getStockDisplayName, initStockNameMap } from "../utils/stockName";
+import {
+  fetchStockUniverse,
+  getFallbackStockUniverse,
+  resolveStockInput,
+  mergeStockNameIntoQuote,
+  buildStockSearchOptions,
+  getStockDisplayNameByCode,
+} from "../stockUniverse/stockUniverse";
 import { useNavigate, useParams } from "react-router-dom";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -10,6 +18,8 @@ import {
 import "../App.css";
 
 const API_BASE = "https://stock-radar-api-os48.onrender.com";
+
+let STOCK_UNIVERSE_RUNTIME = [];
 
 const NAME_TO_CODE = {
   台積電: "2330",
@@ -479,6 +489,9 @@ function getLocalDisplayName(symbol, fallback = "") {
   const rawSymbol = String(symbol || "").trim();
   const key = rawSymbol.toUpperCase().replace(/\.(TW|TWO)$/i, "");
 
+  const universeName = getStockDisplayNameByCode(key, STOCK_UNIVERSE_RUNTIME?.length ? STOCK_UNIVERSE_RUNTIME : getFallbackStockUniverse());
+  if (universeName && universeName !== key && /[一-龥]/.test(universeName)) return universeName;
+
   const cached = readTwNameCache?.()?.[key];
   const mapped = EXTRA_STOCK_CHINESE_NAMES[key] || EXTRA_STOCK_CHINESE_NAMES[rawSymbol.toUpperCase()] || cached;
   if (mapped) return mapped;
@@ -498,7 +511,7 @@ function getLocalDisplayName(symbol, fallback = "") {
     /[A-Za-z]{4,}/.test(raw) &&
     !/[一-龥]/.test(raw);
 
-  // 如果 Yahoo 只回英文，又沒有對照表，寧可顯示代碼，避免頁面充滿英文公司全名。
+  // 如果 Yahoo 只回英文，又沒有對照表，寧可顯示代號，避免頁面充滿英文公司全名。
   if (!raw || raw === key || raw === rawSymbol || looksEnglishOnly) return mapped || key;
 
   return raw;
@@ -1877,6 +1890,13 @@ function buildChineseNameIndex() {
     rows.push({ code: String(code), name });
   });
 
+  (STOCK_UNIVERSE_RUNTIME || []).forEach((stock) => {
+    rows.push({ code: stock.stockCode, name: stock.stockName });
+    if (stock.englishName) rows.push({ code: stock.stockCode, name: stock.englishName });
+    rows.push({ code: stock.stockCode, name: stock.stockName?.replace("-KY", "KY") });
+    rows.push({ code: stock.stockCode, name: stock.stockName?.replace("*-KY", "KY") });
+  });
+
   if (typeof STOCK_MASTER_ALL !== "undefined") {
     STOCK_MASTER_ALL.forEach((stock) => {
       rows.push({ code: stock.stockCode, name: stock.stockName });
@@ -1906,11 +1926,16 @@ function resolveSymbol(input) {
   const raw = String(input || "").trim();
   if (!raw) return "";
 
+  const universeResolved = resolveStockInput(raw, STOCK_UNIVERSE_RUNTIME);
+  if (universeResolved?.stockCode && universeResolved.source !== "unknown") {
+    return universeResolved.yahooSymbol || universeResolved.stockCode;
+  }
+
   const cleaned = raw.replace(/\s+/g, "");
   const upper = cleaned.toUpperCase();
 
   // 代碼 / 美股 / 已經是 Yahoo 格式
-  if (/^[A-Z]{1,6}$/.test(upper)) return upper;
+  if (/^[A-Z]{1,6}(\.[A-Z])?$/.test(upper)) return upper;
   if (/^\d{4,6}$/.test(upper)) return upper;
   if (/^\d{4,6}\.(TW|TWO)$/i.test(upper)) return upper;
   if (/^[A-Z]{1,6}\.(TW|TWO)$/i.test(upper)) return upper;
@@ -3241,6 +3266,7 @@ const [watchText, setWatchText] = useState(() => {
 
   const [range, setRange] = useState("1y");
   const [stock, setStock] = useState(null);
+  const [stockUniverse, setStockUniverse] = useState(() => getFallbackStockUniverse());
   const [watchList, setWatchList] = useState([]);
   const [loading, setLoading] = useState(false);
   const [scanning, setScanning] = useState(false);
@@ -3289,6 +3315,39 @@ const [watchText, setWatchText] = useState(() => {
   const [nextDaySortMode, setNextDaySortMode] = useState("score");
   const [reportTab, setReportTab] = useState("market");
   const [selectedIndustry, setSelectedIndustry] = useState(null);
+
+  useEffect(() => {
+    let alive = true;
+
+    async function loadStockUniverse() {
+      const fallback = getFallbackStockUniverse();
+      STOCK_UNIVERSE_RUNTIME = fallback;
+      setStockUniverse(fallback);
+
+      try {
+        const universe = await fetchStockUniverse();
+        if (!alive || !universe?.length) return;
+
+        STOCK_UNIVERSE_RUNTIME = universe;
+        setStockUniverse(universe);
+
+        setStock((prev) => (prev ? mergeStockNameIntoQuote(prev, universe) : prev));
+        setWatchList((prev) => prev.map((item) => mergeStockNameIntoQuote(item, universe)));
+        setSystemStrongList((prev) => prev.map((item) => mergeStockNameIntoQuote(item, universe)));
+        setKlineRadarList((prev) => prev.map((item) => mergeStockNameIntoQuote(item, universe)));
+        setNextDayList((prev) => prev.map((item) => mergeStockNameIntoQuote(item, universe)));
+        setDayTradeList((prev) => prev.map((item) => mergeStockNameIntoQuote(item, universe)));
+      } catch (err) {
+        console.warn("stockUniverse 載入失敗，使用 fallback", err);
+      }
+    }
+
+    loadStockUniverse();
+
+    return () => {
+      alive = false;
+    };
+  }, []);
   const [selectedGroupQuotes, setSelectedGroupQuotes] = useState({});
   const [chartLines, setChartLines] = useState(() => {
     try {
@@ -3937,26 +3996,63 @@ const [watchText, setWatchText] = useState(() => {
     }
   }
 
+  async function ensureStockUniverseReady() {
+    const fallback = stockUniverse?.length ? stockUniverse : getFallbackStockUniverse();
+
+    try {
+      const universe = await fetchStockUniverse();
+      if (universe?.length) {
+        STOCK_UNIVERSE_RUNTIME = universe;
+        setStockUniverse(universe);
+        return universe;
+      }
+    } catch (err) {
+      console.warn("即時更新 stockUniverse 失敗，改用目前本地資料", err);
+    }
+
+    STOCK_UNIVERSE_RUNTIME = fallback;
+    return fallback;
+  }
+
   async function searchOne(input = query) {
     const rawInput = String(input || "").trim();
     if (!rawInput) return;
 
-    const target = resolveSymbol(rawInput);
-    setQuery(target || rawInput);
-    rememberSearchKeyword(rawInput);
-    if (target && target !== rawInput) rememberSearchKeyword(target);
-
     setLoading(true);
     setError("");
+
     try {
+      // 關鍵修正：
+      // 不再只用一開始的 fallback 名單解析。每次搜尋前先確保 stockUniverse 已經載入。
+      // 否則像 2328 這類不在 fallback 的股票，會被當成「只有代號」。
+      const universe = await ensureStockUniverseReady();
+      const stockInfo = resolveStockInput(rawInput, universe);
+      const target = stockInfo?.yahooSymbol || stockInfo?.stockCode || resolveSymbol(rawInput);
+
+      setQuery(stockInfo?.stockCode || target || rawInput);
+      rememberSearchKeyword(rawInput);
+      if (target && target !== rawInput) rememberSearchKeyword(stockInfo?.stockCode || target);
+
       const data = await fetchYahooHistory(target || rawInput, range, "1d");
       const analyzed = analyzeStock(data);
-      const displayName = await getBestDisplayName(analyzed.symbol, analyzed.name);
+      const merged = mergeStockNameIntoQuote(
+        {
+          ...analyzed,
+          stockCode: analyzed.symbol,
+          name: stockInfo?.stockName || analyzed.name,
+          officialIndustry: stockInfo?.officialIndustry || analyzed.officialIndustry,
+          market: stockInfo?.market || analyzed.market,
+          isETF: stockInfo?.isETF ?? analyzed.isETF,
+        },
+        universe
+      );
+      const displayName = await getBestDisplayName(merged.symbol, merged.name);
+
       setStock({
-        ...analyzed,
+        ...merged,
         name: displayName,
       });
-      setQuery(analyzed.symbol || target || rawInput);
+      setQuery(merged.symbol || stockInfo?.stockCode || target || rawInput);
       setActiveMenu("analysis");
     } catch (err) {
       console.error(err);
@@ -3965,11 +4061,12 @@ const [watchText, setWatchText] = useState(() => {
       setLoading(false);
     }
   }
-
   async function openStockAnalysisFromList(item) {
     if (!item) return;
 
-    const target = String(item.symbol || item.stockCode || item.code || "").trim();
+    const universe = await ensureStockUniverseReady();
+    const info = resolveStockInput(item.symbol || item.stockCode || item.code || item.name || "", universe);
+    const target = String(info?.yahooSymbol || item.symbol || item.stockCode || item.code || "").trim();
     if (!target) return;
 
     setQuery(target);
@@ -3989,11 +4086,20 @@ const [watchText, setWatchText] = useState(() => {
 
       const data = await fetchYahooHistory(target, safeRequest.range, safeRequest.interval);
       const analyzed = analyzeStock(data);
-      const displayName = await getBestDisplayName(analyzed.symbol, item.name || analyzed.name);
+      const merged = mergeStockNameIntoQuote(
+        {
+          ...analyzed,
+          baseType: item.baseType || info?.officialIndustry || item.officialIndustry || analyzed.baseType,
+          officialIndustry: info?.officialIndustry || item.officialIndustry || analyzed.officialIndustry,
+          market: info?.market || item.market || analyzed.market,
+          isETF: info?.isETF ?? item.isETF ?? analyzed.isETF,
+        },
+        universe
+      );
+      const displayName = await getBestDisplayName(merged.symbol, item.name || info?.stockName || merged.name);
 
       setStock({
-        ...analyzed,
-        baseType: item.baseType || item.officialIndustry || analyzed.baseType,
+        ...merged,
         name: displayName,
       });
     } catch (err) {
@@ -4987,13 +5093,30 @@ const [watchText, setWatchText] = useState(() => {
         .app-frame { min-height: 100vh; }
         .left-nav { position: fixed !important; left: 0; top: 0; bottom: 0; width: 170px; z-index: 1000; }
         .content { margin-left: 170px; min-height: 100vh; }
-        .left-nav { background: rgba(2,6,23,.92); border-right: 1px solid rgba(148,163,184,.16); padding: 14px 10px; height: 100vh; box-sizing: border-box; }
-        .logo { display: flex; gap: 10px; align-items: center; padding: 8px 8px 18px; border-bottom: 1px solid rgba(148,163,184,.14); margin-bottom: 12px; }
-        .logo-icon { width: 34px; height: 34px; border-radius: 10px; background: linear-gradient(135deg,#38bdf8,#8b5cf6); display: grid; place-items: center; font-weight: 900; }
+        .left-nav { background: linear-gradient(180deg, rgba(2,6,23,.96), rgba(2,6,23,.90)); border-right: 1px solid rgba(148,163,184,.16); padding: 14px 10px; height: 100vh; box-sizing: border-box; overflow-y: auto; }
+        .logo { display: flex; gap: 10px; align-items: center; padding: 8px 8px 18px; border-bottom: 1px solid rgba(148,163,184,.14); margin-bottom: 14px; }
+        .logo-icon { width: 34px; height: 34px; border-radius: 10px; background: linear-gradient(135deg,#38bdf8,#8b5cf6); display: grid; place-items: center; font-weight: 900; box-shadow: 0 0 18px rgba(56,189,248,.20); }
         .logo b { display: block; font-size: 14px; }
         .logo span { color: #64748b; font-size: 11px; }
-        .nav-btn { width: 100%; display: flex; align-items: center; gap: 8px; margin-bottom: 7px; background: transparent; color: #94a3b8; border: 1px solid transparent; justify-content: flex-start; padding: 10px; }
-        .nav-btn.active { color: #67e8f9; background: rgba(34,211,238,.12); border-color: rgba(34,211,238,.35); }
+        .nav-btn { width: 100%; display: flex; align-items: center; gap: 9px; margin-bottom: 9px; background: rgba(15,23,42,.50); color: #cbd5e1; border: 1px solid rgba(148,163,184,.12); justify-content: flex-start; padding: 11px 10px; border-radius: 13px; box-shadow: inset 0 1px 0 rgba(255,255,255,.025); }
+        .nav-btn:hover { color: #f8fafc; border-color: rgba(56,189,248,.28); background: rgba(15,23,42,.78); transform: translateX(1px); }
+        .nav-btn.active { color: #67e8f9; background: linear-gradient(135deg, rgba(34,211,238,.18), rgba(15,23,42,.78)); border-color: rgba(34,211,238,.48); box-shadow: 0 0 0 1px rgba(34,211,238,.08), 0 10px 24px rgba(0,0,0,.22); }
+        .nav-exit { margin-top: 2px; color: #94a3b8; background: rgba(2,6,23,.38); }
+        .left-nav .nav-btn:nth-of-type(4),
+        .left-nav .nav-btn:nth-of-type(8) {
+          margin-top: 18px;
+          position: relative;
+        }
+        .left-nav .nav-btn:nth-of-type(4)::before,
+        .left-nav .nav-btn:nth-of-type(8)::before {
+          content: "";
+          position: absolute;
+          left: 6px;
+          right: 6px;
+          top: -10px;
+          height: 1px;
+          background: rgba(148,163,184,.14);
+        }
         .kline-radar-hero { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 12px; margin: 16px 0; }
         .kline-radar-hero > div { border: 1px solid rgba(148,163,184,.12); background: rgba(2,6,23,.62); border-radius: 18px; padding: 16px; }
         .kline-radar-hero span { display: block; color: #94a3b8; font-size: 12px; margin-bottom: 8px; }
@@ -5300,7 +5423,12 @@ const [watchText, setWatchText] = useState(() => {
         .table-wrap { overflow: auto; border: 1px solid rgba(148,163,184,.16); border-radius: 16px; }
         table { width: 100%; border-collapse: collapse; font-size: 13px; }
         th, td { padding: 12px 10px; border-bottom: 1px solid rgba(148,163,184,.14); text-align: left; white-space: nowrap; }
+        td { color: #f8fafc; font-weight: 650; }
         th { color: #93c5fd; font-size: 12px; background: rgba(15,23,42,.96); }
+        td .muted, td small { color: #cbd5e1; }
+        .stock-name-code, .selected-symbol, .metric-value, .mini-stat b, .kline-radar-hero b, .radar-score b, .profile-value, .institution-summary b, .advice-mini b { color: #f8fafc !important; }
+        .stock-name-code { opacity: 1; }
+        .badge { color: #f8fafc; }
         tr { cursor: pointer; }
         tr:hover { background: rgba(56,189,248,.08); }
         .badge { display: inline-flex; align-items: center; border-radius: 999px; padding: 4px 8px; font-size: 12px; background: #020617; border: 1px solid rgba(148,163,184,.2); color: #cbd5e1; }
@@ -5308,6 +5436,25 @@ const [watchText, setWatchText] = useState(() => {
         .favorite-item { display: flex; justify-content: space-between; gap: 8px; align-items: center; background: #020617; border: 1px solid rgba(148,163,184,.16); border-radius: 14px; padding: 10px; }
         .empty { color: #94a3b8; padding: 18px; }
         .error { color: #fecaca; background: rgba(127,29,29,.4); padding: 10px; border-radius: 12px; margin-top: 12px; }
+        .up { color: #fb7185 !important; }
+        .down { color: #34d399 !important; }
+        .price, .selected-panel .price, .top-stats b { color: #f8fafc; }
+                .up,
+        b.up,
+        td.up,
+        .market-stats-grid b.up,
+        .summary-grid b.up,
+        .price .up {
+          color: #fb7185 !important;
+        }
+        .down,
+        b.down,
+        td.down,
+        .market-stats-grid b.down,
+        .summary-grid b.down,
+        .price .down {
+          color: #34d399 !important;
+        }
         @media (max-width: 1300px) { .summary-grid, .main-grid, .analysis-layout, .combined-market-card { grid-template-columns: 1fr; } .combined-market-card, .chart-area-card, .right-panel-card { grid-column: auto; grid-row: auto; } .center-stack { display: grid; gap: 10px; } .left-nav { width: 150px; } .content { margin-left: 150px; } .chart-tools { align-items: stretch; } .market-panel { border-left: 0; padding-left: 0; border-top: 1px solid rgba(148,163,184,.18); padding-top: 14px; } .right-panel-card { position: static; } }
         button {transition: background .18s ease, filter .18s ease, transform .18s ease, border-color .18s ease;}
         button:hover {filter: brightness(1.12);transform: translateY(-1px);}
@@ -5328,7 +5475,7 @@ const [watchText, setWatchText] = useState(() => {
           <button className={`nav-btn ${activeMenu === "klineRadar" ? "active" : ""}`} onClick={() => setActiveMenu("klineRadar")}>📡 K線訊號雷達</button>
           <button className={`nav-btn ${activeMenu === "nextday" ? "active" : ""}`} onClick={() => setActiveMenu("nextday")}>🌙 隔日沖選股</button>
           <button className={`nav-btn ${activeMenu === "daytrade" ? "active" : ""}`} onClick={() => setActiveMenu("daytrade")}>⚡ 當沖模式</button>
-          <button className="nav-btn" onClick={() => navigate("/")}>← 返回首頁</button>
+          <button className="nav-btn nav-exit" onClick={() => navigate("/")}>← 返回首頁</button>
         </aside>
 
         <section className="content">
@@ -5366,9 +5513,9 @@ const [watchText, setWatchText] = useState(() => {
                   {searchHistory.map((item) => (
                     <option key={item} value={item} />
                   ))}
-                  {buildChineseNameIndex().slice(0, 260).map((item) => (
+                  {buildStockSearchOptions(stockUniverse).slice(0, 1200).map((item) => (
                     <option key={`${item.code}-${item.name}`} value={item.name}>
-                      {item.code}
+                      {item.code}｜{item.market}｜{item.industry}
                     </option>
                   ))}
                 </datalist>
