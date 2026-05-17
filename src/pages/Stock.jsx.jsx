@@ -1,15 +1,3 @@
-// 停用舊版 twStockNames OpenAPI 抓取，避免 CORS 造成部分分頁黑屏或卡住。
-// 中文名改由 stockUniverse + Yahoo K線資料混合處理。
-const getStockDisplayName = (symbol, fallback = "") => fallback || symbol;
-const initStockNameMap = async () => true;
-import {
-  fetchStockUniverse,
-  getFallbackStockUniverse,
-  resolveStockInput,
-  mergeStockNameIntoQuote,
-  buildStockSearchOptions,
-  getStockDisplayNameByCode,
-} from "../stockUniverse/stockUniverse";
 import { useNavigate, useParams } from "react-router-dom";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -19,604 +7,71 @@ import {
   LineSeries,
 } from "lightweight-charts";
 import "../App.css";
-import { TW_STOCK_NAMES_FALLBACK, fetchTwStockNamesFromOpenApi } from "../data/twStockNames";
-import { US_STOCK_NAMES } from "../data/usStockNames";
-import { ETF_NAMES } from "../data/etfNames";
 
 const API_BASE = "https://stock-radar-api-os48.onrender.com";
 
-let STOCK_UNIVERSE_RUNTIME = [];
+// ─── 股票名稱快取（localStorage） ────────────────────────────────────────────
+// 不再使用靜態對照表，改由後端 Yahoo API 即時取得並快取
+const NAME_CACHE_KEY = "stockNameCache_v3";
 
-const NAME_TO_CODE = {
-  台積電: "2330",
-  鴻海: "2317",
-  聯發科: "2454",
-  台達電: "2308",
-  廣達: "2382",
-  台灣50: "0050",
-  元大台灣50: "0050",
-
-  // 常用中文搜尋別名
-  雷科: "6207",
-  中鋼: "2002",
-  聯詠: "3034",
-  創意: "3443",
-  世芯: "3661",
-  世芯KY: "3661",
-  "世芯-KY": "3661",
-  智原: "3035",
-  譜瑞: "4966",
-  譜瑞KY: "4966",
-  "譜瑞-KY": "4966",
-  矽力: "6415",
-  矽力KY: "6415",
-  "矽力-KY": "6415",
-  元太: "8069",
-  南電: "8046",
-  欣興: "3037",
-  緯穎: "6669",
-  仁寶: "2324",
-  技嘉: "2376",
-  微星: "2377",
-  奇鋐: "3017",
-  雙鴻: "3324",
-  華邦電: "2344",
-  南亞科: "2408",
-  群創: "3481",
-  友達: "2409",
-  彩晶: "6116",
-  長榮: "2603",
-  陽明: "2609",
-  萬海: "2615",
-  國泰金: "2882",
-  富邦金: "2881",
-  中信金: "2891",
-  兆豐金: "2886",
-
-  鈦昇: "8027",
-  鈦昇科技: "8027",
-  中探針: "6217",
-  雷科科技: "6207",
-
-  "元大高股息": "0056",
-  "富邦台50": "006208",
-  "國泰永續高股息": "00878",
-  "國泰台灣5G+": "00881",
-  "中信關鍵半導體": "00891",
-  "富邦台灣半導體": "00892",
-  "群益台灣精選高息": "00919",
-  "國泰台灣領袖50": "00922",
-  "復華台灣科技優息": "00929",
-  "野村臺灣新科技50": "00935",
-  "統一台灣高息動能": "00939",
-  "元大台灣價值高息": "00940",
-  "凱基台灣AI50": "00952",
-  "台泥": "1101",
-  "亞泥": "1102",
-  "嘉泥": "1103",
-  "環泥": "1104",
-  "幸福": "1108",
-  "信大": "1109",
-  "卜蜂": "1215",
-  "統一": "1216",
-  "聯華": "1229",
-  "聯華食": "1231",
-  "大統益": "1232",
-  "黑松": "1234",
-  "台塑": "1301",
-  "台聚": "1304",
-  "華夏": "1305",
-  "國喬": "1312",
-  "中石化": "1314",
-  "台化": "1326",
-  "儒鴻": "1476",
-  "聚陽": "1477",
-  "東元": "1504",
-  "中興電": "1513",
-  "亞力": "1514",
-  "和大": "1536",
-  "華新": "1605",
-  "大亞": "1609",
-  "南僑": "1702",
-  "葡萄王": "1707",
-  "長興": "1717",
-  "台肥": "1722",
-  "台玻": "1802",
-  "正隆": "1904",
-  "永豐餘": "1907",
-  "中鴻": "2014",
-  "燁輝": "2023",
-  "大成鋼": "2027",
-  "新光鋼": "2031",
-  "正新": "2105",
-  "建大": "2106",
-  "和泰車": "2207",
-  "裕日車": "2227",
-  "光寶科": "2301",
-  "聯電": "2303",
-  "國巨": "2327",
-  "智邦": "2345",
-  "聯強": "2347",
-  "宏碁": "2353",
-  "鴻準": "2354",
-  "英業達": "2356",
-  "華碩": "2357",
-  "金像電": "2368",
-  "大同": "2371",
-  "瑞昱": "2379",
-  "台光電": "2383",
-  "研華": "2395",
-  "漢唐": "2404",
-  "國碩": "2406",
-  "中華電": "2412",
-  "建準": "2421",
-  "鉅祥": "2476",
-  "瑞軒": "2489",
-  "興富發": "2542",
-  "華固": "2548",
-  "裕民": "2606",
-  "華航": "2610",
-  "長榮航": "2618",
-  "慧洋-KY": "2637",
-  "國賓": "2704",
-  "晶華": "2707",
-  "王品": "2727",
-  "彰銀": "2801",
-  "開發金": "2883",
-  "玉山金": "2884",
-  "元大金": "2885",
-  "台新金": "2887",
-  "永豐金": "2890",
-  "第一金": "2892",
-  "統一超": "2912",
-  "零壹": "3029",
-  "文曄": "3036",
-  "穩懋": "3105",
-  "景碩": "3189",
-  "全科": "3209",
-  "優群": "3217",
-  "原相": "3227",
-  "緯創": "3231",
-  "光環": "3234",
-  "威剛": "3260",
-  "欣銓": "3264",
-  "精材": "3374",
-  "揚明光": "3504",
-  "智易": "3596",
-  "健策": "3653",
-  "日月光投控": "3711",
-  "東洋": "4105",
-  "遠傳": "4904",
-  "太極": "4934",
-  "茂林-KY": "4935",
-  "和碩": "4938",
-  "臻鼎-KY": "4958",
-  "訊連": "5203",
-  "信驊": "5274",
-  "世界": "5347",
-  "中磊": "5388",
-  "台半": "5425",
-  "中美晶": "5483",
-  "長虹": "5534",
-  "四維航": "5608",
-  "中租-KY": "5871",
-  "合庫金": "5880",
-  "寶雅": "5904",
-  "新普": "6121",
-  "頎邦": "6147",
-  "合晶": "6182",
-  "萬潤": "6187",
-  "帆宣": "6196",
-  "聯茂": "6213",
-  "超眾": "6230",
-  "系微": "6231",
-  "台燿": "6274",
-  "矽力*-KY": "6415",
-  "環球晶": "6488",
-  "台塑化": "6505",
-  "愛普*": "6531",
-  "高端疫苗": "6547",
-  "森崴能源": "6806",
-  "品安": "8088",
-  "群聯": "8299",
-  "金居": "8358",
-  "台汽電": "8926",
-  "全國": "9937",
-  "世紀鋼": "9958",
-  "中租KY": "5871",
-  "日月光": "3711",
-  "日月光控股": "3711",
-    "元大50": "0050",
-  "群益精選高息": "00919",
-  "國泰5G": "00881",
-};
-
-
-const EXTRA_STOCK_CHINESE_NAMES = {
-  "2301": "光寶科",
-  "2353": "宏碁",
-  "2354": "鴻準",
-  "2395": "研華",
-  "2406": "國碩",
-  "2409": "友達",
-  "2476": "鉅祥",
-  "2489": "瑞軒",
-  "2610": "華航",
-  "2618": "長榮航",
-  "2637": "慧洋-KY",
-  "2801": "彰銀",
-  "2890": "永豐金",
-  "3035": "智原",
-  "3045": "台灣大",
-  "3324": "雙鴻",
-  "3504": "揚明光",
-  "4934": "太極",
-  "4935": "茂林-KY",
-  "4966": "譜瑞-KY",
-  "5608": "四維航",
-  "6116": "彩晶",
-  "6213": "聯茂",
-  "6415": "矽力*-KY",
-  "6505": "台塑化",
-  "006208": "富邦台50",
-  "00881": "國泰台灣5G+",
-  "00891": "中信關鍵半導體",
-  "00892": "富邦台灣半導體",
-  "00922": "國泰台灣領袖50",
-  "00935": "野村臺灣新科技50",
-  "00939": "統一台灣高息動能",
-  "00952": "凱基台灣AI50",
-
-
-  "6207": "雷科",
-  "6217": "中探針",
-  "8027": "鈦昇",
-
-  "0050": "元大台灣50",
-  "0056": "元大高股息",
-  "00878": "國泰永續高股息",
-  "00919": "群益台灣精選高息",
-  "00929": "復華台灣科技優息",
-  "00940": "元大台灣價值高息",
-  "1101": "台泥",
-  "1102": "亞泥",
-  "1103": "嘉泥",
-  "1104": "環泥",
-  "1108": "幸福",
-  "1109": "信大",
-  "1215": "卜蜂",
-  "1216": "統一",
-  "1229": "聯華",
-  "1231": "聯華食",
-  "1232": "大統益",
-  "1234": "黑松",
-  "1301": "台塑",
-  "1303": "南亞",
-  "1304": "台聚",
-  "1305": "華夏",
-  "1312": "國喬",
-  "1314": "中石化",
-  "1326": "台化",
-  "1476": "儒鴻",
-  "1477": "聚陽",
-  "1504": "東元",
-  "1513": "中興電",
-  "1514": "亞力",
-  "1536": "和大",
-  "1605": "華新",
-  "1609": "大亞",
-  "1702": "南僑",
-  "1707": "葡萄王",
-  "1717": "長興",
-  "1722": "台肥",
-  "1802": "台玻",
-  "1904": "正隆",
-  "1907": "永豐餘",
-  "2002": "中鋼",
-  "2014": "中鴻",
-  "2023": "燁輝",
-  "2027": "大成鋼",
-  "2031": "新光鋼",
-  "2105": "正新",
-  "2106": "建大",
-  "2207": "和泰車",
-  "2227": "裕日車",
-  "2303": "聯電",
-  "2308": "台達電",
-  "2317": "鴻海",
-  "2324": "仁寶",
-  "2327": "國巨",
-  "2330": "台積電",
-  "2344": "華邦電",
-  "2345": "智邦",
-  "2347": "聯強",
-  "2356": "英業達",
-  "2357": "華碩",
-  "2368": "金像電",
-  "2371": "大同",
-  "2376": "技嘉",
-  "2377": "微星",
-  "2379": "瑞昱",
-  "2382": "廣達",
-  "2383": "台光電",
-  "2404": "漢唐",
-  "2408": "南亞科",
-  "2412": "中華電",
-  "2421": "建準",
-  "2454": "聯發科",
-  "2542": "興富發",
-  "2548": "華固",
-  "2603": "長榮",
-  "2606": "裕民",
-  "2609": "陽明",
-  "2615": "萬海",
-  "2704": "國賓",
-  "2707": "晶華",
-  "2727": "王品",
-  "2881": "富邦金",
-  "2882": "國泰金",
-  "2883": "開發金",
-  "2884": "玉山金",
-  "2885": "元大金",
-  "2886": "兆豐金",
-  "2887": "台新金",
-  "2891": "中信金",
-  "2892": "第一金",
-  "2912": "統一超",
-  "3017": "奇鋐",
-  "3029": "零壹",
-  "3034": "聯詠",
-  "3036": "文曄",
-  "3037": "欣興",
-  "3105": "穩懋",
-  "3189": "景碩",
-  "3209": "全科",
-  "3217": "優群",
-  "3227": "原相",
-  "3231": "緯創",
-  "3234": "光環",
-  "3260": "威剛",
-  "3264": "欣銓",
-  "3374": "精材",
-  "3443": "創意",
-  "3481": "群創",
-  "3596": "智易",
-  "3653": "健策",
-  "3661": "世芯-KY",
-  "3711": "日月光投控",
-  "4105": "東洋",
-  "4904": "遠傳",
-  "4938": "和碩",
-  "4958": "臻鼎-KY",
-  "5203": "訊連",
-  "5274": "信驊",
-  "5347": "世界",
-  "5388": "中磊",
-  "5425": "台半",
-  "5483": "中美晶",
-  "5534": "長虹",
-  "5871": "中租-KY",
-  "5880": "合庫金",
-  "5904": "寶雅",
-  "6121": "新普",
-  "6147": "頎邦",
-  "6182": "合晶",
-  "6187": "萬潤",
-  "6196": "帆宣",
-  "6230": "超眾",
-  "6231": "系微",
-  "6274": "台燿",
-  "6488": "環球晶",
-  "6531": "愛普*",
-  "6547": "高端疫苗",
-  "6669": "緯穎",
-  "6806": "森崴能源",
-  "8046": "南電",
-  "8069": "元太",
-  "8088": "品安",
-  "8299": "群聯",
-  "8358": "金居",
-  "8926": "台汽電",
-  "9937": "全國",
-  "9958": "世紀鋼",
-
-  "6285": "啟碁",
-  "8422": "可寧衛*",};
-
-
-const TW_NAME_CACHE_KEY = "tw_stock_name_cache_v2";
-
-function readTwNameCache() {
-  try {
-    return JSON.parse(localStorage.getItem(TW_NAME_CACHE_KEY) || "{}");
-  } catch {
-    return {};
-  }
+function readNameCache() {
+  try { return JSON.parse(localStorage.getItem(NAME_CACHE_KEY) || "{}"); } catch { return {}; }
+}
+function writeNameCache(cache) {
+  try { localStorage.setItem(NAME_CACHE_KEY, JSON.stringify(cache)); } catch {}
 }
 
-function writeTwNameCache(cache) {
-  try {
-    localStorage.setItem(TW_NAME_CACHE_KEY, JSON.stringify(cache || {}));
-  } catch {}
+// 從 Yahoo chart meta 取中文名（只有包含中文字才回傳，否則回傳空字串）
+function extractChineseName(yahooName = "") {
+  const raw = String(yahooName || "").trim();
+  if (!raw) return "";
+  // Yahoo shortName 有時是英文（例如 "Pan Jit International Inc."），這種就不用
+  if (!/[一-鿿]/.test(raw)) return "";
+  return raw
+    .replace(/股份有限公司/g, "")
+    .replace(/有限公司/g, "")
+    .replace(/\s+/g, "")
+    .trim();
 }
 
-async function fetchTaiwanRealtimeName(code) {
-  const clean = String(code || "").replace(/\D/g, "").slice(0, 6);
-  if (!/^\d{4,6}$/.test(clean)) return "";
-
-  const cache = readTwNameCache();
-  if (cache[clean]) return cache[clean];
-
-  const tryList = [
-    `https://mis.twse.com.tw/stock/api/getStockInfo.jsp?json=1&delay=0&ex_ch=tse_${clean}.tw`,
-    `https://mis.twse.com.tw/stock/api/getStockInfo.jsp?json=1&delay=0&ex_ch=otc_${clean}.tw`,
-  ];
-
-  for (const url of tryList) {
-    try {
-      const res = await fetch(url, { cache: "no-store" });
-      if (!res.ok) continue;
-      const json = await res.json();
-      const row = json?.msgArray?.[0];
-      const name = String(row?.n || row?.nf || "").trim();
-
-      if (name && /[一-龥]/.test(name)) {
-        const fixed = name.replace(/\s+/g, "");
-        cache[clean] = fixed;
-        writeTwNameCache(cache);
-        return fixed;
-      }
-    } catch (err) {
-      console.warn("fetchTaiwanRealtimeName failed", clean, err);
-    }
-  }
-
-  return "";
-}
-
-
-async function fetchJsonDirectOrProxy(url) {
-  const candidates = [
-    url,
-    `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
-  ];
-
-  for (const targetUrl of candidates) {
-    try {
-      const res = await fetch(targetUrl, { cache: "no-store" });
-      if (!res.ok) continue;
-      return await res.json();
-    } catch (err) {
-      console.warn("fetchJsonDirectOrProxy failed", targetUrl, err);
-    }
-  }
-
-  return null;
-}
-
-async function fetchYahooLocalizedName(symbolOrCode) {
-  const raw = String(symbolOrCode || "").trim().toUpperCase();
-  const code = raw.replace(/\.(TW|TWO)$/i, "");
-
-  if (!code) return "";
-
-  const cache = readTwNameCache();
-  if (cache[`YH_${code}`]) return cache[`YH_${code}`];
-
-  const yahooQueries = /^\d{4,6}$/.test(code)
-    ? [`${code}.TW`, `${code}.TWO`, code]
-    : [code];
-
-  for (const q of yahooQueries) {
-    const url =
-      `https://query1.finance.yahoo.com/v1/finance/search` +
-      `?q=${encodeURIComponent(q)}` +
-      `&quotesCount=8&newsCount=0&lang=zh-Hant-TW&region=TW`;
-
-    const json = await fetchJsonDirectOrProxy(url);
-    const quotes = Array.isArray(json?.quotes) ? json.quotes : [];
-
-    const matched =
-      quotes.find((item) => String(item.symbol || "").toUpperCase() === q.toUpperCase()) ||
-      quotes.find((item) => String(item.symbol || "").toUpperCase().startsWith(`${code}.`)) ||
-      quotes.find((item) => String(item.symbol || "").toUpperCase() === code);
-
-    const candidates = [
-      matched?.shortname,
-      matched?.longname,
-      matched?.displayName,
-      matched?.name,
-    ].map((x) => String(x || "").trim()).filter(Boolean);
-
-    const chineseName = candidates.find((name) => /[一-龥]/.test(name));
-
-    if (chineseName) {
-      const fixed = chineseName
-        .replace(/\s+/g, "")
-        .replace(/股份有限公司/g, "")
-        .replace(/有限公司/g, "");
-
-      cache[`YH_${code}`] = fixed;
-      cache[code] = fixed;
-      writeTwNameCache(cache);
-      EXTRA_STOCK_CHINESE_NAMES[code] = fixed;
-      return fixed;
-    }
-  }
-
-  return "";
-}
-
-
-function getLocalDisplayName(symbol, fallback = "") {
-  const rawSymbol = String(symbol || "").trim();
-  const key = rawSymbol.toUpperCase().replace(/\.(TW|TWO)$/i, "");
-
-  // 1. stockUniverse（generated.js，執行腳本後有完整資料）
-  const universe = STOCK_UNIVERSE_RUNTIME?.length ? STOCK_UNIVERSE_RUNTIME : getFallbackStockUniverse();
-  const fromUniverse = getStockDisplayNameByCode(key, universe);
-  if (fromUniverse && fromUniverse !== key && /[一-龥]/.test(fromUniverse)) return fromUniverse;
-
-  // 2. localStorage cache（曾抓取過的，包含 TWSE 完整清單）
-  const cache = readTwNameCache?.() || {};
-  const cached = cache[key] || cache[`YH_${key}`];
-  if (cached && /[一-龥]/.test(cached)) return cached;
-
-  // 2b. TWSE OpenAPI 抓下來的完整清單（key: stockRadarTwStockNamesV1）
-  try {
-    const twseCache = JSON.parse(localStorage.getItem("stockRadarTwStockNamesV1") || "{}");
-    const twseName = twseCache[key];
-    if (twseName && /[一-龥]/.test(twseName)) return twseName;
-  } catch {}
-
-  // 3. Stock.jsx 內硬寫的對照表
-  const mapped = EXTRA_STOCK_CHINESE_NAMES?.[key] || EXTRA_STOCK_CHINESE_NAMES?.[rawSymbol.toUpperCase()];
-  if (mapped) return mapped;
-
-  // 4. twStockNames.js 的台股 fallback（幾百筆）
-  if (TW_STOCK_NAMES_FALLBACK[key]) return TW_STOCK_NAMES_FALLBACK[key];
-
-  // 5. 美股 ETF 名稱（ETF_NAMES）
-  if (ETF_NAMES[key]) return ETF_NAMES[key];
-
-  // 6. 美股個股名稱（US_STOCK_NAMES）
-  if (US_STOCK_NAMES[key]) return US_STOCK_NAMES[key];
-
-  if (typeof STOCK_MASTER_ALL !== "undefined") {
-    const master = STOCK_MASTER_ALL.find(
-      (item) => String(item.stockCode) === key || `${item.stockCode}.TW` === rawSymbol.toUpperCase()
-    );
-    if (master?.stockName) return master.stockName;
-  }
-
-  const raw = String(fallback || "").trim();
-  const looksEnglishOnly = /[A-Za-z]{4,}/.test(raw) && !/[一-龥]/.test(raw);
-
-  if (!raw || raw === key || raw === rawSymbol || looksEnglishOnly) return key;
-
-  return raw;
-}
-
-async function getBestDisplayName(symbol, fallback = "") {
-  const local = getLocalDisplayName(symbol, fallback);
+// 同步查快取，找不到就回傳代號
+function getDisplayName(symbol, fallback = "") {
   const key = String(symbol || "").toUpperCase().replace(/\.(TW|TWO)$/i, "");
-  const looksCodeOnly = local === key || /^\d{4,6}$/.test(local);
-  const looksEnglishOnly = /[A-Za-z]{4,}/.test(local) && !/[一-龥]/.test(local);
-
-  if (!looksCodeOnly && !looksEnglishOnly) return local;
-
-  const cache = readTwNameCache?.() || {};
-  const cached = cache[key] || cache[`YH_${key}`];
-  if (cached && /[一-龥]/.test(cached)) return cached;
-
-  // 找不到中文名時，自動向 Yahoo Finance 查詢並快取
-  try {
-    const yahooName = await fetchYahooLocalizedName(key);
-    if (yahooName && /[一-龥]/.test(yahooName)) return yahooName;
-  } catch {}
-
-  return local;
+  const cache = readNameCache();
+  if (cache[key] && /[一-鿿]/.test(cache[key])) return cache[key];
+  const raw = String(fallback || "").trim();
+  const looksEnglish = /[A-Za-z]{4,}/.test(raw) && !/[一-鿿]/.test(raw);
+  return (!raw || raw === key || looksEnglish) ? key : raw;
 }
+
+// 查股票名稱：先查快取，沒有就問後端（後端查 Yahoo），結果存入快取
+async function fetchAndCacheName(symbol) {
+  const key = String(symbol || "").toUpperCase().replace(/\.(TW|TWO)$/i, "");
+  const cache = readNameCache();
+  if (cache[key] && /[一-鿿]/.test(cache[key])) return cache[key];
+  try {
+    const r = await fetch(`${API_BASE}/api/yahoo/name/${encodeURIComponent(key)}`);
+    if (!r.ok) return key;
+    const data = await r.json();
+    if (data.name && data.name !== key && /[一-鿿]/.test(data.name)) {
+      cache[key] = data.name;
+      writeNameCache(cache);
+      return data.name;
+    }
+  } catch {}
+  return key;
+}
+
+// 儲存名稱到快取
+function saveName(symbol, name) {
+  if (!symbol || !name) return;
+  const key = String(symbol).toUpperCase().replace(/\.(TW|TWO)$/i, "");
+  if (!key || name === key) return;
+  const cache = readNameCache();
+  cache[key] = name;
+  writeNameCache(cache);
+}
+
 
 function klineSma(values, period, endIndex = values.length - 1) {
   if (!values?.length || endIndex < period - 1) return null;
@@ -1164,56 +619,15 @@ function normalizeSearchText(value) {
 }
 
 function buildChineseNameIndex() {
-  const rows = [];
-
-  Object.entries(NAME_TO_CODE || {}).forEach(([name, code]) => {
-    rows.push({ code: String(code), name });
-  });
-
-  Object.entries(EXTRA_STOCK_CHINESE_NAMES || {}).forEach(([code, name]) => {
-    rows.push({ code: String(code), name });
-  });
-
-  (STOCK_UNIVERSE_RUNTIME || []).forEach((stock) => {
-    rows.push({ code: stock.stockCode, name: stock.stockName });
-    if (stock.englishName) rows.push({ code: stock.stockCode, name: stock.englishName });
-    rows.push({ code: stock.stockCode, name: stock.stockName?.replace("-KY", "KY") });
-    rows.push({ code: stock.stockCode, name: stock.stockName?.replace("*-KY", "KY") });
-  });
-
-  if (typeof STOCK_MASTER_ALL !== "undefined") {
-    STOCK_MASTER_ALL.forEach((stock) => {
-      rows.push({ code: stock.stockCode, name: stock.stockName });
-      rows.push({ code: stock.stockCode, name: stock.stockName?.replace("-KY", "KY") });
-      rows.push({ code: stock.stockCode, name: stock.stockName?.replace("*-KY", "KY") });
-    });
-  }
-
-  if (typeof MARKET_STRONG_POOL !== "undefined") {
-    MARKET_STRONG_POOL.forEach((stock) => {
-      if (stock.name) rows.push({ code: stock.symbol, name: stock.name });
-      const localName = EXTRA_STOCK_CHINESE_NAMES?.[stock.symbol];
-      if (localName) rows.push({ code: stock.symbol, name: localName });
-    });
-  }
-
-  return rows
-    .filter((row) => row.code && row.name)
-    .map((row) => ({
-      code: String(row.code),
-      name: String(row.name),
-      key: normalizeSearchText(row.name),
-    }));
+  // 已改用 Yahoo API 即時查名稱，不再維護靜態索引
+  return [];
 }
 
 function resolveSymbol(input) {
   const raw = String(input || "").trim();
   if (!raw) return "";
 
-  const universeResolved = resolveStockInput(raw, STOCK_UNIVERSE_RUNTIME);
-  if (universeResolved?.stockCode && universeResolved.source !== "unknown") {
-    return universeResolved.yahooSymbol || universeResolved.stockCode;
-  }
+
 
   const cleaned = raw.replace(/\s+/g, "");
   const upper = cleaned.toUpperCase();
@@ -1227,23 +641,7 @@ function resolveSymbol(input) {
   // 允許使用「雷科.TW」「台積電.TW」這類輸入，先移除市場後綴再查中文名。
   const key = normalizeSearchText(raw);
 
-  if (NAME_TO_CODE[raw]) return NAME_TO_CODE[raw];
-  if (NAME_TO_CODE[key]) return NAME_TO_CODE[key];
-
-  const nameIndex = buildChineseNameIndex();
-
-  // 完全匹配優先
-  const exact = nameIndex.find((row) => row.key === key);
-  if (exact) return exact.code;
-
-  // 模糊匹配：輸入「台積」「矽力」也能找到
-  if (/[\u4e00-\u9fff]/.test(raw)) {
-    const partial =
-      nameIndex.find((row) => row.key.includes(key)) ||
-      nameIndex.find((row) => key.includes(row.key) && row.key.length >= 2);
-
-    if (partial) return partial.code;
-  }
+  // 中文名查找現在由後端 Yahoo API 處理，這裡只處理代號
 
   const code = upper.match(/\d{4,6}[A-Z]?/)?.[0];
   if (code) return code;
@@ -1353,10 +751,17 @@ async function fetchYahooHistory(input, range = "6mo", interval = "1d") {
 
   if (!history.length) throw new Error(`找不到有效K線資料：${symbol}`);
 
+  // 從 Yahoo meta 取中文名（shortName 台股通常是中文，美股通常是英文）
+  const metaRawName = meta.shortName || meta.longName || "";
+  const metaChineseName = extractChineseName(metaRawName); // 只有含中文才會有值
+  const cleanSymbol = String(symbol || "").replace(/\.(TW|TWO)$/i, "");
+  if (metaChineseName) saveName(cleanSymbol, metaChineseName);
+
   return {
-    symbol: String(symbol || "").replace(/\.(TW|TWO)$/i, ""),
+    symbol: cleanSymbol,
     yahooSymbol: symbol,
-    name: getLocalDisplayName(symbol, meta.longName || meta.shortName || symbol),
+    yahooName: metaRawName,   // 原始名稱，供後續判斷
+    name: metaChineseName || getDisplayName(cleanSymbol) || cleanSymbol,
     currency: meta.currency || "TWD",
     regularMarketPrice: meta.regularMarketPrice || history.at(-1)?.close || null,
     history,
@@ -2607,11 +2012,7 @@ function resolveGroupStocks(groupName, universeInput = null) {
   const group = String(groupName || "").trim();
   if (!group) return [];
 
-  const universe = universeInput?.length
-    ? universeInput
-    : STOCK_UNIVERSE_RUNTIME?.length
-    ? STOCK_UNIVERSE_RUNTIME
-    : getFallbackStockUniverse();
+  const universe = universeInput?.length ? universeInput : [];
 
   const codes = conceptMap?.[group];
 
@@ -2657,9 +2058,7 @@ function getMasterByCode(code) {
   const key = String(code || "").trim().toUpperCase().replace(/\.(TW|TWO)$/i, "");
   if (!key) return null;
 
-  const universe = STOCK_UNIVERSE_RUNTIME?.length ? STOCK_UNIVERSE_RUNTIME : getFallbackStockUniverse();
-  const fromUniverse = universe.find((item) => String(item.stockCode).toUpperCase() === key);
-  if (fromUniverse) return fromUniverse;
+
 
   if (typeof STOCK_MASTER_ALL !== "undefined") {
     const fromMaster = STOCK_MASTER_ALL.find((item) => String(item.stockCode).toUpperCase() === key);
@@ -2683,12 +2082,7 @@ function isCommonTaiwanStock(stock) {
 
 function getStockProfile(stock) {
   const code = String(stock?.symbol || stock?.stockCode || "").replace(/\.(TW|TWO)$/i, "");
-  const universe = STOCK_UNIVERSE_RUNTIME?.length ? STOCK_UNIVERSE_RUNTIME : getFallbackStockUniverse();
-  const info =
-    universe.find((item) => String(item.stockCode) === code) ||
-    (typeof STOCK_MASTER_ALL !== "undefined"
-      ? STOCK_MASTER_ALL.find((item) => String(item.stockCode) === code)
-      : null);
+  const info = null; // 產業資訊由 Yahoo meta 提供
 
   const industry =
     stock?.officialIndustry ||
@@ -2765,7 +2159,7 @@ const [watchText, setWatchText] = useState(() => {
 
   const [range, setRange] = useState("1y");
   const [stock, setStock] = useState(null);
-  const [stockUniverse, setStockUniverse] = useState(() => getFallbackStockUniverse());
+  const [stockUniverse, setStockUniverse] = useState([]);
   const [watchList, setWatchList] = useState([]);
   const [loading, setLoading] = useState(false);
   const [scanning, setScanning] = useState(false);
@@ -2816,52 +2210,12 @@ const [watchText, setWatchText] = useState(() => {
   const [selectedIndustry, setSelectedIndustry] = useState(null);
 
   useEffect(() => {
-    let alive = true;
+    // 每 9 分鐘 ping 後端，防止 Render 免費方案冷啟動
+    const keepAliveInterval = setInterval(() => {
+      fetch(`${API_BASE}/`).catch(() => {});
+    }, 9 * 60 * 1000);
 
-    async function loadStockUniverse() {
-      const fallback = getFallbackStockUniverse();
-      STOCK_UNIVERSE_RUNTIME = fallback;
-      setStockUniverse(fallback);
-
-      try {
-        const universe = await fetchStockUniverse({ forceRefresh: false });
-        if (!alive || !universe?.length) return;
-
-        STOCK_UNIVERSE_RUNTIME = universe;
-        setStockUniverse(universe);
-
-        setStock((prev) => (prev ? mergeStockNameIntoQuote(prev, universe) : prev));
-        setWatchList((prev) => prev.map((item) => mergeStockNameIntoQuote(item, universe)));
-        setSystemStrongList((prev) => prev.map((item) => mergeStockNameIntoQuote(item, universe)));
-        setKlineRadarList((prev) => prev.map((item) => mergeStockNameIntoQuote(item, universe)));
-        setNextDayList((prev) => prev.map((item) => mergeStockNameIntoQuote(item, universe)));
-        setDayTradeList((prev) => prev.map((item) => mergeStockNameIntoQuote(item, universe)));
-      } catch (err) {
-        console.warn("stockUniverse 載入失敗，使用 fallback", err);
-      }
-    }
-
-    loadStockUniverse();
-
-    // 從自己的後端 proxy 抓取 TWSE 完整台股名稱清單，存進 localStorage
-    // 後端已設好 CORS，不會被擋，且有 1 小時快取
-    (async () => {
-      try {
-        const res = await fetch("https://stock-radar-api-os48.onrender.com/api/twse/list");
-        if (!res.ok) return;
-        const map = await res.json();
-        if (map && typeof map === "object" && Object.keys(map).length > 0) {
-          localStorage.setItem("stockRadarTwStockNamesV1", JSON.stringify(map));
-          console.log("TWSE 名稱清單載入完成，共", Object.keys(map).length, "筆");
-        }
-      } catch (e) {
-        console.warn("TWSE 名稱清單載入失敗", e);
-      }
-    })();
-
-    return () => {
-      alive = false;
-    };
+    return () => clearInterval(keepAliveInterval);
   }, []);
   const [selectedGroupQuotes, setSelectedGroupQuotes] = useState({});
   const [chartLines, setChartLines] = useState(() => {
@@ -3512,23 +2866,7 @@ const [watchText, setWatchText] = useState(() => {
   }
 
   async function ensureStockUniverseReady() {
-    const current = stockUniverse?.length ? stockUniverse : getFallbackStockUniverse();
-    STOCK_UNIVERSE_RUNTIME = current;
-
-    if (current.length > 200) return current;
-
-    try {
-      const universe = await fetchStockUniverse({ forceRefresh: false });
-      if (universe?.length) {
-        STOCK_UNIVERSE_RUNTIME = universe;
-        setStockUniverse(universe);
-        return universe;
-      }
-    } catch (err) {
-      console.warn("stockUniverse 快取載入失敗，暫用 fallback", err);
-    }
-
-    return current;
+    return [];
   }
 
   async function searchOne(input = query) {
@@ -3539,56 +2877,19 @@ const [watchText, setWatchText] = useState(() => {
     setError("");
 
     try {
-      // 關鍵修正：
-      // 不再只用一開始的 fallback 名單解析。每次搜尋前先確保 stockUniverse 已經載入。
-      // 否則像 2328 這類不在 fallback 的股票，會被當成「只有代號」。
-      const universe = await ensureStockUniverseReady();
-      const stockInfo = resolveStockInput(rawInput, universe);
-      const target = stockInfo?.yahooSymbol || stockInfo?.stockCode || resolveSymbol(rawInput);
-
-      setQuery(stockInfo?.stockCode || target || rawInput);
+      const target = resolveSymbol(rawInput);
+      setQuery(target || rawInput);
       rememberSearchKeyword(rawInput);
-      if (target && target !== rawInput) rememberSearchKeyword(stockInfo?.stockCode || target);
 
       const data = await fetchYahooHistory(target || rawInput, range, "1d");
       const analyzed = analyzeStock(data);
 
-      // 從 Yahoo K線 meta 裡取中文名（yahooName 可能是「旭暉應材股份有限公司」這樣的完整名稱）
-      const yahooRawName = String(analyzed.yahooName || "").trim();
-      const yahooChineseName = /[一-龥]/.test(yahooRawName)
-        ? yahooRawName.replace(/股份有限公司/g, "").replace(/有限公司/g, "").replace(/\s+/g, "")
-        : "";
-
-      const merged = mergeStockNameIntoQuote(
-        {
-          ...analyzed,
-          stockCode: analyzed.symbol,
-          name: stockInfo?.stockName || yahooChineseName || analyzed.name,
-          officialIndustry: stockInfo?.officialIndustry || analyzed.officialIndustry,
-          market: stockInfo?.market || analyzed.market,
-          isETF: stockInfo?.isETF ?? analyzed.isETF,
-        },
-        universe
-      );
-
-      // 如果 Yahoo 回傳了中文名，存進 cache 讓下次直接用
-      if (yahooChineseName) {
-        const key = String(analyzed.symbol || "").toUpperCase().replace(/\.(TW|TWO)$/i, "");
-        const cache = readTwNameCache();
-        if (!cache[key]) {
-          cache[key] = yahooChineseName;
-          cache["YH_" + key] = yahooChineseName;
-          writeTwNameCache(cache);
-        }
-      }
-
-      const displayName = await getBestDisplayName(merged.symbol, merged.name);
-
-      setStock({
-        ...merged,
-        name: displayName,
-      });
-      setQuery(merged.symbol || stockInfo?.stockCode || target || rawInput);
+      // analyzed.name 如果已是中文（fetchYahooHistory 從 meta.shortName 取到）就直接用
+      // 否則問後端 /api/yahoo/name/:symbol，後端會去 Yahoo chart 取 meta 並回傳
+      const nameIsCode = !analyzed.name || analyzed.name === analyzed.symbol || !/[一-鿿]/.test(analyzed.name);
+      const displayName = nameIsCode ? await fetchAndCacheName(analyzed.symbol) : analyzed.name;
+      setStock({ ...analyzed, name: displayName });
+      setQuery(analyzed.symbol || target || rawInput);
       setActiveMenu("analysis");
     } catch (err) {
       console.error(err);
@@ -3600,9 +2901,7 @@ const [watchText, setWatchText] = useState(() => {
   async function openStockAnalysisFromList(item) {
     if (!item) return;
 
-    const universe = await ensureStockUniverseReady();
-    const info = resolveStockInput(item.symbol || item.stockCode || item.code || item.name || "", universe);
-    const target = String(info?.yahooSymbol || item.symbol || item.stockCode || item.code || "").trim();
+    const target = String(item.symbol || item.stockCode || item.code || "").trim();
     if (!target) return;
 
     setQuery(target);
@@ -3612,8 +2911,6 @@ const [watchText, setWatchText] = useState(() => {
     setError("");
 
     try {
-      // 清單掃描為了速度很多只抓 5d，所以點進分析看板時一定重新抓完整K線。
-      // 這樣系統篩選 / K線雷達 / 隔日沖 / 產業清單點進去，都不會只剩5根K棒。
       const request = getKlineRequest(klineType, range);
       const safeRequest =
         request.interval === "1d" && ["1d", "5d"].includes(request.range)
@@ -3623,39 +2920,17 @@ const [watchText, setWatchText] = useState(() => {
       const data = await fetchYahooHistory(target, safeRequest.range, safeRequest.interval);
       const analyzed = analyzeStock(data);
 
-      const yahooRawName2 = String(analyzed.yahooName || "").trim();
-      const yahooChineseName2 = /[一-龥]/.test(yahooRawName2)
-        ? yahooRawName2.replace(/股份有限公司/g, "").replace(/有限公司/g, "").replace(/\s+/g, "")
-        : "";
-
-      if (yahooChineseName2) {
-        const key2 = String(analyzed.symbol || "").toUpperCase().replace(/\.(TW|TWO)$/i, "");
-        const cache2 = readTwNameCache();
-        if (!cache2[key2]) {
-          cache2[key2] = yahooChineseName2;
-          cache2["YH_" + key2] = yahooChineseName2;
-          writeTwNameCache(cache2);
-        }
-      }
-
-      const merged = mergeStockNameIntoQuote(
-        {
-          ...analyzed,
-          baseType: item.baseType || info?.officialIndustry || item.officialIndustry || analyzed.baseType,
-          officialIndustry: info?.officialIndustry || item.officialIndustry || analyzed.officialIndustry,
-          market: info?.market || item.market || analyzed.market,
-          isETF: info?.isETF ?? item.isETF ?? analyzed.isETF,
-        },
-        universe
-      );
-      const displayName = await getBestDisplayName(merged.symbol, item.name || info?.stockName || yahooChineseName2 || merged.name);
+      const nameIsCode2 = !analyzed.name || analyzed.name === analyzed.symbol || !/[一-鿿]/.test(analyzed.name);
+      const displayName = nameIsCode2 ? (item.name || await fetchAndCacheName(analyzed.symbol)) : analyzed.name;
 
       setStock({
-        ...merged,
+        ...analyzed,
         name: displayName,
+        baseType: item.baseType || analyzed.baseType,
+        officialIndustry: item.officialIndustry || analyzed.officialIndustry,
       });
     } catch (err) {
-      console.warn("openStockAnalysisFromList failed, fallback to existing item", target, err);
+      console.warn("openStockAnalysisFromList failed", target, err);
       setStock(item);
       setError(err.message || "股票完整K線載入失敗，暫時顯示清單快取資料");
     } finally {
@@ -4617,13 +3892,7 @@ const [watchText, setWatchText] = useState(() => {
     "🛡️ 若開盤 30 分鐘內指數快速轉弱，暫停追價，改等回測或尾盤確認。",
   ];
 
-  const suggestion = useMemo(() => {
-    const q = query.trim();
-    if (!q) return [];
-    return Object.entries(NAME_TO_CODE)
-      .filter(([name, code]) => name.includes(q) || code.includes(q))
-      .slice(0, 8);
-  }, [query]);
+  const suggestion = useMemo(() => [], []);
 
   return (
     <div className="terminal-shell">
@@ -5065,7 +4334,7 @@ const [watchText, setWatchText] = useState(() => {
                   {searchHistory.map((item) => (
                     <option key={item} value={item} />
                   ))}
-                  {buildStockSearchOptions(stockUniverse).slice(0, 1200).map((item) => (
+                  {[].map((item) => (
                     <option key={`${item.code}-${item.name}`} value={item.name}>
                       {item.code}｜{item.market}｜{item.industry}
                     </option>
@@ -5135,7 +4404,7 @@ const [watchText, setWatchText] = useState(() => {
 <div className="quick-selected-card">
                   <div className="muted">目前選股</div>
                   <div className="selected-name">
-                    {getLocalDisplayName(stock?.symbol, stock?.name) || "尚未載入資料"}
+                    {getDisplayName(stock?.symbol, stock?.name) || "尚未載入資料"}
                   </div>
                   <div className="selected-symbol">{stock?.symbol || query}</div>
                   <div className={stock?.changePct >= 0 ? "price up" : "price down"}>
@@ -5164,7 +4433,7 @@ const [watchText, setWatchText] = useState(() => {
                     <div className="stock-title">
                       <h1>
                         {stock
-                          ? `${getLocalDisplayName(stock.symbol, stock.name)} ${stock.symbol}`
+                          ? `${getDisplayName(stock.symbol, stock.name)} ${stock.symbol}`
                           : "請搜尋股票"}
                       </h1>
                       <p className="muted">互動 K 線、MA5 / MA20 / MA60、布林通道、成交量</p>
@@ -5390,7 +4659,7 @@ const [watchText, setWatchText] = useState(() => {
                       <tr key={s.symbol} onClick={() => openStockAnalysisFromList(s)}>
                         <td>
                             <div className="stock-name-stack">
-                              <span className="stock-name-main">{getLocalDisplayName(s.symbol, s.name)}</span>
+                              <span className="stock-name-main">{getDisplayName(s.symbol, s.name)}</span>
                               <span className="stock-name-code">{s.symbol}</span>
                             </div>
                           </td>
@@ -5492,7 +4761,7 @@ const [watchText, setWatchText] = useState(() => {
                           <td>{i + 1}</td>
                           <td>
                             <div className="stock-name-stack">
-                              <span className="stock-name-main">{getLocalDisplayName(s.symbol, s.name)}</span>
+                              <span className="stock-name-main">{getDisplayName(s.symbol, s.name)}</span>
                               <span className="stock-name-code">{s.symbol}</span>
                             </div>
                           </td>
@@ -5617,7 +4886,7 @@ const [watchText, setWatchText] = useState(() => {
                           <td>{i + 1}</td>
                           <td>
                             <div className="stock-name-stack">
-                              <span className="stock-name-main">{getLocalDisplayName(s.symbol, s.name)}</span>
+                              <span className="stock-name-main">{getDisplayName(s.symbol, s.name)}</span>
                               <span className="stock-name-code">{s.symbol}｜{s.baseType || "台股"}</span>
                             </div>
                           </td>
@@ -5753,7 +5022,7 @@ const [watchText, setWatchText] = useState(() => {
                         >
                           <td>
                             <div className="stock-name-stack">
-                              <span className="stock-name-main small">{getLocalDisplayName(s.symbol, s.name)}</span>
+                              <span className="stock-name-main small">{getDisplayName(s.symbol, s.name)}</span>
                               <span className="stock-name-code">{s.symbol}</span>
                             </div>
                           </td>
@@ -5841,7 +5110,7 @@ const [watchText, setWatchText] = useState(() => {
                       <div className="stock-head">
                         <div className="stock-title">
                           <h1>
-                            {getLocalDisplayName(intradayStock.symbol, intradayStock.name)} {intradayStock.symbol}
+                            {getDisplayName(intradayStock.symbol, intradayStock.name)} {intradayStock.symbol}
                           </h1>
                           <p className="muted">目前使用 {klineLabel(klineType)}，資料來源為 Yahoo Finance K線（已加速輪詢，但 Yahoo 台股可能仍有延遲）。</p>
                         </div>
@@ -5933,7 +5202,7 @@ const [watchText, setWatchText] = useState(() => {
                             <td>{i + 1}</td>
                             <td>
                             <div className="stock-name-stack">
-                              <span className="stock-name-main">{getLocalDisplayName(s.symbol, s.name)}</span>
+                              <span className="stock-name-main">{getDisplayName(s.symbol, s.name)}</span>
                               <span className="stock-name-code">{s.symbol}</span>
                             </div>
                           </td>
@@ -6132,7 +5401,7 @@ const [watchText, setWatchText] = useState(() => {
                               <tr key={s.symbol} onClick={() => openStockAnalysisFromList(s)}>
                                 <td>
                                   <div className="stock-name-stack">
-                                    <span className="stock-name-main small">{getLocalDisplayName(s.symbol, s.name)}</span>
+                                    <span className="stock-name-main small">{getDisplayName(s.symbol, s.name)}</span>
                                     <span className="stock-name-code">{s.symbol}</span>
                                   </div>
                                 </td>
@@ -6165,7 +5434,7 @@ const [watchText, setWatchText] = useState(() => {
                             <tr key={s.symbol} onClick={() => openStockAnalysisFromList(s)}>
                               <td>
                                 <div className="stock-name-stack">
-                                  <span className="stock-name-main small">{getLocalDisplayName(s.symbol, s.name)}</span>
+                                  <span className="stock-name-main small">{getDisplayName(s.symbol, s.name)}</span>
                                   <span className="stock-name-code">{s.symbol}</span>
                                 </div>
                               </td>
@@ -6226,7 +5495,7 @@ const [watchText, setWatchText] = useState(() => {
                                 平均漲幅 {item.avgChange.toFixed(2)}%｜平均AI {Math.round(item.avgScore)}｜平均量比 {item.avgVolumeRatio.toFixed(2)}
                               </div>
                               <div className="muted">
-                                代表股：{item.topStocks.map((s) => `${getLocalDisplayName(s.symbol, s.name)}(${s.symbol})`).join("、")}
+                                代表股：{item.topStocks.map((s) => `${getDisplayName(s.symbol, s.name)}(${s.symbol})`).join("、")}
                               </div>
                             </div>
                             <span>▲ 強勢</span>
@@ -6246,7 +5515,7 @@ const [watchText, setWatchText] = useState(() => {
                                 平均漲幅 {item.avgChange.toFixed(2)}%｜平均AI {Math.round(item.avgScore)}｜平均量比 {item.avgVolumeRatio.toFixed(2)}
                               </div>
                               <div className="muted">
-                                代表股：{item.topStocks.map((s) => `${getLocalDisplayName(s.symbol, s.name)}(${s.symbol})`).join("、")}
+                                代表股：{item.topStocks.map((s) => `${getDisplayName(s.symbol, s.name)}(${s.symbol})`).join("、")}
                               </div>
                             </div>
                             <span>▼ 弱勢</span>
@@ -6271,7 +5540,7 @@ const [watchText, setWatchText] = useState(() => {
                                   <td>{index + 1}</td>
                                   <td>
                                     <div className="stock-name-stack">
-                                      <span className="stock-name-main small">{getLocalDisplayName(s.symbol, s.name)}</span>
+                                      <span className="stock-name-main small">{getDisplayName(s.symbol, s.name)}</span>
                                       <span className="stock-name-code">{s.symbol}</span>
                                     </div>
                                   </td>
@@ -6302,7 +5571,7 @@ const [watchText, setWatchText] = useState(() => {
                                   <td>{index + 1}</td>
                                   <td>
                                     <div className="stock-name-stack">
-                                      <span className="stock-name-main small">{getLocalDisplayName(s.symbol, s.name)}</span>
+                                      <span className="stock-name-main small">{getDisplayName(s.symbol, s.name)}</span>
                                       <span className="stock-name-code">{s.symbol}</span>
                                     </div>
                                   </td>
@@ -6336,7 +5605,7 @@ const [watchText, setWatchText] = useState(() => {
                             <tr key={s.symbol} onClick={() => openStockAnalysisFromList(s)}>
                               <td>
                                 <div className="stock-name-stack">
-                                  <span className="stock-name-main small">{getLocalDisplayName(s.symbol, s.name)}</span>
+                                  <span className="stock-name-main small">{getDisplayName(s.symbol, s.name)}</span>
                                   <span className="stock-name-code">{s.symbol}</span>
                                 </div>
                               </td>
@@ -6367,7 +5636,7 @@ const [watchText, setWatchText] = useState(() => {
                             <tr key={s.symbol} onClick={() => { setIntradayStock(s); setStock(s); setActiveMenu("daytrade"); }}>
                               <td>
                                 <div className="stock-name-stack">
-                                  <span className="stock-name-main small">{getLocalDisplayName(s.symbol, s.name)}</span>
+                                  <span className="stock-name-main small">{getDisplayName(s.symbol, s.name)}</span>
                                   <span className="stock-name-code">{s.symbol}</span>
                                 </div>
                               </td>
