@@ -1614,13 +1614,13 @@ function TradingChart({
 
     const chart = createChart(containerRef.current, {
       height: 560,
-      layout: { background: { color: "#020617" }, textColor: "#cbd5e1" },
+      layout: { background: { color: "#060e1a" }, textColor: "#cbd5e1" },
       grid: {
-        vertLines: { color: "rgba(148,163,184,.12)" },
-        horzLines: { color: "rgba(148,163,184,.12)" },
+        vertLines: { color: "rgba(56,189,248,.10)" },
+        horzLines: { color: "rgba(56,189,248,.10)" },
       },
-      rightPriceScale: { borderColor: "rgba(148,163,184,.25)" },
-      timeScale: { borderColor: "rgba(148,163,184,.25)", timeVisible: true, secondsVisible: false },
+      rightPriceScale: { borderColor: "rgba(14,165,233,.20)" },
+      timeScale: { borderColor: "rgba(14,165,233,.20)", timeVisible: true, secondsVisible: false },
       crosshair: { mode: 1 },
     });
 
@@ -1637,8 +1637,8 @@ function TradingChart({
 
     candleSeriesRef.current = candleSeries;
 
-    const ma5Series = chart.addSeries(LineSeries, { color: "#facc15", lineWidth: 2, priceLineVisible: false });
-    const ma20Series = chart.addSeries(LineSeries, { color: "#60a5fa", lineWidth: 2, priceLineVisible: false });
+    const ma5Series = chart.addSeries(LineSeries, { color: "#fb923c", lineWidth: 2, priceLineVisible: false });
+    const ma20Series = chart.addSeries(LineSeries, { color: "#38bdf8", lineWidth: 2, priceLineVisible: false });
     const ma60Series = chart.addSeries(LineSeries, { color: "#a78bfa", lineWidth: 2, priceLineVisible: false });
     const bollUpperSeries = chart.addSeries(LineSeries, { color: "rgba(45,212,191,.9)", lineWidth: 1, priceLineVisible: false });
     const bollMidSeries = chart.addSeries(LineSeries, { color: "rgba(45,212,191,.55)", lineWidth: 1, priceLineVisible: false });
@@ -3184,9 +3184,9 @@ const [watchText, setWatchText] = useState(() => {
     }
   }
 
-  async function scanKlineRadar() {
-    setKlineRadarLoading(true);
-    setError("");
+  async function scanKlineRadar({ silent = false } = {}) {
+    if (!silent) setKlineRadarLoading(true);
+    if (!silent) setError("");
 
     try {
       const universeMap = new Map();
@@ -3244,9 +3244,9 @@ const [watchText, setWatchText] = useState(() => {
     }
   }
 
-  async function scanSystemStrongStocks() {
-    setSystemStrongLoading(true);
-    setError("");
+  async function scanSystemStrongStocks({ silent = false } = {}) {
+    if (!silent) setSystemStrongLoading(true);
+    if (!silent) setError("");
 
     try {
       const result = (
@@ -3462,12 +3462,13 @@ const [watchText, setWatchText] = useState(() => {
     let cancelled = false;
 
     async function loadSystemStrongInBackground() {
-      if (cancelled || systemStrongList.length) return;
-      await scanSystemStrongStocks();
+      if (cancelled) return;
+      await scanSystemStrongStocks({ silent: true });
     }
 
     loadSystemStrongInBackground();
 
+    // 每 5 分鐘重新掃描，確保資料是最新的
     const timer = setInterval(() => {
       loadSystemStrongInBackground();
     }, 300000);
@@ -3536,6 +3537,32 @@ const [watchText, setWatchText] = useState(() => {
     return () => clearInterval(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoScan, watchText, range]);
+
+  // K線雷達：背景自動執行，每 10 分鐘更新一次
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadKlineRadarInBackground() {
+      if (cancelled) return;
+      await scanKlineRadar({ silent: true });
+    }
+
+    // 延遲 30 秒才開始，避免網頁剛開時同時發太多請求
+    const delay = setTimeout(() => {
+      loadKlineRadarInBackground();
+    }, 30000);
+
+    const timer = setInterval(() => {
+      loadKlineRadarInBackground();
+    }, 600000);  // 10 分鐘
+
+    return () => {
+      cancelled = true;
+      clearTimeout(delay);
+      clearInterval(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [range]);
 
   useEffect(() => {
     if (!realtimeDayTrade || activeMenu !== "daytrade") return;
@@ -4082,32 +4109,32 @@ const [watchText, setWatchText] = useState(() => {
   return (
     <div className="terminal-shell">
       <style>{`
-        button {border: 0;border-radius: 10px;padding: 8px 11px;background: #22d3ee;color: #06202a;font-weight: 900;cursor: pointer;font-size: 13px;
+        button {border: 0;border-radius: 10px;padding: 8px 11px;background: #0ea5e9;color: #03111f;font-weight: 900;cursor: pointer;font-size: 13px;
         transition:background .18s ease,filter .18s ease,transform .18s ease,border-color .18s ease;}
         button:hover {filter: brightness(1.12);transform: translateY(-1px);}
         button:active {transform: translateY(0);}
         button:disabled {opacity: .55;cursor: not-allowed;}
-        button.ghost {background: #111827;color: #e5e7eb;border: 1px solid #334155;}
-        button.ghost:hover {background: #1e293b;border-color: #64748b;}
-        button.danger {background: #fb7185;color: #450a0a;}
+        button.ghost {background: #0f1929;color: #e5e7eb;border: 1px solid #1e3a55;}
+        button.ghost:hover {background: #152236;border-color: #2d5a80;}
+        button.danger {background: #f43f5e;color: #2d0312;}
         button.danger:hover {filter: brightness(1.08);}
-        input, textarea, select { width: 100%; box-sizing: border-box; background: #020617; color: #e5e7eb; border: 1px solid #334155; border-radius: 10px; padding: 9px; outline: none; font-size: 13px; }
-        label { display: block; color: #cbd5e1; margin: 9px 0 6px; font-size: 12px; }
+        input, textarea, select { width: 100%; box-sizing: border-box; background: #060e1a; color: #e5e7eb; border: 1px solid #1e3a55; border-radius: 10px; padding: 9px; outline: none; font-size: 13px; }
+        label { display: block; color: #475569; margin: 8px 0 4px; font-size: 11px; letter-spacing: .04em; }
         h1, h2, h3 { margin: 0; }
-        .terminal-shell { min-height: 100vh; background: radial-gradient(circle at top left, #1e293b, #050914 50%); }
+        .terminal-shell { min-height: 100vh; background: radial-gradient(circle at top left, #0d1f35, #07111e 55%); }
         #root { width: 100vw; min-height: 100vh; margin: 0; padding: 0; }
         .app-frame { min-height: 100vh; }
         .left-nav { position: fixed !important; left: 0; top: 0; bottom: 0; width: 170px; z-index: 1000; }
         .content { margin-left: 170px; min-height: 100vh; }
-        .left-nav { background: linear-gradient(180deg, rgba(2,6,23,.96), rgba(2,6,23,.90)); border-right: 1px solid rgba(148,163,184,.16); padding: 14px 10px; height: 100vh; box-sizing: border-box; overflow-y: auto; }
-        .logo { display: flex; gap: 10px; align-items: center; padding: 8px 8px 18px; border-bottom: 1px solid rgba(148,163,184,.14); margin-bottom: 14px; }
-        .logo-icon { width: 34px; height: 34px; border-radius: 10px; background: linear-gradient(135deg,#38bdf8,#8b5cf6); display: grid; place-items: center; font-weight: 900; box-shadow: 0 0 18px rgba(56,189,248,.20); }
+        .left-nav { background: linear-gradient(180deg, rgba(7,13,22,.98), rgba(7,13,22,.95)); border-right: 1px solid rgba(56,189,248,.12); padding: 14px 10px; height: 100vh; box-sizing: border-box; overflow-y: auto; }
+        .logo { display: flex; gap: 10px; align-items: center; padding: 8px 8px 18px; border-bottom: 1px solid rgba(56,189,248,.10); margin-bottom: 14px; }
+        .logo-icon { width: 34px; height: 34px; border-radius: 10px; background: linear-gradient(135deg,#0ea5e9,#0369a1); display: grid; place-items: center; font-weight: 900; box-shadow: 0 0 14px rgba(14,165,233,.18); }
         .logo b { display: block; font-size: 14px; }
         .logo span { color: #64748b; font-size: 11px; }
-        .nav-btn { width: 100%; display: flex; align-items: center; gap: 9px; margin-bottom: 9px; background: rgba(15,23,42,.50); color: #cbd5e1; border: 1px solid rgba(148,163,184,.12); justify-content: flex-start; padding: 11px 10px; border-radius: 13px; box-shadow: inset 0 1px 0 rgba(255,255,255,.025); }
-        .nav-btn:hover { color: #f8fafc; border-color: rgba(56,189,248,.28); background: rgba(15,23,42,.78); transform: translateX(1px); }
-        .nav-btn.active { color: #67e8f9; background: linear-gradient(135deg, rgba(34,211,238,.18), rgba(15,23,42,.78)); border-color: rgba(34,211,238,.48); box-shadow: 0 0 0 1px rgba(34,211,238,.08), 0 10px 24px rgba(0,0,0,.22); }
-        .nav-exit { margin-top: 2px; color: #94a3b8; background: rgba(2,6,23,.38); }
+        .nav-btn { width: 100%; display: flex; align-items: center; gap: 8px; margin-bottom: 6px; background: transparent; color: #64748b; border: 1px solid transparent; justify-content: flex-start; padding: 9px 10px; border-radius: 8px; font-size: 12px; }
+        .nav-btn:hover { color: #cbd5e1; background: rgba(14,165,233,.08); border-color: transparent; transform: none; }
+        .nav-btn.active { color: #38bdf8; background: rgba(14,165,233,.12); border-color: rgba(14,165,233,.25); box-shadow: none; font-weight: 600; }
+        .nav-exit { margin-top: 2px; color: #94a3b8; background: rgba(6,14,26,.40); }
         .left-nav .nav-btn:nth-of-type(4),
         .left-nav .nav-btn:nth-of-type(8) {
           margin-top: 18px;
@@ -4121,26 +4148,26 @@ const [watchText, setWatchText] = useState(() => {
           right: 6px;
           top: -10px;
           height: 1px;
-          background: rgba(148,163,184,.14);
+          background: rgba(56,189,248,.10);
         }
         .kline-radar-hero { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 12px; margin: 16px 0; }
-        .kline-radar-hero > div { border: 1px solid rgba(148,163,184,.12); background: rgba(2,6,23,.62); border-radius: 18px; padding: 16px; }
+        .kline-radar-hero > div { border: 1px solid rgba(14,165,233,.12); background: rgba(6,14,26,.65); border-radius: 18px; padding: 16px; }
         .kline-radar-hero span { display: block; color: #94a3b8; font-size: 12px; margin-bottom: 8px; }
         .kline-radar-hero b { display: block; color: #f8fafc; font-size: 30px; line-height: 1; }
         .kline-radar-hero small { display: block; color: #64748b; font-size: 11px; margin-top: 8px; }
-        .radar-score b { display: block; color: #67e8f9; font-size: 20px; }
+        .radar-score b { display: block; color: #38bdf8; font-size: 20px; }
         .radar-score span { color: #94a3b8; font-size: 12px; }
         .tag-list.compact { display: flex; flex-wrap: wrap; gap: 6px; }
-        .tag-list.compact span { border: 1px solid rgba(94,234,212,.18); background: rgba(94,234,212,.08); color: #ccfbf1; border-radius: 999px; padding: 4px 8px; font-size: 11px; font-weight: 800; }
+        .tag-list.compact span { border: 1px solid rgba(14,165,233,.20); background: rgba(56,189,248,.08); color: #bae6fd; border-radius: 999px; padding: 4px 8px; font-size: 11px; font-weight: 800; }
         .tag-list.compact.bearish span { border-color: rgba(255,59,92,.18); background: rgba(255,59,92,.08); color: #fecdd3; }
-        .tag-list.compact.bullish span { border-color: rgba(94,234,212,.18); background: rgba(94,234,212,.08); color: #ccfbf1; }
+        .tag-list.compact.bullish span { border-color: rgba(14,165,233,.20); background: rgba(56,189,248,.08); color: #bae6fd; }
         .kline-radar-table tbody tr:hover { background: rgba(34,211,238,.06); cursor: pointer; }
         .auto-criteria-panel { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 12px 0 16px; }
-        .auto-criteria-panel > div { border: 1px solid rgba(148,163,184,.14); background: rgba(2,6,23,.42); border-radius: 16px; padding: 13px 15px; }
+        .auto-criteria-panel > div { border: 1px solid rgba(14,165,233,.12); background: rgba(6,14,26,.42); border-radius: 16px; padding: 13px 15px; }
         .auto-criteria-panel b { display: block; color: #f8fafc; margin-bottom: 6px; }
         .auto-criteria-panel span { color: #94a3b8; line-height: 1.6; font-size: 13px; }
         .condition-mini-list { display: flex; flex-wrap: wrap; gap: 6px; max-width: 310px; }
-        .condition-mini-list span { border: 1px solid rgba(56,189,248,.18); background: rgba(56,189,248,.07); color: #dbeafe; border-radius: 999px; padding: 4px 8px; font-size: 11px; font-weight: 800; }
+        .condition-mini-list span { border: 1px solid rgba(14,165,233,.20); background: rgba(14,165,233,.08); color: #bae6fd; border-radius: 999px; padding: 4px 8px; font-size: 11px; font-weight: 800; }
         .advice-mini { display: grid; gap: 4px; min-width: 260px; max-width: 340px; }
         .advice-mini b { color: #f8fafc; font-size: 12px; }
         .advice-mini span { color: #fbbf24; font-size: 12px; }
@@ -4150,7 +4177,7 @@ const [watchText, setWatchText] = useState(() => {
         @media (max-width: 720px) { .kline-radar-hero { grid-template-columns: 1fr; } }
         .content { padding: 16px; margin-left: 170px; }
         .top-bar { position: relative; display: grid; grid-template-columns: 240px 1fr 360px; align-items: center; gap: 16px; margin-bottom: 14px; min-height: 96px; }
-        .floating-header {
+        .floating-header { /* no shadow */
           position: sticky;
           top: 0;
           z-index: 9999;
@@ -4170,17 +4197,17 @@ const [watchText, setWatchText] = useState(() => {
           right: 18px;
           bottom: 0;
           height: 1px;
-          background: linear-gradient(90deg, transparent, rgba(94,234,212,.18), transparent);
+          background: linear-gradient(90deg, transparent, rgba(14,165,233,.20), transparent);
           pointer-events: none;
         }
-        .top-back-btn { height: 58px; border-radius: 16px; background: linear-gradient(135deg, rgba(15,23,42,.98), rgba(30,41,59,.98)); color: #e2e8f0; border: 1px solid rgba(56,189,248,.28); font-size: 17px; font-weight: 900; box-shadow: 0 10px 24px rgba(0,0,0,.28); }
-        .top-back-btn:hover { background: linear-gradient(135deg, rgba(8,47,73,.98), rgba(15,118,110,.98)); border-color: rgba(34,211,238,.55); }
+        .top-back-btn { height: 44px; border-radius: 10px; background: rgba(10,24,44,.90); color: #94a3b8; border: 1px solid rgba(14,165,233,.18); font-size: 13px; font-weight: 600; box-shadow: none; padding: 0 16px; }
+        .top-back-btn:hover { background: rgba(14,165,233,.12); border-color: rgba(14,165,233,.35); color: #38bdf8; }
         .top-title { text-align: center; justify-self: center; }
         .top-title h1 { font-size: 32px; letter-spacing: 2px; font-weight: 900; }
         .top-title p { color: #94a3b8; font-size: 13px; margin: 8px 0 0; white-space: nowrap; }
         .top-stats { display: flex; gap: 12px; align-items: center; justify-content: flex-end; }
-        .mini-stat { min-width: 90px; background: rgba(15,23,42,.86); border: 1px solid rgba(148,163,184,.18); border-radius: 14px; padding: 10px 12px; text-align: center; }
-        .mini-stat span { color: #94a3b8; font-size: 11px; }
+        .mini-stat { min-width: 80px; background: rgba(14,165,233,.06); border: 1px solid rgba(14,165,233,.14); border-radius: 8px; padding: 8px 12px; text-align: center; }
+        .mini-stat span { color: #475569; font-size: 10px; letter-spacing: .04em; }
         .mini-stat b { display: block; font-size: 20px; margin-top: 5px; }
         @media (max-width: 1280px) {
           .top-bar { grid-template-columns: 1fr; min-height: auto; }
@@ -4189,99 +4216,99 @@ const [watchText, setWatchText] = useState(() => {
           .top-stats { justify-content: center; }
           .top-back-btn { width: 100%; }
         }
-        .card { background: rgba(15,23,42,.84); border: 1px solid rgba(148,163,184,.18); border-radius: 14px; box-shadow: 0 14px 36px rgba(0,0,0,.28); padding: 12px; }
-        .favorite-action { background: linear-gradient(135deg, #facc15, #fb923c); color: #1f1300; }
+        .card { background: rgba(12,28,50,.88); border: 1px solid rgba(14,165,233,.16); border-radius: 14px; box-shadow: 0 14px 36px rgba(0,0,0,.28); padding: 12px; }
+        .favorite-action { background: linear-gradient(135deg, #0ea5e9, #0284c7); color: #031220; }
         .favorite-action.saved { background: #14532d; color: #bbf7d0; border: 1px solid rgba(34,197,94,.45); }
         .favorite-notice { margin-top: 8px; color: #facc15; font-size: 13px; }
-        .favorite-picker { position: absolute; z-index: 50; min-width: 150px; background: #020617; border: 1px solid rgba(148,163,184,.28); border-radius: 14px; padding: 8px; box-shadow: 0 18px 50px rgba(0,0,0,.45); }
-        .favorite-picker button { width: 100%; margin-bottom: 6px; background: #111827; color: #e5e7eb; border: 1px solid #334155; }
+        .favorite-picker { position: absolute; z-index: 50; min-width: 150px; background: #0b1929; border: 1px solid rgba(56,189,248,.22); border-radius: 14px; padding: 8px; box-shadow: 0 18px 50px rgba(0,0,0,.45); }
+        .favorite-picker button { width: 100%; margin-bottom: 6px; background: #111f30; color: #e5e7eb; border: 1px solid #1e3a55; }
         .favorite-picker button:last-child { margin-bottom: 0; }
         .watch-actions { position: relative; display: inline-block; }
-        .watch-menu { position: absolute; right: 0; top: 44px; z-index: 20; width: 280px; background: #020617; border: 1px solid rgba(148,163,184,.25); border-radius: 16px; padding: 12px; box-shadow: 0 18px 50px rgba(0,0,0,.45); }
+        .watch-menu { position: absolute; right: 0; top: 44px; z-index: 20; width: 280px; background: #0b1929; border: 1px solid rgba(14,165,233,.20); border-radius: 16px; padding: 12px; box-shadow: 0 18px 50px rgba(0,0,0,.45); }
         .chart-tools { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
         .indicator-dropdown { position: relative; }
-        .indicator-menu { position: absolute; right: 0; top: 42px; z-index: 30; width: 230px; background: #020617; border: 1px solid rgba(148,163,184,.25); border-radius: 14px; padding: 10px; box-shadow: 0 18px 50px rgba(0,0,0,.45); }
+        .indicator-menu { position: absolute; right: 0; top: 42px; z-index: 30; width: 230px; background: #0b1929; border: 1px solid rgba(14,165,233,.20); border-radius: 14px; padding: 10px; box-shadow: 0 18px 50px rgba(0,0,0,.45); }
         .indicator-menu .toggle-card { margin-bottom: 8px; }
         .indicator-menu .toggle-card:last-child { margin-bottom: 0; }
         .summary-grid { display: grid; grid-template-columns: 1.1fr 1fr .8fr 1fr; gap: 10px; margin-bottom: 10px; }
-        .analysis-layout { display: grid; grid-template-columns: 360px minmax(680px, 1fr) 370px; gap: 10px; align-items: start; }
+        .analysis-layout { display: grid; grid-template-columns: 300px 1fr 340px; gap: 10px; align-items: start; }
         .center-stack { display: contents; }
-        .search-combo-card { grid-column: 1 / span 2; grid-row: 1; min-height: 210px; display: grid; grid-template-columns: 360px 1fr; gap: 22px; align-items: stretch; }
-        .search-form-zone { border-right: 1px solid rgba(148,163,184,.16); padding-right: 18px; }
-        .search-current-zone { display: grid; grid-template-columns: minmax(220px,.8fr) minmax(360px,1.2fr); gap: 18px; align-items: center; }
+        .search-combo-card { grid-column: 1; grid-row: 1 / span 2; display: flex; flex-direction: column; gap: 10px; background: #0b1929; border: 1px solid rgba(14,165,233,.14); border-radius: 14px; padding: 14px; }
+        .search-form-zone { padding-bottom: 12px; border-bottom: 1px solid rgba(14,165,233,.10); margin-bottom: 2px; }
+        .search-current-zone { display: flex; flex-direction: column; gap: 10px; }
         .search-current-zone .quick-selected-card { margin-top: 0; border-top: 0; padding-top: 0; }
-        .profile-mini-card { background: rgba(2,6,23,.62); border: 1px solid rgba(56,189,248,.18); border-radius: 16px; padding: 16px; min-height: 152px; display: grid; gap: 10px; align-content: center; }
-        .profile-mini-row { display: grid; grid-template-columns: 120px 1fr; gap: 10px; padding: 8px 0; border-bottom: 1px solid rgba(148,163,184,.12); }
+        .profile-mini-card { background: rgba(6,14,26,.60); border: 1px solid rgba(14,165,233,.10); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 0; }
+        .profile-mini-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 7px 0; border-bottom: .5px solid rgba(14,165,233,.08); }
         .profile-mini-row:last-child { border-bottom: 0; }
         @media (max-width: 1280px) {
           .search-combo-card { grid-column: 1 / -1; grid-template-columns: 1fr; }
-          .search-form-zone { border-right: 0; padding-right: 0; border-bottom: 1px solid rgba(148,163,184,.16); padding-bottom: 12px; }
+          .search-form-zone { border-right: 0; padding-right: 0; border-bottom: 1px solid rgba(56,189,248,.12); padding-bottom: 12px; }
           .search-current-zone { grid-template-columns: 1fr; }
         }
         .combined-market-card { grid-column: 2; grid-row: 1; min-height: 210px; display: block; }
-        .chart-area-card { grid-column: 1 / span 2; grid-row: 2; }
+        .chart-area-card { grid-column: 2; grid-row: 1 / span 2; background: #0b1929; border: 1px solid rgba(14,165,233,.14); border-radius: 14px; padding: 14px; }
         .selected-panel { text-align: center; }
-        .selected-name { font-size: 31px; font-weight: 900; letter-spacing: .04em; color: #f8fafc; margin: 4px 0 6px; line-height: 1.12; }
-        .selected-symbol { font-size: 16px; font-weight: 700; margin: 2px 0 10px; color: #bfdbfe; }
+        .selected-name { font-size: 22px; font-weight: 900; letter-spacing: .02em; color: #f8fafc; margin: 3px 0 4px; line-height: 1.12; }
+        .selected-symbol { font-size: 13px; font-weight: 700; margin: 2px 0 8px; color: #38bdf8; }
         .stock-name-stack { display: flex; flex-direction: column; gap: 2px; line-height: 1.15; }
         .stock-name-main { font-size: 25px; font-weight: 900; color: #f8fafc; letter-spacing: .03em; }
-        .stock-name-code { font-size: 13px; color: #93c5fd; font-weight: 700; }
+        .stock-name-code { font-size: 13px; color: #38bdf8; font-weight: 700; }
         .stock-name-main.small { font-size: 22px; }
         .selected-panel .price { text-align: center; margin-top: 8px; font-size: 24px; line-height: 1.15; }
         .selected-panel .price small { font-size: 13px; margin-top: 4px; }
         .selected-panel .price .price-label { font-size: 14px; margin-right: 8px; color: #e5e7eb; font-weight: 700; }
         .market-panel { border-left: 1px solid rgba(148,163,184,.22); padding-left: 20px; }
-        .quick-selected-card { margin-top: 14px; border-top: 1px solid rgba(148,163,184,.16); padding-top: 14px; text-align: center; }
+        .quick-selected-card { background: rgba(14,165,233,.07); border: 1px solid rgba(14,165,233,.18); border-radius: 10px; padding: 12px; text-align: center; border-top: 2px solid #0ea5e9; }
         .profile-card-grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
-        .profile-hero { background: rgba(2,6,23,.72); border: 1px solid rgba(56,189,248,.18); border-radius: 16px; padding: 16px; }
+        .profile-hero { background: rgba(6,14,26,.72); border: 1px solid rgba(14,165,233,.20); border-radius: 16px; padding: 16px; }
         .profile-hero h3 { font-size: 22px; margin-bottom: 8px; color: #f8fafc; }
-        .profile-row { display: grid; grid-template-columns: 120px 1fr; gap: 10px; padding: 10px 0; border-top: 1px solid rgba(148,163,184,.12); }
+        .profile-row { display: grid; grid-template-columns: 120px 1fr; gap: 10px; padding: 10px 0; border-top: 1px solid rgba(56,189,248,.10); }
         .profile-row:first-child { border-top: 0; }
         .profile-label { color: #94a3b8; font-size: 13px; }
         .profile-value { color: #e5e7eb; font-weight: 800; }
-        .institution-summary { background: rgba(2,6,23,.75); border: 1px solid rgba(148,163,184,.18); border-radius: 14px; padding: 12px; margin-bottom: 10px; }
+        .institution-summary { background: rgba(6,14,26,.78); border: 1px solid rgba(14,165,233,.16); border-radius: 14px; padding: 12px; margin-bottom: 10px; }
         .institution-summary b { display: block; font-size: 18px; margin-bottom: 4px; }
         .institution-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 8px; }
-        .institution-box { background: #020617; border: 1px solid rgba(148,163,184,.16); border-radius: 12px; padding: 10px; }
+        .institution-box { background: rgba(6,14,26,.70); border: 1px solid rgba(14,165,233,.10); border-radius: 8px; padding: 8px 10px; }
         .institution-box span { display:block; color:#94a3b8; font-size:12px; margin-bottom:4px; }
         .institution-box b { font-size:16px; }
 
-        .right-panel-card { grid-column: 3; grid-row: 1 / span 2; position: sticky; top: 16px; }
+        .right-panel-card { grid-column: 3; grid-row: 1 / span 2; position: sticky; top: 10px; max-height: calc(100vh - 80px); overflow-y: auto; background: #0b1929; border: 1px solid rgba(14,165,233,.14); border-radius: 14px; padding: 14px; }
 
         .main-grid { display: grid; grid-template-columns: minmax(680px, 1fr) 370px; gap: 10px; align-items: start; }
         .section-title { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
         .section-title h2 { font-size: 16px; }
         .muted { color: #94a3b8; font-size: 13px; }
-        .btn-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+        .btn-row { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 10px; }
         .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
-        .chips button { padding: 7px 9px; background: #172554; color: #bfdbfe; font-size: 12px; }
-        .divider { height: 1px; background: rgba(148,163,184,.16); margin: 14px 0; }
+        .chips button { padding: 7px 9px; background: #172554; color: #7dd3fc; font-size: 12px; }
+        .divider { height: .5px; background: rgba(14,165,233,.10); margin: 10px 0; }
         .market-card { display: grid; grid-template-columns: repeat(3,1fr); gap: 8px; }
-        .market-box { background: #020617; border: 1px solid rgba(148,163,184,.14); border-radius: 14px; padding: 12px; }
+        .market-box { background: #0b1929; border: 1px solid rgba(14,165,233,.12); border-radius: 14px; padding: 12px; }
         .market-box b { display: block; font-size: 22px; }
         .up { color: #fb7185; }
         .down { color: #34d399; }
         .neutral { color: #facc15; }
-        .stock-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 12px; }
-        .stock-title h1 { font-size: 21px; margin-bottom: 4px; }
-        .chart-profile-inline { background: rgba(2,6,23,.56); border: 1px solid rgba(56,189,248,.18); border-radius: 14px; padding: 12px 16px; display: grid; gap: 10px; }
+        .stock-head { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px solid rgba(14,165,233,.10); }
+        .stock-title h1 { font-size: 18px; font-weight: 700; margin-bottom: 2px; color: #f1f5f9; }
+        .chart-profile-inline { background: rgba(6,14,26,.56); border: 1px solid rgba(14,165,233,.20); border-radius: 14px; padding: 12px 16px; display: grid; gap: 10px; }
         .chart-profile-inline b { display: block; color: #f8fafc; font-size: 16px; margin-top: 4px; line-height: 1.45; }
         .price { font-size: 26px; font-weight: 900; text-align: right; }
         .price small { display: block; font-size: 14px; margin-top: 4px; }
-        .trading-chart { width: 100%; min-height: 560px; border-radius: 16px; overflow: hidden; background: #020617; }
-        .tag-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
-        .tag-row span { background: #172554; color: #bfdbfe; padding: 7px 10px; border-radius: 999px; font-size: 12px; }
+        .trading-chart { width: 100%; min-height: 520px; border-radius: 10px; overflow: hidden; background: #060e1a; }
+        .tag-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; padding-top: 10px; border-top: .5px solid rgba(14,165,233,.08); }
+        .tag-row span { background: rgba(14,165,233,.08); color: #38bdf8; padding: 4px 10px; border-radius: 6px; font-size: 11px; border: 1px solid rgba(14,165,233,.15); }
         .indicator-toggle { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 10px; }
-        .toggle-card { display: flex; align-items: center; gap: 8px; background: #020617; border: 1px solid rgba(148,163,184,.18); border-radius: 12px; padding: 10px; color: #cbd5e1; font-size: 13px; cursor: pointer; }
+        .toggle-card { display: flex; align-items: center; gap: 8px; background: #0b1929; border: 1px solid rgba(14,165,233,.16); border-radius: 12px; padding: 10px; color: #cbd5e1; font-size: 13px; cursor: pointer; }
         .toggle-card input { width: auto; accent-color: #38bdf8; }
-        .view-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 14px; }
-        .view-tabs button { background: #020617; color: #cbd5e1; border: 1px solid rgba(148,163,184,.2); padding: 9px 8px; font-size: 13px; }
-        .view-tabs button.active { background: #38bdf8; color: #082f49; border-color: #38bdf8; }
-        .report-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; border-bottom: 1px solid rgba(148,163,184,.14); padding-bottom: 10px; }
-        .report-tabs button { background: #020617; color: #cbd5e1; border: 1px solid rgba(148,163,184,.22); }
-        .report-tabs button.active { background: rgba(56,189,248,.22); color: #67e8f9; border-color: rgba(56,189,248,.55); }
+        .view-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 12px; }
+        .view-tabs button { background: rgba(14,165,233,.06); color: #64748b; border: 1px solid rgba(14,165,233,.12); padding: 8px 6px; font-size: 12px; border-radius: 8px; font-weight: 600; }
+        .view-tabs button.active { background: rgba(14,165,233,.18); color: #38bdf8; border-color: rgba(14,165,233,.45); font-weight: 700; }
+        .report-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; border-bottom: 1px solid rgba(56,189,248,.10); padding-bottom: 10px; }
+        .report-tabs button { background: #0b1929; color: #cbd5e1; border: 1px solid rgba(148,163,184,.22); }
+        .report-tabs button.active { background: rgba(56,189,248,.22); color: #38bdf8; border-color: rgba(56,189,248,.55); }
         .terminal-home-clean { margin-bottom: 16px; }
-        .market-core { min-height: 300px; display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(360px, .85fr); gap: 18px; border: 1px solid rgba(148,163,184,.10); border-radius: 24px; background: linear-gradient(135deg, rgba(15,23,42,.78), rgba(2,6,23,.82)); padding: 28px; }
+        .market-core { min-height: 300px; display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(360px, .85fr); gap: 18px; border: 1px solid rgba(148,163,184,.10); border-radius: 24px; background: linear-gradient(135deg, rgba(10,24,44,.82), rgba(2,6,23,.82)); padding: 28px; }
         .market-core-left { display: flex; flex-direction: column; justify-content: center; min-width: 0; }
         .market-core-label { color: #94a3b8; font-size: 13px; font-weight: 800; letter-spacing: .08em; }
         .market-core-title { margin-top: 10px; font-size: clamp(48px, 6vw, 86px); line-height: .95; font-weight: 950; letter-spacing: -.05em; }
@@ -4292,7 +4319,7 @@ const [watchText, setWatchText] = useState(() => {
         .market-core-title-large.down { color: #00c896; }
         .market-core-substats { display: flex; flex-wrap: wrap; gap: 18px; margin-top: 20px; color: #cbd5e1; font-size: 15px; }
         .market-core-substats span { position: relative; }
-        .market-core-substats span:not(:last-child)::after { content: ""; position: absolute; right: -10px; top: 50%; width: 1px; height: 14px; transform: translateY(-50%); background: rgba(148,163,184,.18); }
+        .market-core-substats span:not(:last-child)::after { content: ""; position: absolute; right: -10px; top: 50%; width: 1px; height: 14px; transform: translateY(-50%); background: rgba(14,165,233,.14); }
         .market-primary-card { margin-bottom: 14px; }
         .market-primary-head { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-bottom: 16px; }
         .market-primary-head h2 { margin: 0 0 6px; }
@@ -4305,8 +4332,8 @@ const [watchText, setWatchText] = useState(() => {
         .flow-title.enlarged { color: #e2e8f0; font-size: 26px; font-weight: 950; letter-spacing: -.03em; margin-bottom: 18px; }
         .flow-path.upgraded { gap: 12px; }
         .flow-path.upgraded .flow-segment { gap: 12px; }
-        .flow-path.upgraded button { border-radius: 18px; padding: 11px 17px; background: linear-gradient(180deg, rgba(15,23,42,.92), rgba(2,6,23,.88)); border-color: rgba(148,163,184,.18); color: #f8fafc; box-shadow: inset 0 1px 0 rgba(255,255,255,.04); }
-        .flow-path.upgraded button:hover { border-color: rgba(94,234,212,.5); color: #ccfbf1; transform: translateY(-1px); box-shadow: 0 14px 32px rgba(0,0,0,.22), 0 0 22px rgba(94,234,212,.10); }
+        .flow-path.upgraded button { border-radius: 18px; padding: 11px 17px; background: linear-gradient(180deg, rgba(15,23,42,.92), rgba(2,6,23,.88)); border-color: rgba(14,165,233,.14); color: #f8fafc; box-shadow: inset 0 1px 0 rgba(255,255,255,.04); }
+        .flow-path.upgraded button:hover { border-color: rgba(94,234,212,.5); color: #bae6fd; transform: translateY(-1px); box-shadow: 0 14px 32px rgba(0,0,0,.22), 0 0 22px rgba(94,234,212,.10); }
         .flow-path.upgraded i { color: #64748b; font-size: 18px; }
         .market-core-title.up { color: #ff3b5c; }
         .market-core-title.down { color: #00c896; }
@@ -4315,30 +4342,30 @@ const [watchText, setWatchText] = useState(() => {
         .market-core-meta span:not(:last-child)::after { content: ""; position: absolute; right: -10px; top: 50%; width: 1px; height: 14px; transform: translateY(-50%); background: rgba(148,163,184,.22); }
         .main-themes { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 26px; }
         .theme-label { color: #64748b; font-size: 12px; font-weight: 800; margin-right: 4px; }
-        .main-themes button, .flow-path button { border: 1px solid rgba(148,163,184,.14); background: rgba(15,23,42,.78); color: #e2e8f0; border-radius: 999px; padding: 7px 11px; font-size: 13px; font-weight: 800; transition: all .18s ease; }
-        .main-themes button:hover, .flow-path button:hover { border-color: rgba(94,234,212,.45); color: #ccfbf1; box-shadow: 0 0 18px rgba(94,234,212,.10); }
-        .market-core-flow { align-self: center; border-left: 1px solid rgba(148,163,184,.12); padding-left: 24px; }
+        .main-themes button, .flow-path button { border: 1px solid rgba(14,165,233,.12); background: rgba(10,24,44,.78); color: #e2e8f0; border-radius: 999px; padding: 7px 11px; font-size: 13px; font-weight: 800; transition: all .18s ease; }
+        .main-themes button:hover, .flow-path button:hover { border-color: rgba(94,234,212,.45); color: #bae6fd; box-shadow: 0 0 18px rgba(94,234,212,.10); }
+        .market-core-flow { align-self: center; border-left: 1px solid rgba(56,189,248,.10); padding-left: 24px; }
         .flow-title { color: #94a3b8; font-size: 13px; font-weight: 800; margin-bottom: 14px; }
         .flow-path { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
         .flow-segment { display: inline-flex; gap: 10px; align-items: center; }
         .flow-segment i { color: #64748b; font-style: normal; }
-        .sector-strip { margin-top: 14px; border: 1px solid rgba(148,163,184,.10); border-radius: 22px; background: rgba(15,23,42,.62); padding: 18px; }
+        .sector-strip { margin-top: 14px; border: 1px solid rgba(148,163,184,.10); border-radius: 22px; background: rgba(10,24,44,.62); padding: 18px; }
         .strip-head { display: flex; justify-content: space-between; align-items: end; gap: 12px; margin-bottom: 14px; }
         .strip-head h3 { margin: 0; font-size: 18px; }
         .strip-head span { color: #64748b; font-size: 12px; }
         .sector-strip-grid { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 12px; }
-        .sector-tile { text-align: left; border: 1px solid rgba(148,163,184,.10); border-radius: 18px; background: rgba(2,6,23,.54); padding: 14px; transition: all .18s ease; }
-        .sector-tile:hover { transform: translateY(-2px); border-color: rgba(94,234,212,.32); box-shadow: 0 16px 36px rgba(0,0,0,.22), 0 0 22px rgba(94,234,212,.08); }
+        .sector-tile { text-align: left; border: 1px solid rgba(148,163,184,.10); border-radius: 18px; background: rgba(6,14,26,.54); padding: 14px; transition: all .18s ease; }
+        .sector-tile:hover { transform: translateY(-2px); border-color: rgba(94,234,212,.32); box-shadow: 0 16px 36px rgba(0,0,0,.22), 0 0 22px rgba(56,189,248,.08); }
         .sector-tile-top { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
         .sector-tile-top b { color: #f8fafc; font-size: 16px; }
         .sector-tile-top strong { color: #ff3b5c; font-size: 17px; }
         .sector-tile-row { display: flex; justify-content: space-between; gap: 10px; color: #94a3b8; font-size: 12px; margin-top: 7px; }
         .sector-tile-row em { color: #cbd5e1; font-style: normal; font-weight: 800; }
-        .sector-tile-bar { height: 3px; border-radius: 999px; background: rgba(148,163,184,.12); margin-top: 13px; overflow: hidden; }
+        .sector-tile-bar { height: 3px; border-radius: 999px; background: rgba(56,189,248,.10); margin-top: 13px; overflow: hidden; }
         .sector-tile-bar i { display: block; height: 100%; border-radius: 999px; background: #5eead4; }
         @media (max-width: 1400px) {
           .market-core { grid-template-columns: 1fr; }
-          .market-core-flow { border-left: 0; border-top: 1px solid rgba(148,163,184,.12); padding-left: 0; padding-top: 18px; }
+          .market-core-flow { border-left: 0; border-top: 1px solid rgba(56,189,248,.10); padding-left: 0; padding-top: 18px; }
           .sector-strip-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
         }
         @media (max-width: 760px) {
@@ -4348,19 +4375,74 @@ const [watchText, setWatchText] = useState(() => {
           .sector-strip-grid { grid-template-columns: 1fr; }
         }
         .report-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-        .report-card, .macro-card { background: #020617; border: 1px solid rgba(148,163,184,.18); border-radius: 16px; padding: 14px; }
+        .report-card, .macro-card { background: #0e1e32; border: 1px solid rgba(14,165,233,.16); border-radius: 16px; padding: 14px; }
         .report-card h2, .macro-card h3 { margin-bottom: 12px; }
         .market-direction-badge { display: inline-flex; padding: 8px 12px; border-radius: 999px; font-weight: 900; margin-bottom: 12px; border: 1px solid rgba(148,163,184,.22); }
         .market-direction-badge.up { background: rgba(239,68,68,.14); color: #fca5a5; border-color: rgba(239,68,68,.35); }
         .market-direction-badge.down { background: rgba(34,197,94,.14); color: #86efac; border-color: rgba(34,197,94,.35); }
         .market-stats-grid, .macro-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
-        .market-stats-grid div, .industry-item, .risk-item, .strategy-item { background: rgba(15,23,42,.85); border: 1px solid rgba(148,163,184,.16); border-radius: 14px; padding: 12px; }
+        .market-stats-grid div, .industry-item, .risk-item, .strategy-item { background: rgba(10,24,44,.85); border: 1px solid rgba(14,165,233,.14); border-radius: 14px; padding: 12px; }
+        /* ── 今日大盤方向 排版 ─────────────────────────────────── */
+        .market-layout { display: flex; flex-direction: column; gap: 10px; }
+
+        /* 第一列：三格頂部色條卡片 */
+        .mkt-row1 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+        .mkt-card { background: #0e1e32; border: 1px solid rgba(14,165,233,.12); border-radius: 12px; padding: 14px 16px; border-top: 3px solid transparent; }
+        .mkt-card-blue  { border-top-color: #0ea5e9; }
+        .mkt-card-neutral { border-top-color: #475569; }
+        .mkt-card-red   { border-top-color: #fb7185; }
+        .mkt-card-label { font-size: 11px; color: #64748b; letter-spacing: .04em; margin-bottom: 6px; }
+        .mkt-card-main  { font-size: 22px; font-weight: 700; color: #f1f5f9; letter-spacing: -.02em; margin-bottom: 4px; }
+        .mkt-card-sub   { font-size: 12px; color: #64748b; }
+
+        /* 第二列：風險提醒橫排 */
+        .mkt-risk-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+        .mkt-risk-item { background: rgba(251,191,36,.06); border: 1px solid rgba(251,191,36,.14); border-left: 2px solid #f59e0b; border-radius: 8px; padding: 9px 12px; font-size: 12px; color: #fbbf24; line-height: 1.5; display: flex; gap: 7px; align-items: flex-start; }
+        .mkt-risk-dot { width: 5px; height: 5px; border-radius: 50%; background: #f59e0b; flex-shrink: 0; margin-top: 5px; }
+
+        /* 第三列：左右各半 */
+        .mkt-row3 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .mkt-half-card { background: #0e1e32; border: 1px solid rgba(14,165,233,.12); border-radius: 12px; padding: 14px 16px; }
+        .mkt-half-title { font-size: 11px; font-weight: 700; color: #64748b; letter-spacing: .05em; margin-bottom: 10px; display: flex; align-items: center; gap: 6px; }
+        .mkt-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+        .mkt-dot-blue   { background: #0ea5e9; }
+        .mkt-dot-orange { background: #fb923c; }
+        .mkt-dot-yellow { background: #fbbf24; }
+
+        /* 主流族群 */
+        .mkt-themes { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 4px; }
+        .mkt-theme-tag { background: rgba(14,165,233,.10); color: #38bdf8; border: 1px solid rgba(14,165,233,.22); border-radius: 7px; padding: 4px 12px; font-size: 12px; font-weight: 600; cursor: pointer; }
+        .mkt-theme-tag:hover { background: rgba(14,165,233,.20); }
+        .mkt-flow { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
+        .mkt-flow-seg { display: flex; align-items: center; gap: 4px; }
+        .mkt-flow-seg button { background: rgba(14,165,233,.06); color: #94a3b8; border: 1px solid rgba(14,165,233,.12); border-radius: 6px; padding: 3px 9px; font-size: 11px; cursor: pointer; }
+        .mkt-flow-seg button:hover { color: #38bdf8; }
+        .mkt-arrow { color: #334155; font-size: 11px; }
+
+        /* 明日策略 */
+        .mkt-strategy { display: flex; flex-direction: column; gap: 7px; }
+        .mkt-strategy-item { font-size: 12px; color: #94a3b8; line-height: 1.6; padding: 8px 10px; background: rgba(14,165,233,.04); border-radius: 8px; border-left: 2px solid rgba(14,165,233,.20); }
+
+        @media (max-width: 1100px) {
+          .mkt-row1 { grid-template-columns: 1fr 1fr; }
+          .mkt-risk-row { grid-template-columns: 1fr 1fr; }
+          .mkt-row3 { grid-template-columns: 1fr; }
+        }
+
         .ai-summary-main { font-size: 15px; color: #e2e8f0; margin-bottom: 12px; line-height: 1.6; }
-        .ai-risk-inline { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; border-top: 1px solid rgba(148,163,184,.14); padding-top: 12px; }
+        .ai-risk-inline { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; border-top: 1px solid rgba(56,189,248,.10); padding-top: 12px; }
         .ai-risk-inline-item { font-size: 13px; color: #fbbf24; padding: 6px 10px; background: rgba(251,191,36,.08); border-radius: 8px; border-left: 3px solid rgba(251,191,36,.5); }
+        /* 左欄新聞 */
+        .left-news-card { background: #0e1e32; border: 1px solid rgba(14,165,233,.12); border-radius: 10px; padding: 12px; }
+        .left-news-title { font-size: 11px; font-weight: 700; color: #64748b; letter-spacing: .04em; margin-bottom: 8px; display: flex; align-items: center; gap: 5px; }
+        .left-news-item { display: block; padding: 7px 0; border-bottom: .5px solid rgba(14,165,233,.08); text-decoration: none; }
+        .left-news-item:last-child { border-bottom: none; }
+        .left-news-item:hover .left-news-item-title { color: #38bdf8; }
+        .left-news-item-title { font-size: 12px; color: #cbd5e1; line-height: 1.45; margin-bottom: 3px; }
+        .left-news-item-meta { font-size: 10px; color: #475569; display: flex; gap: 8px; }
         .news-section { display: flex; flex-direction: column; gap: 1px; }
         .news-section-title { font-size: 13px; font-weight: 700; color: #94a3b8; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
-        .news-item { display: block; padding: 10px 0; border-bottom: 1px solid rgba(148,163,184,.1); text-decoration: none; cursor: pointer; }
+        .news-item { display: block; padding: 10px 0; border-bottom: 1px solid rgba(14,165,233,.08); text-decoration: none; cursor: pointer; }
         .news-item:hover .news-item-title { color: #38bdf8; }
         .news-item:last-child { border-bottom: 0; }
         .news-item-title { font-size: 13px; color: #e2e8f0; line-height: 1.5; margin-bottom: 4px; }
@@ -4368,7 +4450,7 @@ const [watchText, setWatchText] = useState(() => {
         .news-item-snippet { font-size: 11px; color: #64748b; margin: 2px 0 4px; line-height: 1.4; }
         .news-loading { font-size: 13px; color: #64748b; padding: 12px 0; }
         .news-tab-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; }
-        .news-tab-card { background: rgba(2,6,23,.75); border: 1px solid rgba(148,163,184,.14); border-radius: 14px; padding: 16px; }
+        .news-tab-card { background: rgba(6,14,26,.78); border: 1px solid rgba(14,165,233,.12); border-radius: 14px; padding: 16px; }
         .news-tab-card-title { font-size: 15px; font-weight: 700; color: #e2e8f0; margin-bottom: 12px; }
         .news-tab-item { padding: 10px 0; border-bottom: 1px solid rgba(148,163,184,.08); }
         .news-tab-item:last-child { border-bottom: 0; }
@@ -4376,7 +4458,7 @@ const [watchText, setWatchText] = useState(() => {
         .news-tab-item a:hover .news-item-title { color: #38bdf8; }
         .market-stats-grid span, .macro-card p { display: block; color: #94a3b8; font-size: 12px; margin-bottom: 6px; }
         .market-stats-grid b, .macro-card b { font-size: 20px; }
-        .ai-summary-box { margin-top: 12px; padding: 14px; border-radius: 16px; background: rgba(56,189,248,.08); border: 1px solid rgba(56,189,248,.22); color: #dbeafe; }
+        .ai-summary-box { margin-top: 12px; padding: 14px; border-radius: 16px; background: rgba(56,189,248,.08); border: 1px solid rgba(56,189,248,.22); color: #bae6fd; }
         .industry-list, .risk-list, .strategy-box { display: grid; gap: 10px; }
         .industry-item { display: flex; justify-content: space-between; align-items: center; cursor: pointer; transition: all .18s ease; text-align:left; }
         .industry-item:hover { transform: translateY(-1px); border-color: rgba(56,189,248,.45); background: rgba(30,41,59,.92); }
@@ -4385,58 +4467,58 @@ const [watchText, setWatchText] = useState(() => {
         .industry-item > div { min-width: 0; }
         .industry-item.up span { color: #fca5a5; }
         .industry-item.down span { color: #86efac; }
-        .report-empty { color: #94a3b8; padding: 16px; border: 1px dashed rgba(148,163,184,.25); border-radius: 14px; }
-        .drawing-panel { background: rgba(2,6,23,.72); border: 1px solid rgba(148,163,184,.18); border-radius: 14px; padding: 10px; margin: 10px 0; }
+        .report-empty { color: #94a3b8; padding: 16px; border: 1px dashed rgba(14,165,233,.20); border-radius: 14px; }
+        .drawing-panel { background: rgba(6,14,26,.72); border: 1px solid rgba(14,165,233,.16); border-radius: 14px; padding: 10px; margin: 10px 0; }
         .drawing-title { display: flex; justify-content: space-between; align-items: center; gap: 10px; color: #e5e7eb; margin-bottom: 8px; }
         .drawing-title span { color: #94a3b8; font-size: 12px; }
         .drawing-mode-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
-        .drawing-mode-tabs button { background: #111827; color: #e5e7eb; border: 1px solid #334155; }
-        .drawing-mode-tabs button.active { background: #22d3ee; color: #06202a; border-color: #22d3ee; }
-        .drawing-free-box { background: rgba(15,23,42,.75); border: 1px solid rgba(56,189,248,.18); border-radius: 12px; padding: 9px; margin-top: 8px; }
+        .drawing-mode-tabs button { background: #111f30; color: #e5e7eb; border: 1px solid #1e3a55; }
+        .drawing-mode-tabs button.active { background: #0ea5e9; color: #f0f9ff; border-color: #0ea5e9; }
+        .drawing-free-box { background: rgba(10,24,44,.75); border: 1px solid rgba(14,165,233,.20); border-radius: 12px; padding: 9px; margin-top: 8px; }
         .chart-drawing-wrap { position: relative; width: 100%; }
         .chart-free-draw-overlay { position: absolute; inset: 0; width: 100%; height: 560px; pointer-events: none; z-index: 10; }
         .chart-drawing-wrap.drawing-active .chart-free-draw-overlay { pointer-events: auto; cursor: crosshair; touch-action: none; }
         .chart-drawing-wrap.drawing-active .trading-chart { user-select: none; }
         .chart-free-draw-overlay line, .chart-free-draw-overlay path, .chart-free-draw-overlay rect { pointer-events: none; }
-        .drawing-chip.line { border-color: rgba(56,189,248,.5); color: #67e8f9; }
+        .drawing-chip.line { border-color: rgba(56,189,248,.5); color: #38bdf8; }
         .drawing-chip.brush { border-color: rgba(250,204,21,.55); color: #fde68a; }
         .drawing-chip.rect { border-color: rgba(168,85,247,.5); color: #d8b4fe; }
         .drawing-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
         .drawing-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
-        .drawing-chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid rgba(148,163,184,.22); border-radius: 999px; padding: 5px 6px 5px 10px; font-size: 12px; color: #e5e7eb; background: #020617; }
+        .drawing-chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid rgba(148,163,184,.22); border-radius: 999px; padding: 5px 6px 5px 10px; font-size: 12px; color: #e5e7eb; background: #0b1929; }
         .drawing-chip.support { border-color: rgba(34,197,94,.45); color: #86efac; }
         .drawing-chip.resistance { border-color: rgba(239,68,68,.45); color: #fca5a5; }
         .drawing-chip.stop { border-color: rgba(249,115,22,.5); color: #fdba74; }
-        .drawing-chip.trend { border-color: rgba(56,189,248,.5); color: #67e8f9; }
+        .drawing-chip.trend { border-color: rgba(56,189,248,.5); color: #38bdf8; }
         .drawing-chip.zone { border-color: rgba(168,85,247,.5); color: #d8b4fe; }
-        .drawing-chip button { padding: 1px 6px; border-radius: 999px; background: rgba(148,163,184,.18); color: #e5e7eb; font-size: 12px; }
+        .drawing-chip button { padding: 1px 6px; border-radius: 999px; background: rgba(14,165,233,.14); color: #e5e7eb; font-size: 12px; }
 
 
 
-        .score-main { background: linear-gradient(135deg, rgba(56,189,248,.22), rgba(37,99,235,.18)); border: 1px solid rgba(56,189,248,.28); border-radius: 18px; padding: 18px; text-align: center; margin-bottom: 12px; }
-        .score-main b { display: block; font-size: 48px; line-height: 1; }
-        .score-main span { color: #bfdbfe; font-size: 13px; }
-        .metric-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
-        .metric-card { background: #020617; border: 1px solid rgba(148,163,184,.18); border-radius: 12px; padding: 10px; }
-        .metric-card b { display: block; font-size: 17px; margin-bottom: 3px; }
-        .metric-card span { color: #94a3b8; font-size: 12px; }
-        .trade-signal { border-radius: 18px; padding: 16px; margin-bottom: 14px; border: 1px solid rgba(148,163,184,.22); background: #020617; }
-        .trade-signal.buy { border-color: rgba(34,197,94,.45); background: rgba(20,83,45,.2); }
-        .trade-signal.hold { border-color: rgba(250,204,21,.42); background: rgba(113,63,18,.18); }
-        .trade-signal.sell { border-color: rgba(248,113,113,.42); background: rgba(127,29,29,.18); }
+        .score-main { background: linear-gradient(135deg, rgba(14,165,233,.18), rgba(3,105,161,.14)); border: 1px solid rgba(14,165,233,.25); border-radius: 10px; padding: 14px; text-align: center; margin-bottom: 10px; }
+        .score-main b { display: block; font-size: 42px; line-height: 1; font-weight: 800; color: #38bdf8; }
+        .score-main span { color: #7dd3fc; font-size: 13px; }
+        .metric-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 7px; }
+        .metric-card { background: rgba(6,14,26,.70); border: 1px solid rgba(14,165,233,.12); border-radius: 8px; padding: 8px 10px; }
+        .metric-card b { display: block; font-size: 15px; font-weight: 700; margin-bottom: 2px; color: #f1f5f9; }
+        .metric-card span { color: #475569; font-size: 10px; letter-spacing: .03em; }
+        .trade-signal { border-radius: 12px; padding: 14px; margin-bottom: 10px; border: 1px solid rgba(14,165,233,.14); background: rgba(6,14,26,.80); }
+        .trade-signal.buy { border-color: rgba(34,197,94,.35); border-top: 2px solid #22c55e; background: rgba(20,83,45,.15); }
+        .trade-signal.hold { border-color: rgba(250,204,21,.30); border-top: 2px solid #fbbf24; background: rgba(113,63,18,.12); }
+        .trade-signal.sell { border-color: rgba(248,113,113,.35); border-top: 2px solid #fb7185; background: rgba(127,29,29,.12); }
         .signal-action { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
-        .signal-action b { font-size: 30px; letter-spacing: 1px; }
+        .signal-action b { font-size: 26px; letter-spacing: 1px; font-weight: 800; }
         .signal-action span { display: block; color: #cbd5e1; font-size: 13px; margin-top: 4px; }
         .signal-list { margin: 8px 0 0; padding-left: 18px; color: #94a3b8; font-size: 13px; line-height: 1.65; }
-        .signal-card { background: #020617; border: 1px solid rgba(148,163,184,.18); border-radius: 14px; padding: 14px; margin-top: 10px; }
+        .signal-card { background: rgba(6,14,26,.70); border: 1px solid rgba(14,165,233,.10); border-radius: 8px; padding: 10px 12px; margin-top: 8px; }
         .signal-card b { display: block; font-size: 16px; margin-bottom: 6px; }
         .signal-card p { color: #94a3b8; font-size: 13px; line-height: 1.55; margin: 0; }
         .daytrade-grid { display: grid; grid-template-columns: 1.1fr .9fr; gap: 12px; align-items: start; }
-        .daytrade-score { background: linear-gradient(135deg, rgba(34,211,238,.18), rgba(34,197,94,.14)); border: 1px solid rgba(34,211,238,.28); border-radius: 18px; padding: 18px; text-align: center; }
+        .daytrade-score { background: linear-gradient(135deg, rgba(14,165,233,.18), rgba(34,197,94,.14)); border: 1px solid rgba(34,211,238,.28); border-radius: 18px; padding: 18px; text-align: center; }
         .daytrade-score b { display: block; font-size: 54px; line-height: 1; }
         .daytrade-score span { color: #bae6fd; font-weight: 900; }
         .entry-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 12px; }
-        .entry-box { background: #020617; border: 1px solid rgba(148,163,184,.18); border-radius: 14px; padding: 12px; text-align: center; }
+        .entry-box { background: #0b1929; border: 1px solid rgba(14,165,233,.16); border-radius: 14px; padding: 12px; text-align: center; }
         .entry-box b { display: block; font-size: 20px; margin-top: 4px; }
         .radar-alert { border-radius: 16px; padding: 14px; margin-bottom: 12px; border: 1px solid rgba(250,204,21,.35); background: rgba(113,63,18,.2); }
         .radar-alert.good { border-color: rgba(34,197,94,.45); background: rgba(20,83,45,.24); }
@@ -4445,20 +4527,20 @@ const [watchText, setWatchText] = useState(() => {
         .instant-signal.buy { border-color: rgba(34,197,94,.55); background: rgba(20,83,45,.28); }
         .live-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #22c55e; margin-right: 6px; box-shadow: 0 0 12px #22c55e; }
         .watch-table-card { margin-top: 12px; }
-        .table-wrap { overflow: auto; border: 1px solid rgba(148,163,184,.16); border-radius: 16px; }
+        .table-wrap { overflow: auto; border: 1px solid rgba(14,165,233,.14); border-radius: 16px; }
         table { width: 100%; border-collapse: collapse; font-size: 13px; }
-        th, td { padding: 12px 10px; border-bottom: 1px solid rgba(148,163,184,.14); text-align: left; white-space: nowrap; }
+        th, td { padding: 12px 10px; border-bottom: 1px solid rgba(56,189,248,.10); text-align: left; white-space: nowrap; }
         td { color: #f8fafc; font-weight: 650; }
-        th { color: #93c5fd; font-size: 12px; background: rgba(15,23,42,.96); }
+        th { color: #38bdf8; font-size: 12px; background: rgba(10,24,44,.96); }
         td .muted, td small { color: #cbd5e1; }
         .stock-name-code, .selected-symbol, .metric-value, .mini-stat b, .kline-radar-hero b, .radar-score b, .profile-value, .institution-summary b, .advice-mini b { color: #f8fafc !important; }
         .stock-name-code { opacity: 1; }
         .badge { color: #f8fafc; }
         tr { cursor: pointer; }
         tr:hover { background: rgba(56,189,248,.08); }
-        .badge { display: inline-flex; align-items: center; border-radius: 999px; padding: 4px 8px; font-size: 12px; background: #020617; border: 1px solid rgba(148,163,184,.2); color: #cbd5e1; }
+        .badge { display: inline-flex; align-items: center; border-radius: 999px; padding: 4px 8px; font-size: 12px; background: #0b1929; border: 1px solid rgba(14,165,233,.15); color: #cbd5e1; }
         .favorite-list { display: grid; gap: 8px; }
-        .favorite-item { display: flex; justify-content: space-between; gap: 8px; align-items: center; background: #020617; border: 1px solid rgba(148,163,184,.16); border-radius: 14px; padding: 10px; }
+        .favorite-item { display: flex; justify-content: space-between; gap: 8px; align-items: center; background: #0b1929; border: 1px solid rgba(14,165,233,.14); border-radius: 14px; padding: 10px; }
         .empty { color: #94a3b8; padding: 18px; }
         .error { color: #fecaca; background: rgba(127,29,29,.4); padding: 10px; border-radius: 12px; margin-top: 12px; }
         .up { color: #fb7185 !important; }
@@ -4480,10 +4562,10 @@ const [watchText, setWatchText] = useState(() => {
         .price .down {
           color: #34d399 !important;
         }
-        @media (max-width: 1300px) { .summary-grid, .main-grid, .analysis-layout, .combined-market-card { grid-template-columns: 1fr; } .combined-market-card, .chart-area-card, .right-panel-card { grid-column: auto; grid-row: auto; } .center-stack { display: grid; gap: 10px; } .left-nav { width: 150px; } .content { margin-left: 150px; } .chart-tools { align-items: stretch; } .market-panel { border-left: 0; padding-left: 0; border-top: 1px solid rgba(148,163,184,.18); padding-top: 14px; } .right-panel-card { position: static; } }
+        @media (max-width: 1300px) { .summary-grid, .main-grid, .analysis-layout, .combined-market-card { grid-template-columns: 1fr; } .combined-market-card, .chart-area-card, .right-panel-card { grid-column: auto; grid-row: auto; } .center-stack { display: grid; gap: 10px; } .left-nav { width: 140px; } .content { margin-left: 140px; } .chart-tools { align-items: stretch; } .market-panel { border-left: 0; padding-left: 0; border-top: 1px solid rgba(14,165,233,.16); padding-top: 14px; } .right-panel-card { position: static; } }
         button {transition: background .18s ease, filter .18s ease, transform .18s ease, border-color .18s ease;}
         button:hover {filter: brightness(1.12);transform: translateY(-1px);}
-        button.ghost:hover {background: #1e293b;border-color: #64748b;}
+        button.ghost:hover {background: #152236;border-color: #2d5a80;}
         button.danger:hover {filter: brightness(1.08);}
       `}</style>
 
@@ -4525,8 +4607,7 @@ const [watchText, setWatchText] = useState(() => {
             <div className="analysis-layout">
               <div className="card search-combo-card">
                 <div className="search-form-zone">
-                <div className="section-title"><h2>加入自選或搜尋</h2></div>
-                <label>股票代碼或名稱</label>
+                <label style={{fontSize:11,color:"#64748b",letterSpacing:".04em",marginBottom:4,display:"block"}}>股票代碼或名稱</label>
                 <input
                   list="stock-search-history"
                   value={query}
@@ -4604,9 +4685,8 @@ const [watchText, setWatchText] = useState(() => {
 
                                 </div>
 
-                <div className="search-current-zone">
-<div className="quick-selected-card">
-                  <div className="muted">目前選股</div>
+                <div className="quick-selected-card">
+                  <div className="muted" style={{fontSize:11,letterSpacing:".04em"}}>目前選股</div>
                   <div className="selected-name">
                     {getDisplayName(stock?.symbol, stock?.name) || "尚未載入資料"}
                   </div>
@@ -4628,7 +4708,38 @@ const [watchText, setWatchText] = useState(() => {
                       <span className="profile-value">{stockProfile.business}</span>
                     </div>
                   </div>
-                </div>
+
+                  {/* 個股相關新聞（左欄） */}
+                  {stock && (
+                    <div className="left-news-card">
+                      <div className="left-news-title">
+                        📰 相關新聞
+                        {newsData[stock.symbol]?.loading && <span style={{color:"#475569",fontSize:11}}> 載入中...</span>}
+                      </div>
+                      {(() => {
+                        const nd = newsData[stock.symbol];
+                        if (!nd || nd.loading) return <div style={{fontSize:12,color:"#475569",padding:"6px 0"}}>新聞載入中...</div>;
+                        if (!nd.articles?.length) return <div style={{fontSize:12,color:"#475569",padding:"6px 0"}}>暫無相關新聞</div>;
+                        return nd.articles
+                          .filter(a => a.title && !a.title.startsWith("http") && a.title.length > 5)
+                          .slice(0, 5).map((article, idx) => {
+                            const ts = article.providerPublishTime;
+                            const pubAt = article.publishedAt;
+                            const t = ts ? new Date(ts * 1000) : pubAt ? new Date(pubAt) : null;
+                            const timeStr = t ? t.toLocaleDateString("zh-TW", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }) : "";
+                            return (
+                              <a key={idx} href={article.url || article.link} target="_blank" rel="noopener noreferrer" className="left-news-item">
+                                <div className="left-news-item-title">{article.title}</div>
+                                <div className="left-news-item-meta">
+                                  {article.publisher && <span>{article.publisher}</span>}
+                                  {timeStr && <span>{timeStr}</span>}
+                                </div>
+                              </a>
+                            );
+                        });
+                      })()}
+                    </div>
+                  )}
               </div>
 
               <div className="center-stack">
@@ -4763,35 +4874,6 @@ const [watchText, setWatchText] = useState(() => {
                       <div className="metric-card"><b>{stock.backtest.trades}</b><span>交易次數</span></div>
                     </div>
 
-                    {/* 個股相關新聞 */}
-                    <div className="divider" />
-                    <div className="news-section">
-                      <div className="news-section-title">
-                        📰 相關新聞
-                        {newsData[stock.symbol]?.loading && <span className="muted" style={{fontSize:12}}> 載入中...</span>}
-                      </div>
-                      {(() => {
-                        const nd = newsData[stock.symbol];
-                        if (!nd || nd.loading) return <div className="news-loading">新聞載入中...</div>;
-                        if (!nd.articles?.length) return <div className="muted" style={{fontSize:13,padding:"8px 0"}}>暫無相關新聞</div>;
-                        return nd.articles.slice(0, 6).map((article, idx) => {
-                          const ts = article.providerPublishTime;
-                          const timeStr = ts ? new Date(ts * 1000).toLocaleDateString("zh-TW", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }) : "";
-                          return (
-                            <a key={idx} href={article.url || article.link} target="_blank" rel="noopener noreferrer" className="news-item">
-                              <div className="news-item-title">{article.title}</div>
-                              {article.snippet && (
-                                <div className="news-item-snippet">{article.snippet.slice(0, 80)}...</div>
-                              )}
-                              <div className="news-item-meta">
-                                {article.publisher && <span>{article.publisher}</span>}
-                                {timeStr && <span>{timeStr}</span>}
-                              </div>
-                            </a>
-                          );
-                        });
-                      })()}
-                    </div>
                   </>
                 )}
 
@@ -5475,112 +5557,85 @@ const [watchText, setWatchText] = useState(() => {
               </div>
 
               {reportTab === "market" && (
-                <>
-                  <div className="report-card market-primary-card">
-                    <div className="market-primary-head">
-                      <div>
-                        <h2>📊 今日大盤方向</h2>
-                        <p className="muted">
-                          資料來源：{marketStats.sourceName}
-                          {taiwanMarketUpdatedAt ? `｜更新 ${taiwanMarketUpdatedAt.toLocaleString("zh-TW")}` : "｜資料更新中"}
-                        </p>
-                      </div>
+                <div className="market-layout">
 
-                      <div className={`market-direction-badge ${marketStats.avg >= 0 ? "up" : "down"}`}>
-                        {marketDirectionText}
+                  {/* 第一列：三格頂部色條卡片 */}
+                  <div className="mkt-row1">
+                    <div className="mkt-card mkt-card-blue">
+                      <div className="mkt-card-label">AI 判斷</div>
+                      <div className="mkt-card-main">
+                        {marketStats.avg > 1 ? "偏多" : marketStats.avg > 0 ? "震盪偏多" : marketStats.avg > -1 ? "震盪偏弱" : "偏空"}
+                      </div>
+                      <div className="mkt-card-sub">熱度 {terminalAIScore} · {marketDirectionText}</div>
+                    </div>
+                    <div className="mkt-card mkt-card-neutral">
+                      <div className="mkt-card-label">台股加權指數</div>
+                      <div className="mkt-card-main">{marketStats.indexPrice ? marketStats.indexPrice.toFixed(2) : "--"}</div>
+                      <div className={`mkt-card-sub ${marketStats.avg >= 0 ? "up" : "down"}`}>{marketStats.avg.toFixed(2)}%</div>
+                    </div>
+                    <div className="mkt-card mkt-card-red">
+                      <div className="mkt-card-label">市場寬度</div>
+                      <div className="mkt-card-main">
+                        {marketStats.total ? `${marketStats.up} / ${marketStats.down}` : "--"}
+                      </div>
+                      <div className="mkt-card-sub">
+                        {marketStats.total ? <><span className="up">{marketStats.up} 漲</span> · <span className="down">{marketStats.down} 跌</span></> : "更新中"}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 第二列：AI風險提醒（4格橫排） */}
+                  <div className="mkt-risk-row">
+                    {aiRiskItems.map((item, idx) => (
+                      <div key={idx} className="mkt-risk-item">
+                        <span className="mkt-risk-dot" />
+                        {item.replace(/^⚠️\s*/, "")}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* 第三列：主流族群 + 相關新聞 */}
+                  <div className="mkt-row3">
+                    <div className="mkt-half-card">
+                      <div className="mkt-half-title">
+                        <span className="mkt-dot mkt-dot-blue" />主流族群
+                      </div>
+                      <div className="mkt-themes">
+                        {terminalStrongFlow.slice(0, 4).map((item) => (
+                          <button key={item} className="mkt-theme-tag"
+                            onClick={() => { setReportTab("industry"); setSelectedIndustry({ side: "strong", name: item }); }}>
+                            {item}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="mkt-half-title" style={{marginTop:12}}>
+                        <span className="mkt-dot mkt-dot-orange" />資金流方向
+                      </div>
+                      <div className="mkt-flow">
+                        {terminalStrongFlow.slice(0, 5).map((item, i) => (
+                          <span key={item} className="mkt-flow-seg">
+                            <button onClick={() => { setReportTab("industry"); setSelectedIndustry({ side: "strong", name: item }); }}>{item}</button>
+                            {i < 4 && <span className="mkt-arrow">→</span>}
+                          </span>
+                        ))}
                       </div>
                     </div>
 
-                    <div className="market-stats-grid primary">
-                      <div>
-                        <span>台股加權指數</span>
-                        <b>{marketStats.indexPrice ? marketStats.indexPrice.toFixed(2) : "--"}</b>
+                    <div className="mkt-half-card">
+                      <div className="mkt-half-title">
+                        <span className="mkt-dot mkt-dot-yellow" />明日操作策略
                       </div>
-                      <div>
-                        <span>指數漲跌幅</span>
-                        <b className={marketStats.avg >= 0 ? "up" : "down"}>{marketStats.avg.toFixed(2)}%</b>
-                      </div>
-                      <div>
-                        <span>AI熱度</span>
-                        <b>{terminalAIScore}</b>
-                      </div>
-                      <div>
-                        <span>市場寬度</span>
-                        <b>{marketStats.total ? `${marketStats.up}漲 / ${marketStats.down}跌` : "更新中"}</b>
-                      </div>
-                    </div>
-
-                    {/* AI 判斷 + 風險整合 */}
-                    <div className="ai-summary-box">
-                      <div className="ai-summary-main">
-                        🤖 AI 判斷：
-                        {marketStats.avg > 1
-                          ? "加權指數明顯偏多，強勢股可續抱，但避免追高過熱標的。"
-                          : marketStats.avg > 0
-                          ? "加權指數震盪偏多，適合觀察量能放大的主流股。"
-                          : "加權指數偏弱，建議降低追價，等待轉強訊號。"}
-                      </div>
-                      <div className="ai-risk-inline">
-                        {aiRiskItems.map((item, idx) => (
-                          <div key={idx} className="ai-risk-inline-item">{item}</div>
+                      <div className="mkt-strategy">
+                        {tomorrowStrategyItems.map((item, i) => (
+                          <div key={i} className="mkt-strategy-item">
+                            {item.replace(/^[📌🔥]\s*/, "")}
+                          </div>
                         ))}
                       </div>
                     </div>
                   </div>
 
-                  <div className="terminal-home-clean">
-                    <section className="market-core refined flow-only">
-                      <div className="market-core-left">
-                        <div className="market-core-heading">主流族群</div>
-
-                        <div className="main-themes featured">
-                          {terminalStrongFlow.slice(0, 3).map((item) => (
-                            <button
-                              key={item}
-                              onClick={() => {
-                                setReportTab("industry");
-                                setSelectedIndustry({ side: "strong", name: item });
-                              }}
-                            >
-                              {item}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div className="market-core-flow">
-                        <div className="flow-title enlarged">資金流方向</div>
-
-                        <div className="flow-path upgraded">
-                          {terminalStrongFlow.slice(0, 5).map((item, index) => (
-                            <span className="flow-segment" key={item}>
-                              <button
-                                onClick={() => {
-                                  setReportTab("industry");
-                                  setSelectedIndustry({ side: "strong", name: item });
-                                }}
-                              >
-                                {item}
-                              </button>
-
-                              {index < terminalStrongFlow.slice(0, 5).length - 1 && <i>→</i>}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    </section>
-
-                    {/* 明日策略 */}
-                    <div className="report-card" style={{ marginTop: 16 }}>
-                      <h2 style={{ fontSize: 16, marginBottom: 12 }}>📌 明日操作策略</h2>
-                      <div className="strategy-box">
-                        {tomorrowStrategyItems.map((item, index) => (
-                          <div className="strategy-item" key={index}>{item}</div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </>
+                </div>
               )}
 
               {reportTab === "industry" && (
