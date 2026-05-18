@@ -4429,6 +4429,62 @@ const [watchText, setWatchText] = useState(() => {
           .mkt-row3 { grid-template-columns: 1fr; }
         }
 
+        /* ── 掃描頁共用版面（K線雷達 + 隔日沖） ─────────────────── */
+        .scan-layout { display: grid; grid-template-columns: 210px 1fr; gap: 12px; align-items: start; }
+
+        /* 左側篩選面板 */
+        .scan-sidebar { background: #0b1929; border: 1px solid rgba(14,165,233,.14); border-radius: 14px; padding: 16px; position: sticky; top: 10px; display: flex; flex-direction: column; gap: 10px; }
+        .scan-sidebar-title { font-size: 14px; font-weight: 700; color: #f1f5f9; }
+        .scan-sidebar-desc { font-size: 11px; color: #475569; line-height: 1.5; }
+        .scan-sidebar-section { font-size: 10px; font-weight: 700; color: #475569; letter-spacing: .06em; text-transform: uppercase; padding-top: 4px; border-top: .5px solid rgba(14,165,233,.10); }
+
+        /* 統計格 */
+        .scan-stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+        .scan-stat { background: rgba(14,165,233,.07); border: 1px solid rgba(14,165,233,.14); border-radius: 8px; padding: 8px; }
+        .scan-stat-label { font-size: 10px; color: #64748b; letter-spacing: .03em; margin-bottom: 3px; }
+        .scan-stat-val { font-size: 20px; font-weight: 700; color: #f1f5f9; line-height: 1; margin-bottom: 2px; }
+        .scan-stat-sub { font-size: 10px; color: #475569; }
+
+        /* 條件列表 */
+        .scan-criteria-list { display: flex; flex-direction: column; gap: 5px; }
+        .scan-criteria-item { font-size: 11px; color: #94a3b8; padding: 4px 8px; background: rgba(14,165,233,.04); border-radius: 6px; border-left: 2px solid rgba(14,165,233,.20); }
+
+        /* 選單 + 按鈕 */
+        .scan-select { width: 100%; font-size: 12px; padding: 6px 8px; border-radius: 7px; border: 1px solid rgba(14,165,233,.18); background: #0b1929; color: #e2e8f0; }
+        .scan-btn { width: 100%; padding: 9px; border-radius: 8px; background: rgba(14,165,233,.15); color: #38bdf8; border: 1px solid rgba(14,165,233,.30); font-size: 12px; font-weight: 700; cursor: pointer; margin-top: 4px; }
+        .scan-btn:hover { background: rgba(14,165,233,.25); }
+        .scan-btn:disabled { opacity: .5; cursor: not-allowed; }
+
+        /* 右側結果 */
+        .scan-result { background: #0b1929; border: 1px solid rgba(14,165,233,.14); border-radius: 14px; overflow: hidden; }
+        .scan-empty { padding: 60px 24px; text-align: center; color: #475569; font-size: 13px; }
+        .scan-table-wrap { overflow-x: auto; }
+
+        /* 表格 */
+        .scan-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        .scan-table thead tr { background: rgba(14,165,233,.08); border-bottom: 1px solid rgba(14,165,233,.15); }
+        .scan-table th { padding: 10px 10px; text-align: left; font-size: 11px; font-weight: 700; color: #64748b; letter-spacing: .04em; white-space: nowrap; }
+        .scan-table td { padding: 10px 10px; border-bottom: .5px solid rgba(14,165,233,.07); vertical-align: middle; }
+        .scan-row { cursor: pointer; }
+        .scan-row:hover td { background: rgba(14,165,233,.06); }
+        .scan-row:last-child td { border-bottom: none; }
+
+        /* 表格內容元素 */
+        .scan-rank { color: #475569; font-size: 11px; font-weight: 700; text-align: center; }
+        .scan-stock-name { font-size: 13px; font-weight: 700; color: #f1f5f9; margin-bottom: 2px; }
+        .scan-stock-code { font-size: 10px; color: #475569; }
+        .scan-score { font-size: 16px; font-weight: 800; color: #38bdf8; line-height: 1; }
+        .scan-score span { display: block; font-size: 10px; color: #64748b; font-weight: 400; margin-top: 2px; }
+        .scan-badge { display: inline-block; font-size: 10px; padding: 2px 7px; border-radius: 4px; background: rgba(14,165,233,.10); color: #38bdf8; border: 1px solid rgba(14,165,233,.20); white-space: nowrap; margin-top: 3px; }
+        .scan-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+        .scan-tags span { font-size: 10px; padding: 2px 6px; border-radius: 4px; }
+        .scan-tags.bullish span { background: rgba(34,197,94,.10); color: #4ade80; border: 1px solid rgba(34,197,94,.20); }
+        .scan-tags.bearish span { background: rgba(248,113,113,.10); color: #fb7185; border: 1px solid rgba(248,113,113,.20); }
+        .scan-tag-empty { color: #334155; font-size: 11px; }
+        .scan-advice-main { font-size: 11px; font-weight: 600; color: #cbd5e1; margin-bottom: 2px; }
+        .scan-advice-risk { font-size: 11px; color: #f59e0b; margin-bottom: 2px; }
+        .scan-advice-note { font-size: 10px; color: #64748b; line-height: 1.4; }
+
         .ai-summary-main { font-size: 15px; color: #e2e8f0; margin-bottom: 12px; line-height: 1.6; }
         .ai-risk-inline { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; border-top: 1px solid rgba(56,189,248,.10); padding-top: 12px; }
         .ai-risk-inline-item { font-size: 13px; color: #fbbf24; padding: 6px 10px; background: rgba(251,191,36,.08); border-radius: 8px; border-left: 3px solid rgba(251,191,36,.5); }
@@ -5114,267 +5170,228 @@ const [watchText, setWatchText] = useState(() => {
           
 
           {activeMenu === "klineRadar" && (
-            <div className="card kline-radar-page">
-              <div className="section-title">
-                <div>
-                  <h2>📡 K線訊號雷達</h2>
-                  <p className="muted">掃描今日符合 K線型態 + 成交量放大的台股，優先找突破K、長下影支撐、爆量上漲與接近20日高點的標的。</p>
+            <div className="scan-layout">
+
+              {/* 左側篩選面板（固定） */}
+              <div className="scan-sidebar">
+                <div className="scan-sidebar-title">📡 K線訊號雷達</div>
+                <p className="scan-sidebar-desc">掃描今日符合K線型態＋成交量放大的台股</p>
+
+                <div className="scan-stat-grid">
+                  <div className="scan-stat"><div className="scan-stat-label">符合訊號</div><div className="scan-stat-val">{sortedKlineRadarList.length}</div><div className="scan-stat-sub">K線+量能</div></div>
+                  <div className="scan-stat"><div className="scan-stat-label">S/A 級</div><div className="scan-stat-val">{sortedKlineRadarList.filter((s) => (s.radarScore || 0) >= 78).length}</div><div className="scan-stat-sub">優先名單</div></div>
+                  <div className="scan-stat"><div className="scan-stat-label">突破/高點</div><div className="scan-stat-val">{sortedKlineRadarList.filter((s) => s.nearBreakout || s.candleTitle?.includes("突破K")).length}</div><div className="scan-stat-sub">動能觀察</div></div>
+                  <div className="scan-stat"><div className="scan-stat-label">爆量上漲</div><div className="scan-stat-val">{sortedKlineRadarList.filter((s) => s.volumeTitle?.includes("爆量上漲")).length}</div><div className="scan-stat-sub">量價同步</div></div>
                 </div>
 
-                <div className="btn-row" style={{ marginTop: 0 }}>
-                  <button onClick={scanKlineRadar} disabled={klineRadarLoading}>
-                    {klineRadarLoading ? "雷達掃描中..." : "掃描今日K線訊號"}
-                  </button>
+                <div className="scan-sidebar-section">排序方式</div>
+                <select value={klineRadarSort} onChange={(e) => setKlineRadarSort(e.target.value)} className="scan-select">
+                  <option value="score">依訊號強度</option>
+                  <option value="volume">依成交量</option>
+                  <option value="change">依漲跌幅</option>
+                  <option value="breakout">依突破型態</option>
+                </select>
 
-                  <select
-                    value={klineRadarSort}
-                    onChange={(e) => setKlineRadarSort(e.target.value)}
-                    style={{ width: 170 }}
-                  >
-                    <option value="score">依訊號強度</option>
-                    <option value="volume">依成交量</option>
-                    <option value="change">依漲跌幅</option>
-                    <option value="breakout">依突破型態</option>
-                  </select>
+                <div className="scan-sidebar-section">系統條件</div>
+                <div className="scan-criteria-list">
+                  <div className="scan-criteria-item">漲幅 + 量能放大</div>
+                  <div className="scan-criteria-item">收盤位置強弱</div>
+                  <div className="scan-criteria-item">爆量長上影過濾</div>
+                  <div className="scan-criteria-item">假突破風險評估</div>
                 </div>
-              </div>
-              <div className="auto-criteria-panel">
-                <div>
-                  <b>系統判斷條件</b>
-                  <span>今日漲幅、成交量放大、收盤位置、是否強停、是否鎖漲停、爆量長上影、分數與假突破風險。</span>
-                </div>
-                <div>
-                  <b>每檔股票建議</b>
-                  <span>自動顯示開高機率、續強機率、出貨風險與建議策略；不用手動調整篩選條件。</span>
-                </div>
-              </div>
 
-              <div className="kline-radar-hero">
-                <div>
-                  <span>今日符合訊號</span>
-                  <b>{sortedKlineRadarList.length}</b>
-                  <small>K線 + 量能條件</small>
-                </div>
-                <div>
-                  <span>爆量上漲</span>
-                  <b>{sortedKlineRadarList.filter((s) => s.volumeTitle?.includes("爆量上漲")).length}</b>
-                  <small>量價同步</small>
-                </div>
-                <div>
-                  <span>突破 / 接近高點</span>
-                  <b>{sortedKlineRadarList.filter((s) => s.nearBreakout || s.candleTitle?.includes("突破K")).length}</b>
-                  <small>動能觀察</small>
-                </div>
-                <div>
-                  <span>S / A級</span>
-                  <b>{sortedKlineRadarList.filter((s) => (s.radarScore || 0) >= 78).length}</b>
-                  <small>優先名單</small>
-                </div>
+                <button onClick={scanKlineRadar} disabled={klineRadarLoading} className="scan-btn">
+                  {klineRadarLoading ? "掃描中..." : "掃描今日K線訊號"}
+                </button>
               </div>
 
-              {sortedKlineRadarList.length === 0 ? (
-                <p className="empty">
-                  {klineRadarLoading ? "正在掃描台股K線與成交量訊號..." : "按「掃描今日K線訊號」後，會列出符合K線型態與量能條件的股票。"}
-                </p>
-              ) : (
-                <div className="table-wrap kline-radar-table">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>排名</th>
-                        <th>股票</th>
-                        <th>訊號強度</th>
-                        <th>盤面結構</th>
-                        <th>看漲訊號</th>
-                        <th>看跌/風險</th>
-                        <th>主升段機率</th>
-                        <th>假突破風險</th>
-                        <th>漲跌</th>
-                        <th>量能</th>
-                        <th>判斷條件</th>
-                        <th>建議</th>
-                        <th>觀察理由</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {sortedKlineRadarList.map((s, i) => (
-                        <tr key={s.symbol} onClick={() => openStockAnalysisFromList(s)}>
-                          <td>{i + 1}</td>
-                          <td>
-                            <div className="stock-name-stack">
-                              <span className="stock-name-main">{getDisplayName(s.symbol, s.name)}</span>
-                              <span className="stock-name-code">{s.symbol}｜{s.baseType || "台股"}</span>
-                            </div>
-                          </td>
-                          <td>
-                            <div className="radar-score">
-                              <b>{s.radarScore}</b>
-                              <span>{s.radarLevel}</span>
-                            </div>
-                          </td>
-                          <td><span className="badge">{s.marketStructure}</span></td>
-                          <td>
-                            <div className="tag-list compact bullish">
-                              {(s.bullishSignals || []).slice(0, 3).map((sig) => (
-                                <span key={sig.signalName}>{sig.signalName}</span>
-                              ))}
-                              {!(s.bullishSignals || []).length && <span>--</span>}
-                            </div>
-                          </td>
-                          <td>
-                            <div className="tag-list compact bearish">
-                              {(s.bearishSignals || []).slice(0, 2).map((sig) => (
-                                <span key={sig.signalName}>{sig.signalName}</span>
-                              ))}
-                              {!(s.bearishSignals || []).length && <span>--</span>}
-                            </div>
-                          </td>
-                          <td>{s.mainUpProbability ?? "--"}%</td>
-                          <td className={(s.fakeBreakoutRisk || 0) >= 60 ? "down" : ""}>{s.fakeBreakoutRisk ?? "--"}%</td>
-                          <td className={s.changePct >= 0 ? "up" : "down"}>{s.changePct?.toFixed?.(2) ?? "--"}%</td>
-                          <td>{s.volumeTitle || "--"}</td>
-                          <td>
-                            <div className="condition-mini-list">
-                              {buildAutoTradeAdvice(s).conditionTags.slice(0, 4).map((tag) => <span key={tag}>{tag}</span>)}
-                            </div>
-                          </td>
-                          <td>
-                            <div className="advice-mini">
-                              <b>開高 {buildAutoTradeAdvice(s).openHighProbability}%｜續強 {buildAutoTradeAdvice(s).continueProbability}%</b>
-                              <span>出貨風險 {buildAutoTradeAdvice(s).sellRisk}%</span>
-                              <em>{buildAutoTradeAdvice(s).strategy}</em>
-                            </div>
-                          </td>
-                          <td>{(s.radarReasons || []).slice(0, 2).join("、")}</td>
+              {/* 右側結果區 */}
+              <div className="scan-result">
+                {sortedKlineRadarList.length === 0 ? (
+                  <div className="scan-empty">
+                    {klineRadarLoading ? "正在掃描台股K線與成交量訊號..." : "按左側「掃描今日K線訊號」後，會列出符合K線型態與量能條件的股票。"}
+                  </div>
+                ) : (
+                  <div className="scan-table-wrap">
+                    <table className="scan-table">
+                      <thead>
+                        <tr>
+                          <th style={{width:36}}>#</th>
+                          <th style={{minWidth:130}}>股票</th>
+                          <th style={{width:90}}>訊號 / 結構</th>
+                          <th style={{minWidth:140}}>看漲訊號</th>
+                          <th style={{minWidth:100}}>看跌 / 風險</th>
+                          <th style={{width:70}}>漲跌</th>
+                          <th style={{width:70}}>量能</th>
+                          <th style={{width:90}}>主升 / 假突</th>
+                          <th style={{minWidth:150}}>建議</th>
+                          <th style={{minWidth:160}}>觀察理由</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+                      </thead>
+                      <tbody>
+                        {sortedKlineRadarList.map((s, i) => {
+                          const adv = buildAutoTradeAdvice(s);
+                          return (
+                            <tr key={s.symbol} onClick={() => openStockAnalysisFromList(s)} className="scan-row">
+                              <td className="scan-rank">{i + 1}</td>
+                              <td>
+                                <div className="scan-stock-name">{getDisplayName(s.symbol, s.name)}</div>
+                                <div className="scan-stock-code">{s.symbol} · {s.baseType || "台股"}</div>
+                              </td>
+                              <td>
+                                <div className="scan-score">{s.radarScore}<span>{s.radarLevel}</span></div>
+                                <div className="scan-badge">{s.marketStructure}</div>
+                              </td>
+                              <td>
+                                <div className="scan-tags bullish">
+                                  {(s.bullishSignals || []).slice(0, 3).map((sig) => <span key={sig.signalName}>{sig.signalName}</span>)}
+                                  {!(s.bullishSignals || []).length && <span className="scan-tag-empty">--</span>}
+                                </div>
+                              </td>
+                              <td>
+                                <div className="scan-tags bearish">
+                                  {(s.bearishSignals || []).slice(0, 2).map((sig) => <span key={sig.signalName}>{sig.signalName}</span>)}
+                                  {!(s.bearishSignals || []).length && <span className="scan-tag-empty">--</span>}
+                                </div>
+                              </td>
+                              <td className={s.changePct >= 0 ? "up" : "down"} style={{fontWeight:600}}>{s.changePct?.toFixed?.(2) ?? "--"}%</td>
+                              <td style={{fontSize:11,color:"var(--color-text-secondary)"}}>{s.volumeTitle || "--"}</td>
+                              <td>
+                                <div style={{fontSize:11}}>{s.mainUpProbability ?? "--"}%</div>
+                                <div style={{fontSize:11}} className={(s.fakeBreakoutRisk||0)>=60?"down":"muted"}>假突 {s.fakeBreakoutRisk ?? "--"}%</div>
+                              </td>
+                              <td>
+                                <div className="scan-advice-main">開高 {adv.openHighProbability}% · 續強 {adv.continueProbability}%</div>
+                                <div className="scan-advice-risk">出貨風險 {adv.sellRisk}%</div>
+                                <div className="scan-advice-note">{adv.strategy}</div>
+                              </td>
+                              <td style={{fontSize:11,color:"var(--color-text-secondary)",lineHeight:1.5}}>{(s.radarReasons || []).slice(0, 2).join("、")}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
 {activeMenu === "nextday" && (
-            <div className="card">
-              <div className="section-title">
-                <div>
-                  <h2>🌙 隔日沖選股</h2>
-                  <p className="muted">依照漲幅、量能、收盤位置、均線、RSI、MACD 與假突破過濾器進行評分。</p>
+            <div className="scan-layout">
+
+              {/* 左側篩選面板（固定） */}
+              <div className="scan-sidebar">
+                <div className="scan-sidebar-title">🌙 隔日沖選股</div>
+                <p className="scan-sidebar-desc">依漲幅、量能、收盤位置、均線、RSI、MACD 與假突破過濾器評分</p>
+
+                <div className="scan-stat-grid">
+                  <div className="scan-stat">
+                    <div className="scan-stat-label">目前候選</div>
+                    <div className="scan-stat-val">{nextDayLoading ? "--" : sortedNextDayList.filter((s) => (s.nextDay?.nextDayScore || 0) >= 100 && !s.nextDay?.fakeBreakout).length}</div>
+                    <div className="scan-stat-sub">B級以上</div>
+                  </div>
+                  <div className="scan-stat">
+                    <div className="scan-stat-label">總名單</div>
+                    <div className="scan-stat-val">{sortedNextDayList.length}</div>
+                    <div className="scan-stat-sub">全部候選</div>
+                  </div>
+                  <div className="scan-stat">
+                    <div className="scan-stat-label">假突破</div>
+                    <div className="scan-stat-val">{sortedNextDayList.filter(s => s.nextDay?.fakeBreakout).length}</div>
+                    <div className="scan-stat-sub">需過濾</div>
+                  </div>
+                  <div className="scan-stat">
+                    <div className="scan-stat-label">S級</div>
+                    <div className="scan-stat-val">{sortedNextDayList.filter(s => (s.nextDay?.nextDayScore||0) >= 200).length}</div>
+                    <div className="scan-stat-sub">最強勢</div>
+                  </div>
                 </div>
-                <div className="btn-row" style={{ marginTop: 0 }}>
-                  <button onClick={() => scanNextDayList()} disabled={nextDayLoading}>
-                    {nextDayLoading ? "更新中..." : "立即刷新"}
-                  </button>
-                  <select
-                    value={nextDaySortMode}
-                    onChange={(e) => setNextDaySortMode(e.target.value)}
-                    style={{ width: 170 }}
-                  >
-                    <option value="score">依隔日沖分數</option>
-                    <option value="gap">依開高機率</option>
-                    <option value="change">依漲幅</option>
-                    <option value="volume">依量比</option>
-                  </select>
+
+                <div className="scan-sidebar-section">排序方式</div>
+                <select value={nextDaySortMode} onChange={(e) => setNextDaySortMode(e.target.value)} className="scan-select">
+                  <option value="score">依隔日沖分數</option>
+                  <option value="gap">依開高機率</option>
+                  <option value="change">依漲幅</option>
+                  <option value="volume">依量比</option>
+                </select>
+
+                <div className="scan-sidebar-section">選股邏輯</div>
+                <div className="scan-criteria-list">
+                  <div className="scan-criteria-item">漲幅強 + 爆量</div>
+                  <div className="scan-criteria-item">收近高點 / 突破日高</div>
+                  <div className="scan-criteria-item">均線多頭排列</div>
+                  <div className="scan-criteria-item">假突破自動過濾</div>
                 </div>
-              </div>
-              <div className="auto-criteria-panel">
-                <div>
-                  <b>系統判斷條件</b>
-                  <span>今日漲幅、成交量放大、收盤位置、是否強停、是否鎖漲停、爆量長上影、分數與假突破風險。</span>
-                </div>
-                <div>
-                  <b>每檔股票建議</b>
-                  <span>自動顯示開高機率、續強機率、出貨風險與建議策略；不用手動調整篩選條件。</span>
-                </div>
+
+                <button onClick={() => scanNextDayList()} disabled={nextDayLoading} className="scan-btn">
+                  {nextDayLoading ? "更新中..." : "立即刷新"}
+                </button>
               </div>
 
-              <div className="summary-grid">
-                <div className="card">
-                  <h3>📌 選股邏輯</h3>
-                  <p className="muted">漲幅強、爆量、收近高點、突破 5/20 日高、均線多頭排列會加分。</p>
-                </div>
-                <div className="card">
-                  <h3>🚫 假突破過濾</h3>
-                  <p className="muted">長上影、爆量黑K、縮量突破會被判定為假突破風險。</p>
-                </div>
-                <div className="card">
-                  <h3>📈 開高機率</h3>
-                  <p className="muted">依收盤強度、量比、法人與大盤環境估算隔日開高機率。</p>
-                </div>
-                <div className="card">
-                  <h3>🔥 目前候選</h3>
-                  <b>{nextDayLoading ? "更新中" : sortedNextDayList.filter((s) => (s.nextDay?.nextDayScore || 0) >= 100 && !s.nextDay?.fakeBreakout).length}</b>
-                  <p className="muted">分數達 B 級以上且未觸發假突破。</p>
-                </div>
-              </div>
-
-              {sortedNextDayList.length === 0 ? (
-                <p className="empty">{nextDayLoading ? "隔日沖名單更新中..." : "目前暫無隔日沖候選，系統會持續背景更新。"}</p>
-              ) : (
-                <div className="table-wrap">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>代號</th>
-                        <th>名稱</th>
-                        <th>隔日沖分數</th>
-                        <th>等級</th>
-                        <th>開高機率</th>
-                        <th>訊號</th>
-                        <th>漲跌</th>
-                        <th>量比</th>
-                        <th>假突破</th>
-                        <th>判斷條件</th>
-                        <th>建議</th>
-                        <th>觀察標籤</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {sortedNextDayList.map((s) => (
-                        <tr
-                          key={s.symbol}
-                          onClick={() => openStockAnalysisFromList(s)}
-                        >
-                          <td>
-                            <div className="stock-name-stack">
-                              <span className="stock-name-main small">{getDisplayName(s.symbol, s.name)}</span>
-                              <span className="stock-name-code">{s.symbol}</span>
-                            </div>
-                          </td>
-                          <td>{s.symbol}</td>
-                          <td><b>{s.nextDay?.nextDayScore ?? "--"}</b></td>
-                          <td><span className="badge">{s.nextDay?.nextDayRank || "待觀察"}</span></td>
-                          <td>{s.nextDay?.gapUpProbability ?? "--"}%</td>
-                          <td>
-                            <span className="badge">{s.nextDay?.nextDaySignal || "觀望"}</span>
-                          </td>
-                          <td className={s.changePct >= 0 ? "up" : "down"}>
-                            {s.changePct?.toFixed?.(2) ?? "--"}%
-                          </td>
-                          <td>{s.volumeRatio?.toFixed?.(2) ?? "--"}</td>
-                          <td className={s.nextDay?.fakeBreakout ? "down" : "up"}>
-                            {s.nextDay?.fakeBreakout ? "有風險" : "通過"}
-                          </td>
-                          <td>
-                            <div className="condition-mini-list">
-                              {buildAutoTradeAdvice(s).conditionTags.slice(0, 5).map((tag) => <span key={tag}>{tag}</span>)}
-                            </div>
-                          </td>
-                          <td>
-                            <div className="advice-mini">
-                              <b>開高 {buildAutoTradeAdvice(s).openHighProbability}%｜續強 {buildAutoTradeAdvice(s).continueProbability}%</b>
-                              <span>出貨風險 {buildAutoTradeAdvice(s).sellRisk}%</span>
-                              <em>{buildAutoTradeAdvice(s).strategy}</em>
-                            </div>
-                          </td>
-                          <td>{s.tags?.slice(0, 3).join("、") || s.volumeSignal?.title || "等待確認"}</td>
+              {/* 右側結果區 */}
+              <div className="scan-result">
+                {sortedNextDayList.length === 0 ? (
+                  <div className="scan-empty">
+                    {nextDayLoading ? "隔日沖名單更新中..." : "目前暫無隔日沖候選，系統會持續背景更新。"}
+                  </div>
+                ) : (
+                  <div className="scan-table-wrap">
+                    <table className="scan-table">
+                      <thead>
+                        <tr>
+                          <th style={{width:36}}>#</th>
+                          <th style={{minWidth:130}}>股票</th>
+                          <th style={{width:100}}>分數 / 等級</th>
+                          <th style={{width:70}}>開高機率</th>
+                          <th style={{width:80}}>訊號</th>
+                          <th style={{width:70}}>漲跌</th>
+                          <th style={{width:60}}>量比</th>
+                          <th style={{width:70}}>假突破</th>
+                          <th style={{minWidth:120}}>判斷條件</th>
+                          <th style={{minWidth:150}}>建議</th>
+                          <th style={{minWidth:120}}>觀察標籤</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+                      </thead>
+                      <tbody>
+                        {sortedNextDayList.map((s, i) => {
+                          const adv = buildAutoTradeAdvice(s);
+                          return (
+                            <tr key={s.symbol} onClick={() => openStockAnalysisFromList(s)} className="scan-row">
+                              <td className="scan-rank">{i + 1}</td>
+                              <td>
+                                <div className="scan-stock-name">{getDisplayName(s.symbol, s.name)}</div>
+                                <div className="scan-stock-code">{s.symbol}</div>
+                              </td>
+                              <td>
+                                <div className="scan-score">{s.nextDay?.nextDayScore ?? "--"}<span>{s.nextDay?.nextDayRank || "待觀察"}</span></div>
+                              </td>
+                              <td style={{fontWeight:600}}>{s.nextDay?.gapUpProbability ?? "--"}%</td>
+                              <td><div className="scan-badge">{s.nextDay?.nextDaySignal || "觀望"}</div></td>
+                              <td className={s.changePct >= 0 ? "up" : "down"} style={{fontWeight:600}}>{s.changePct?.toFixed?.(2) ?? "--"}%</td>
+                              <td style={{fontSize:11}}>{s.volumeRatio?.toFixed?.(2) ?? "--"}</td>
+                              <td className={s.nextDay?.fakeBreakout ? "down" : "up"} style={{fontSize:11,fontWeight:600}}>
+                                {s.nextDay?.fakeBreakout ? "有風險" : "通過"}
+                              </td>
+                              <td>
+                                <div className="condition-mini-list">
+                                  {adv.conditionTags.slice(0, 4).map((tag) => <span key={tag}>{tag}</span>)}
+                                </div>
+                              </td>
+                              <td>
+                                <div className="scan-advice-main">開高 {adv.openHighProbability}% · 續強 {adv.continueProbability}%</div>
+                                <div className="scan-advice-risk">出貨風險 {adv.sellRisk}%</div>
+                                <div className="scan-advice-note">{adv.strategy}</div>
+                              </td>
+                              <td style={{fontSize:11,color:"var(--color-text-secondary)"}}>{s.tags?.slice(0, 3).join("、") || s.volumeSignal?.title || "等待確認"}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
