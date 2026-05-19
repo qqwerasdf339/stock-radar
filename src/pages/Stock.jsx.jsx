@@ -693,22 +693,48 @@ function resolveSymbol(input) {
   const raw = String(input || "").trim();
   if (!raw) return "";
 
-
-
   const cleaned = raw.replace(/\s+/g, "");
   const upper = cleaned.toUpperCase();
 
-  // 代碼 / 美股 / 已經是 Yahoo 格式
+  // 1. 已是代號格式，直接回傳
   if (/^[A-Z]{1,6}(\.[A-Z])?$/.test(upper)) return upper;
-  if (/^\d{4,6}$/.test(upper)) return upper;
+  if (/^\d{4,6}[A-Z]?$/.test(upper)) return upper;
   if (/^\d{4,6}\.(TW|TWO)$/i.test(upper)) return upper;
   if (/^[A-Z]{1,6}\.(TW|TWO)$/i.test(upper)) return upper;
 
-  // 允許使用「雷科.TW」「台積電.TW」這類輸入，先移除市場後綴再查中文名。
-  const key = normalizeSearchText(raw);
+  // 2. 含中文字 → 從內建股票池反查代號
+  if (/[\u4e00-\u9fff]/.test(raw)) {
+    const nameKey = cleaned.replace(/[＊*]/g, "");
 
-  // 中文名查找現在由後端 Yahoo API 處理，這裡只處理代號
+    // 先查 localStorage 名稱快取（反向查詢）
+    try {
+      const cache = JSON.parse(localStorage.getItem("stockNameCache_v3") || "{}");
+      for (const [code, name] of Object.entries(cache)) {
+        if (String(name).replace(/[＊*]/g, "").includes(nameKey) ||
+            nameKey.includes(String(name).replace(/[＊*]/g, ""))) {
+          return code;
+        }
+      }
+    } catch {}
 
+    // 再查內建股票池 MARKET_STRONG_POOL
+    if (typeof MARKET_STRONG_POOL !== "undefined") {
+      // 完全匹配
+      const exact = MARKET_STRONG_POOL.find(
+        (s) => String(s.name).replace(/[＊*]/g, "") === nameKey
+      );
+      if (exact) return exact.symbol;
+
+      // 部分匹配（輸入是名稱的一部分，或名稱包含輸入）
+      const partial = MARKET_STRONG_POOL.find(
+        (s) => String(s.name).replace(/[＊*]/g, "").includes(nameKey) ||
+               nameKey.includes(String(s.name).replace(/[＊*]/g, ""))
+      );
+      if (partial) return partial.symbol;
+    }
+  }
+
+  // 3. 混合輸入中抽取數字代號（如 "台積電2330"）
   const code = upper.match(/\d{4,6}[A-Z]?/)?.[0];
   if (code) return code;
 
@@ -4116,7 +4142,26 @@ const [watchText, setWatchText] = useState(() => {
     "🛡️ 若開盤 30 分鐘內指數快速轉弱，暫停追價，改等回測或尾盤確認。",
   ];
 
-  const suggestion = useMemo(() => [], []);
+  // 搜尋建議：輸入中文名時從股票池反查，輸入代號時也顯示對應名稱
+  const suggestion = useMemo(() => {
+    const q = query.trim();
+    if (!q || q.length < 1) return [];
+    if (typeof MARKET_STRONG_POOL === "undefined") return [];
+
+    const isChinese = /[\u4e00-\u9fff]/.test(q);
+    const qUpper = q.toUpperCase();
+    const qClean = q.replace(/[＊*]/g, "");
+
+    return MARKET_STRONG_POOL.filter((s) => {
+      const name = String(s.name || "").replace(/[＊*]/g, "");
+      const sym = String(s.symbol || "").toUpperCase();
+      if (isChinese) {
+        return name.includes(qClean);
+      } else {
+        return sym.startsWith(qUpper) || name.includes(q);
+      }
+    }).slice(0, 8);
+  }, [query]);
 
   return (
     <div className="terminal-shell">
@@ -4746,9 +4791,9 @@ const [watchText, setWatchText] = useState(() => {
 
                 {suggestion.length > 0 && (
                   <div className="chips">
-                    {suggestion.map(([name, code]) => (
-                      <button key={name} onClick={() => searchOne(code)}>
-                        {code} {name}
+                    {suggestion.map((item) => (
+                      <button key={item.symbol} onClick={() => searchOne(item.symbol)}>
+                        {item.symbol} {item.name}
                       </button>
                     ))}
                   </div>
