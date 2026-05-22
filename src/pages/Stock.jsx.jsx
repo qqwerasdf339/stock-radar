@@ -2202,11 +2202,28 @@ function getMasterByCode(code) {
   const key = String(code || "").trim().toUpperCase().replace(/\.(TW|TWO)$/i, "");
   if (!key) return null;
 
-
-
+  // 優先查 STOCK_MASTER_ALL（若有）
   if (typeof STOCK_MASTER_ALL !== "undefined") {
     const fromMaster = STOCK_MASTER_ALL.find((item) => String(item.stockCode).toUpperCase() === key);
     if (fromMaster) return fromMaster;
+  }
+
+  // 從 MARKET_STRONG_POOL 建立 master-like 物件（轉換格式）
+  if (typeof MARKET_STRONG_POOL !== "undefined") {
+    const poolItem = MARKET_STRONG_POOL.find((p) => String(p.symbol).toUpperCase() === key);
+    if (poolItem) {
+      return {
+        stockCode: poolItem.symbol,
+        stockName: poolItem.name,
+        name: poolItem.name,
+        symbol: poolItem.symbol,
+        officialIndustry: poolItem.industry || "其他",
+        subIndustry: poolItem.industry || "其他",
+        themeTags: poolItem.industry ? [poolItem.industry] : [],
+        isETF: false,
+        isWarrant: false,
+      };
+    }
   }
 
   return null;
@@ -2441,6 +2458,7 @@ const [watchText, setWatchText] = useState(() => {
   const [nextDaySortMode, setNextDaySortMode] = useState("score");
   const [reportTab, setReportTab] = useState("market");
   const [selectedIndustry, setSelectedIndustry] = useState(null);
+  const [industryPopup, setIndustryPopup] = useState(null); // { name, side, stocks, avgChange }
 
   useEffect(() => {
     // 每 9 分鐘 ping 後端，防止 Render 免費方案冷啟動
@@ -3131,6 +3149,7 @@ const [watchText, setWatchText] = useState(() => {
 
     setLoading(true);
     setError("");
+    setStock(null);  // 立即清空，避免切換股票時舊資料殘留 20-30 秒
 
     try {
       const target = resolveSymbol(rawInput);
@@ -4104,6 +4123,21 @@ const [watchText, setWatchText] = useState(() => {
     return list.find((item) => item.name === selectedIndustry.name) || null;
   }, [selectedIndustry, industryReport]);
 
+  // 點擊產業時開啟小視窗
+  function openIndustryPopup(industryName, side) {
+    const allStocks = MARKET_STRONG_POOL.filter(p => p.industry === industryName);
+    // 排序：有漲跌資料的優先，按漲幅排
+    const withData = [...systemStrongList, ...marketBreadthList]
+      .filter(s => {
+        const pool = MARKET_STRONG_POOL.find(p => p.symbol === s.symbol);
+        return pool?.industry === industryName;
+      })
+      .sort((a, b) => (b.changePct || 0) - (a.changePct || 0));
+    const withDataSymbols = new Set(withData.map(s => s.symbol));
+    const noData = allStocks.filter(s => !withDataSymbols.has(s.symbol));
+    setIndustryPopup({ name: industryName, side, stocks: [...withData, ...noData] });
+  }
+
   const terminalStrongFlow = useMemo(() => {
     const names = industryReport.strong.slice(0, 5).map((item) => item.name);
     return names.length ? names : ["ASIC", "AI伺服器", "散熱", "電源管理", "CPO"];
@@ -4514,6 +4548,14 @@ const [watchText, setWatchText] = useState(() => {
         .market-layout { display: flex; flex-direction: column; gap: 10px; }
 
         /* 第一列：三格頂部色條卡片 */
+        /* 首頁加權指數主角排版 */
+        .mkt-row1-hero { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .mkt-hero-card { background: #0e1e32; border: 1px solid rgba(14,165,233,.20); border-radius: 14px; padding: 20px 24px; border-left: 4px solid #0ea5e9; display: flex; flex-direction: column; justify-content: center; }
+        .mkt-hero-label { font-size: 12px; color: #8fafc8; letter-spacing: .06em; margin-bottom: 8px; }
+        .mkt-hero-price { font-size: 44px; font-weight: 800; color: #f1f5f9; letter-spacing: -.02em; line-height: 1; margin-bottom: 8px; }
+        .mkt-hero-change { font-size: 20px; font-weight: 700; margin-bottom: 6px; }
+        .mkt-hero-meta { font-size: 11px; color: #526880; }
+        .mkt-side-cards { display: flex; flex-direction: column; gap: 10px; }
         .mkt-row1 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
         .mkt-card { background: #0e1e32; border: 1px solid rgba(14,165,233,.12); border-radius: 12px; padding: 14px 16px; border-top: 3px solid transparent; }
         .mkt-card-blue  { border-top-color: #0ea5e9; }
@@ -4648,6 +4690,47 @@ const [watchText, setWatchText] = useState(() => {
         .market-stats-grid b, .macro-card b { font-size: 20px; }
         .ai-summary-box { margin-top: 12px; padding: 14px; border-radius: 16px; background: rgba(56,189,248,.08); border: 1px solid rgba(56,189,248,.22); color: #bae6fd; }
         .industry-list, .risk-list, .strategy-box { display: grid; gap: 10px; }
+        /* ── 產業股票小視窗 ──────────────────────────────────────── */
+        .industry-popup-overlay {
+          position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 1000;
+          display: flex; align-items: center; justify-content: center;
+          backdrop-filter: blur(2px);
+        }
+        .industry-popup {
+          background: #0b1929; border: 1px solid rgba(14,165,233,.25);
+          border-radius: 16px; width: min(680px, 92vw);
+          max-height: 80vh; display: flex; flex-direction: column;
+          box-shadow: 0 24px 64px rgba(0,0,0,.6);
+          animation: popupIn .18s ease;
+        }
+        @keyframes popupIn { from { opacity:0; transform:scale(.95) } to { opacity:1; transform:scale(1) } }
+        .industry-popup-header {
+          display: flex; justify-content: space-between; align-items: center;
+          padding: 16px 20px; border-bottom: 1px solid rgba(14,165,233,.12);
+          flex-shrink: 0;
+        }
+        .industry-popup-title { display: flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 700; color: #f1f5f9; }
+        .industry-popup-count { font-size: 12px; color: #7090a8; font-weight: 400; margin-left: 4px; }
+        .industry-popup-close {
+          background: rgba(14,165,233,.08); border: 1px solid rgba(14,165,233,.20);
+          color: #7090a8; border-radius: 8px; width: 32px; height: 32px;
+          font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+        }
+        .industry-popup-close:hover { background: rgba(14,165,233,.18); color: #f1f5f9; }
+        .industry-popup-body { overflow-y: auto; flex: 1; scrollbar-width: thin; }
+        .industry-popup-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        .industry-popup-table thead { position: sticky; top: 0; z-index: 2; background: #0d1e32; }
+        .industry-popup-table th {
+          padding: 10px 14px; text-align: left; font-size: 11px;
+          font-weight: 700; color: #7090a8; letter-spacing: .04em;
+          border-bottom: 2px solid rgba(14,165,233,.20);
+        }
+        .industry-popup-table td { padding: 10px 14px; border-bottom: .5px solid rgba(14,165,233,.08); }
+        .industry-popup-row { cursor: pointer; }
+        .industry-popup-row:hover td { background: rgba(14,165,233,.07); }
+        .industry-popup-row:last-child td { border-bottom: none; }
+        .popup-name { font-size: 14px; font-weight: 700; color: #f1f5f9; }
+        .popup-code { font-size: 12px; color: #7090a8; }
         .industry-item { display: flex; justify-content: space-between; align-items: center; cursor: pointer; transition: all .18s ease; text-align:left; }
         .industry-item:hover { transform: translateY(-1px); border-color: rgba(56,189,248,.45); background: rgba(30,41,59,.92); }
         .industry-item.active { border-color: rgba(34,211,238,.62); background: rgba(8,47,73,.55); }
@@ -5729,27 +5812,39 @@ const [watchText, setWatchText] = useState(() => {
               {reportTab === "market" && (
                 <div className="market-layout">
 
-                  {/* 第一列：三格頂部色條卡片 */}
-                  <div className="mkt-row1">
-                    <div className="mkt-card mkt-card-blue">
-                      <div className="mkt-card-label">AI 判斷</div>
-                      <div className="mkt-card-main">
-                        {marketStats.avg > 1 ? "偏多" : marketStats.avg > 0 ? "震盪偏多" : marketStats.avg > -1 ? "震盪偏弱" : "偏空"}
+                  {/* 第一列：加權指數大卡(左) + 右側兩格 */}
+                  <div className="mkt-row1-hero">
+                    {/* 左：加權指數主角卡 */}
+                    <div className="mkt-hero-card">
+                      <div className="mkt-hero-label">台灣加權指數</div>
+                      <div className="mkt-hero-price">
+                        {marketStats.indexPrice ? marketStats.indexPrice.toLocaleString("zh-TW", {minimumFractionDigits:2,maximumFractionDigits:2}) : "--"}
                       </div>
-                      <div className="mkt-card-sub">熱度 {terminalAIScore} · {marketDirectionText}</div>
-                    </div>
-                    <div className="mkt-card mkt-card-neutral">
-                      <div className="mkt-card-label">台股加權指數</div>
-                      <div className="mkt-card-main">{marketStats.indexPrice ? marketStats.indexPrice.toFixed(2) : "--"}</div>
-                      <div className={`mkt-card-sub ${marketStats.avg >= 0 ? "up" : "down"}`}>{marketStats.avg.toFixed(2)}%</div>
-                    </div>
-                    <div className="mkt-card mkt-card-red">
-                      <div className="mkt-card-label">市場寬度</div>
-                      <div className="mkt-card-main">
-                        {marketStats.total ? `${marketStats.up} / ${marketStats.down}` : "--"}
+                      <div className={`mkt-hero-change ${marketStats.avg >= 0 ? "up" : "down"}`}>
+                        {marketStats.avg >= 0 ? "▲" : "▼"} {Math.abs(marketStats.avg).toFixed(2)}%
                       </div>
-                      <div className="mkt-card-sub">
-                        {marketStats.total ? <><span className="up">{marketStats.up} 漲</span> · <span className="down">{marketStats.down} 跌</span></> : "更新中"}
+                      <div className="mkt-hero-meta">
+                        {taiwanMarketUpdatedAt ? `更新 ${taiwanMarketUpdatedAt.toLocaleTimeString("zh-TW",{hour:"2-digit",minute:"2-digit"})}` : "資料更新中"}
+                      </div>
+                    </div>
+
+                    {/* 右：兩格小卡 */}
+                    <div className="mkt-side-cards">
+                      <div className="mkt-card mkt-card-blue">
+                        <div className="mkt-card-label">AI 判斷</div>
+                        <div className="mkt-card-main">
+                          {marketStats.avg > 1 ? "偏多" : marketStats.avg > 0 ? "震盪偏多" : marketStats.avg > -1 ? "震盪偏弱" : "偏空"}
+                        </div>
+                        <div className="mkt-card-sub">熱度 {terminalAIScore} · {marketDirectionText}</div>
+                      </div>
+                      <div className="mkt-card mkt-card-red">
+                        <div className="mkt-card-label">市場寬度</div>
+                        <div className="mkt-card-main">
+                          {marketStats.total ? `${marketStats.up} / ${marketStats.down}` : "--"}
+                        </div>
+                        <div className="mkt-card-sub">
+                          {marketStats.total ? <><span className="up">{marketStats.up} 漲</span> · <span className="down">{marketStats.down} 跌</span></> : "更新中"}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -5965,7 +6060,9 @@ const [watchText, setWatchText] = useState(() => {
                       <h2>🏆 強勢產業前五名</h2>
                       <div className="industry-list">
                         {reportIndustryRank.strong.length ? reportIndustryRank.strong.map((item, index) => (
-                          <div className="industry-item up" key={item.industry}>
+                          <div className="industry-item up" key={item.industry}
+                            onClick={() => openIndustryPopup(item.industry, "strong")}
+                            style={{cursor:"pointer"}}>
                             <div>
                               <b>{index + 1}. {item.industry}</b>
                               <div className="muted">
@@ -5985,7 +6082,9 @@ const [watchText, setWatchText] = useState(() => {
                       <h2>📉 弱勢產業前五名</h2>
                       <div className="industry-list">
                         {reportIndustryRank.weak.length ? reportIndustryRank.weak.map((item, index) => (
-                          <div className="industry-item down" key={item.industry}>
+                          <div className="industry-item down" key={item.industry}
+                            onClick={() => openIndustryPopup(item.industry, "weak")}
+                            style={{cursor:"pointer"}}>
                             <div>
                               <b>{index + 1}. {item.industry}</b>
                               <div className="muted">
