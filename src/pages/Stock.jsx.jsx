@@ -6,10 +6,7 @@ import {
   HistogramSeries,
   LineSeries,
 } from "lightweight-charts";
-import {
-  ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid,
-  Tooltip, ResponsiveContainer, ReferenceLine, Legend, Cell,
-} from "recharts";
+
 import "../App.css";
 
 const API_BASE = "https://stock-radar-api-os48.onrender.com";
@@ -3959,17 +3956,6 @@ const [watchText, setWatchText] = useState(() => {
   }
 
   // ── 套用 AI 過濾後的K線雷達結果 ───────────────────────────────────────────
-  const filteredKlineRadarList = useMemo(() => {
-    if (!klineAiFilter.length) return sortedKlineRadarList;
-    return sortedKlineRadarList.filter(s => {
-      const allSigs = [
-        ...(s.bullishSignals || []).map(b => b.signalName),
-        ...(s.bearishSignals || []).map(b => b.signalName),
-      ];
-      return klineAiFilter.some(f => allSigs.some(sig => sig && sig.includes(f.split(" ")[0])));
-    });
-  }, [sortedKlineRadarList, klineAiFilter]);
-
   const sortedNextDayList = useMemo(() => {
     const list = [...nextDayList];
 
@@ -3982,7 +3968,6 @@ const [watchText, setWatchText] = useState(() => {
 
     return list.sort(sorters[nextDaySortMode] || sorters.score);
   }, [nextDayList, nextDaySortMode]);
-
 
   const sortedKlineRadarList = useMemo(() => {
     const list = [...klineRadarList];
@@ -4005,6 +3990,18 @@ const [watchText, setWatchText] = useState(() => {
 
     return list.sort((a, b) => (b.radarScore || 0) - (a.radarScore || 0));
   }, [klineRadarList, klineRadarSort]);
+
+  // filteredKlineRadarList 必須在 sortedKlineRadarList 之後定義
+  const filteredKlineRadarList = useMemo(() => {
+    if (!klineAiFilter.length) return sortedKlineRadarList;
+    return sortedKlineRadarList.filter(s => {
+      const allSigs = [
+        ...(s.bullishSignals || []).map(b => b.signalName),
+        ...(s.bearishSignals || []).map(b => b.signalName),
+      ];
+      return klineAiFilter.some(f => allSigs.some(sig => sig && sig.includes(f.split(" ")[0])));
+    });
+  }, [sortedKlineRadarList, klineAiFilter]);
 
   const filteredSystemStrongList = useMemo(() => {
     const list = [...systemStrongList];
@@ -5398,7 +5395,29 @@ const [watchText, setWatchText] = useState(() => {
                   </>
                 )}
 
-                {rightView === "institution" && stock && (
+                {rightView === "institution" && stock && (() => {
+                  const rows = institutionalFlow.rows;
+                  const hist = institutionalFlow.history || [];
+
+                  // ── 今日直條圖（SVG）─────────────────────────────────────
+                  const BAR_W = 54; const BAR_GAP = 24; const CHART_H = 120; const CHART_TOP = 12; const CHART_BOT = 24;
+                  const netVals = rows.map(r => r.net);
+                  const maxAbs = Math.max(Math.abs(Math.min(...netVals)), Math.abs(Math.max(...netVals)), 100);
+                  const zeroY = CHART_TOP + (CHART_H - CHART_TOP - CHART_BOT) / 2;
+                  const scale = (CHART_H - CHART_TOP - CHART_BOT) / 2 / maxAbs;
+                  const SVG_W = rows.length * (BAR_W + BAR_GAP) + BAR_GAP;
+
+                  // ── 近10日趨勢（SVG）─────────────────────────────────────
+                  const HIST_H = 160; const HIST_TOP = 12; const HIST_BOT = 24; const BAR_HW = 18;
+                  const histTotals = hist.map(d => d["合計"] || 0);
+                  const histMax = Math.max(Math.abs(Math.min(...histTotals)), Math.abs(Math.max(...histTotals)), 100);
+                  const histZeroY = HIST_TOP + (HIST_H - HIST_TOP - HIST_BOT) / 2;
+                  const histScale = (HIST_H - HIST_TOP - HIST_BOT) / 2 / histMax;
+                  const HIST_W = hist.length * (BAR_HW * 2 + 8) + 12;
+                  const histX = (i) => 12 + i * (BAR_HW * 2 + 8) + BAR_HW;
+                  const histY = (v) => histZeroY - v * histScale;
+
+                  return (
                   <>
                     {/* 總計摘要 */}
                     <div className={`institution-summary ${institutionalFlow.totalNet >= 0 ? "up" : "down"}`}>
@@ -5406,50 +5425,41 @@ const [watchText, setWatchText] = useState(() => {
                       <p className="muted">籌碼判斷：{institutionalFlow.bias}</p>
                     </div>
 
-                    {/* 今日三大法人買賣超 — 直條圖 */}
+                    {/* 今日買賣超直條圖（SVG） */}
                     <div className="inst-chart-card">
                       <div className="inst-chart-title">今日買賣超（張）</div>
-                      <ResponsiveContainer width="100%" height={130}>
-                        <ComposedChart data={institutionalFlow.rows} margin={{top:8,right:8,bottom:0,left:0}}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="rgba(14,165,233,.08)" vertical={false} />
-                          <XAxis dataKey="name" tick={{fill:"#8fafc8",fontSize:11}} axisLine={false} tickLine={false} />
-                          <YAxis tick={{fill:"#8fafc8",fontSize:10}} axisLine={false} tickLine={false} width={46}
-                            tickFormatter={v => v >= 1000 ? `${(v/1000).toFixed(1)}k` : v <= -1000 ? `-${(Math.abs(v)/1000).toFixed(1)}k` : v} />
-                          <Tooltip
-                            contentStyle={{background:"#0b1929",border:"1px solid rgba(14,165,233,.25)",borderRadius:8,fontSize:12}}
-                            labelStyle={{color:"#f1f5f9",fontWeight:700}}
-                            formatter={(v, name) => [`${v >= 0 ? "+" : ""}${v.toLocaleString()} 張`, name]}
-                          />
-                          <ReferenceLine y={0} stroke="rgba(14,165,233,.25)" />
-                          <Bar dataKey="net" name="買賣超" radius={[4,4,0,0]}>
-                            {institutionalFlow.rows.map((r) => (
-                              <Cell key={r.name} fill={r.net >= 0 ? "#22c55e" : "#fb7185"} />
-                            ))}
-                          </Bar>
-                        </ComposedChart>
-                      </ResponsiveContainer>
+                      <svg width="100%" viewBox={`0 0 ${SVG_W} ${CHART_H}`} style={{overflow:"visible"}}>
+                        {/* 零軸線 */}
+                        <line x1="0" y1={zeroY} x2={SVG_W} y2={zeroY} stroke="rgba(14,165,233,.25)" strokeWidth="1" strokeDasharray="4,3" />
+                        {rows.map((r, i) => {
+                          const x = BAR_GAP + i * (BAR_W + BAR_GAP);
+                          const barH = Math.abs(r.net) * scale;
+                          const y = r.net >= 0 ? zeroY - barH : zeroY;
+                          const fill = r.net >= 0 ? "#22c55e" : "#fb7185";
+                          const label = r.net >= 0 ? `+${(r.net/1000).toFixed(1)}k` : `${(r.net/1000).toFixed(1)}k`;
+                          return (
+                            <g key={r.name}>
+                              <rect x={x} y={y} width={BAR_W} height={Math.max(barH, 2)} fill={fill} opacity={0.85} rx={3} />
+                              <text x={x + BAR_W/2} y={r.net >= 0 ? y - 4 : y + barH + 12} textAnchor="middle" fontSize={10} fill={fill} fontWeight="700">{label}</text>
+                              <text x={x + BAR_W/2} y={CHART_H - 4} textAnchor="middle" fontSize={11} fill="#8fafc8">{r.name}</text>
+                            </g>
+                          );
+                        })}
+                      </svg>
                     </div>
 
                     {/* 三大法人明細 */}
-                    {institutionalFlow.rows.map((row) => (
+                    {rows.map((row) => (
                       <div className="inst-row-card" key={row.name}>
                         <div className="inst-row-name">{row.name}</div>
                         <div className="inst-row-nums">
                           <div><span>買進</span><b>{row.buy.toLocaleString()}</b></div>
                           <div><span>賣出</span><b>{row.sell.toLocaleString()}</b></div>
-                          <div>
-                            <span>買賣超</span>
-                            <b className={row.net >= 0 ? "up" : "down"}>
-                              {row.net >= 0 ? "+" : ""}{row.net.toLocaleString()}
-                            </b>
-                          </div>
+                          <div><span>買賣超</span><b className={row.net >= 0 ? "up" : "down"}>{row.net >= 0 ? "+" : ""}{row.net.toLocaleString()}</b></div>
                         </div>
-                        {/* 買賣超比例條 */}
                         <div className="inst-bar-wrap">
-                          <div className="inst-bar-buy"
-                            style={{width:`${Math.round(row.buy/(row.buy+row.sell)*100)}%`}} />
-                          <div className="inst-bar-sell"
-                            style={{width:`${Math.round(row.sell/(row.buy+row.sell)*100)}%`}} />
+                          <div className="inst-bar-buy" style={{width:`${Math.round(row.buy/(row.buy+row.sell)*100)}%`}} />
+                          <div className="inst-bar-sell" style={{width:`${Math.round(row.sell/(row.buy+row.sell)*100)}%`}} />
                         </div>
                         <div className="inst-bar-label">
                           <span className="up">買 {Math.round(row.buy/(row.buy+row.sell)*100)}%</span>
@@ -5458,40 +5468,59 @@ const [watchText, setWatchText] = useState(() => {
                       </div>
                     ))}
 
-                    {/* 近 10 日買賣超趨勢 — 柱狀 + 折線 */}
-                    <div className="inst-chart-card">
-                      <div className="inst-chart-title">近 10 日買賣超趨勢（張）</div>
-                      <ResponsiveContainer width="100%" height={180}>
-                        <ComposedChart data={institutionalFlow.history} margin={{top:8,right:8,bottom:0,left:0}}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="rgba(14,165,233,.08)" vertical={false} />
-                          <XAxis dataKey="date" tick={{fill:"#8fafc8",fontSize:10}} axisLine={false} tickLine={false} />
-                          <YAxis tick={{fill:"#8fafc8",fontSize:10}} axisLine={false} tickLine={false} width={46}
-                            tickFormatter={v => v >= 1000 ? `${(v/1000).toFixed(1)}k` : v <= -1000 ? `-${(Math.abs(v)/1000).toFixed(1)}k` : v} />
-                          <Tooltip
-                            contentStyle={{background:"#0b1929",border:"1px solid rgba(14,165,233,.25)",borderRadius:8,fontSize:12}}
-                            formatter={(v, name) => [`${v >= 0 ? "+" : ""}${v.toLocaleString()} 張`, name]}
+                    {/* 近10日趨勢折線+柱（SVG） */}
+                    {hist.length > 0 && (
+                      <div className="inst-chart-card">
+                        <div className="inst-chart-title">近 10 日合計買賣超趨勢（張）</div>
+                        <svg width="100%" viewBox={`0 0 ${HIST_W} ${HIST_H}`} style={{overflow:"visible"}}>
+                          {/* 網格線 */}
+                          {[-histMax*0.5, 0, histMax*0.5].map((v, i) => (
+                            <g key={i}>
+                              <line x1="8" y1={histY(v)} x2={HIST_W-4} y2={histY(v)} stroke="rgba(14,165,233,.08)" strokeWidth="1" />
+                              <text x="6" y={histY(v)+4} textAnchor="end" fontSize={9} fill="#526880">
+                                {v === 0 ? "0" : `${(v/1000).toFixed(0)}k`}
+                              </text>
+                            </g>
+                          ))}
+                          <line x1="8" y1={histZeroY} x2={HIST_W-4} y2={histZeroY} stroke="rgba(14,165,233,.25)" strokeWidth="1" strokeDasharray="4,3" />
+                          {/* 柱狀 */}
+                          {hist.map((d, i) => {
+                            const x = histX(i);
+                            const tot = d["合計"] || 0;
+                            const bh = Math.abs(tot) * histScale;
+                            const by = tot >= 0 ? histY(tot) : histZeroY;
+                            return (
+                              <g key={d.date}>
+                                <rect x={x - BAR_HW + 2} y={by} width={BAR_HW*2-4} height={Math.max(bh, 2)}
+                                  fill={tot >= 0 ? "rgba(56,189,248,.55)" : "rgba(251,113,133,.55)"} rx={2} />
+                                <text x={x} y={HIST_H - 4} textAnchor="middle" fontSize={9} fill="#526880">{d.date}</text>
+                              </g>
+                            );
+                          })}
+                          {/* 折線 */}
+                          <polyline
+                            points={hist.map((d, i) => `${histX(i)},${histY(d["合計"] || 0)}`).join(" ")}
+                            fill="none" stroke="#38bdf8" strokeWidth="2" strokeLinejoin="round"
                           />
-                          <ReferenceLine y={0} stroke="rgba(14,165,233,.25)" />
-                          <Bar dataKey="外資" stackId="a" fill="rgba(56,189,248,.70)" radius={[0,0,0,0]} />
-                          <Bar dataKey="投信" stackId="a" fill="rgba(34,197,94,.65)" radius={[0,0,0,0]} />
-                          <Bar dataKey="自營商" stackId="a" fill="rgba(251,191,36,.60)" radius={[2,2,0,0]} />
-                          <Line type="monotone" dataKey="合計" stroke="#f1f5f9" strokeWidth={2}
-                            dot={{fill:"#f1f5f9",r:3}} activeDot={{r:5}} />
-                        </ComposedChart>
-                      </ResponsiveContainer>
-                      <div className="inst-legend">
-                        <span style={{color:"rgba(56,189,248,.9)"}}>■ 外資</span>
-                        <span style={{color:"rgba(34,197,94,.9)"}}>■ 投信</span>
-                        <span style={{color:"rgba(251,191,36,.9)"}}>■ 自營商</span>
-                        <span style={{color:"#f1f5f9"}}>— 合計</span>
+                          {hist.map((d, i) => (
+                            <circle key={i} cx={histX(i)} cy={histY(d["合計"] || 0)} r={3}
+                              fill={(d["合計"]||0) >= 0 ? "#22c55e" : "#fb7185"} stroke="#0b1929" strokeWidth="1.5" />
+                          ))}
+                        </svg>
+                        <div className="inst-legend">
+                          <span style={{color:"rgba(56,189,248,.9)"}}>■ 買超（藍）</span>
+                          <span style={{color:"rgba(251,113,133,.9)"}}>■ 賣超（紅）</span>
+                          <span style={{color:"#38bdf8"}}>— 合計折線</span>
+                        </div>
                       </div>
-                    </div>
+                    )}
 
                     <div className="signal-card" style={{fontSize:12,color:"#7090a8"}}>
                       外資連買 + 投信同步買超：偏多。三大法人同步買超：籌碼偏強。股價上漲但法人賣超：追價需保守。
                     </div>
                   </>
-                )}
+                  );
+                })()}
 
                 {!stock && <p className="empty">尚無分析資料。</p>}
               </div>
