@@ -4689,7 +4689,12 @@ const [watchText, setWatchText] = useState(() => {
           height: 1px;
           background: rgba(56,189,248,.10);
         }
-        .kline-radar-hero { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 12px; margin: 16px 0; }
+        .kline-radar-hero {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr));
+          gap: 12px;
+          margin: 16px 0;
+        }
         .kline-radar-hero > div { border: 1px solid rgba(14,165,233,.12); background: rgba(6,14,26,.65); border-radius: 18px; padding: 16px; }
         .kline-radar-hero span { display: block; color: #cddae2; font-size: 12px; margin-bottom: 8px; }
         .kline-radar-hero b { display: block; color: #f8fafc; font-size: 30px; line-height: 1; }
@@ -4701,7 +4706,12 @@ const [watchText, setWatchText] = useState(() => {
         .tag-list.compact.bearish span { border-color: rgba(255,59,92,.18); background: rgba(255,59,92,.08); color: #fecdd3; }
         .tag-list.compact.bullish span { border-color: rgba(14,165,233,.20); background: rgba(56,189,248,.08); color: #bae6fd; }
         .kline-radar-table tbody tr:hover { background: rgba(34,211,238,.06); cursor: pointer; }
-        .auto-criteria-panel { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 12px 0 16px; }
+        .auto-criteria-panel {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+          gap: 12px;
+          margin: 12px 0 16px;
+        }
         .auto-criteria-panel > div { border: 1px solid rgba(14,165,233,.12); background: rgba(6,14,26,.42); border-radius: 16px; padding: 13px 15px; }
         .auto-criteria-panel b { display: block; color: #f8fafc; margin-bottom: 6px; }
         .auto-criteria-panel span { color: #cddae2; line-height: 1.6; font-size: 13px; }
@@ -4749,11 +4759,16 @@ const [watchText, setWatchText] = useState(() => {
         .mini-stat span { color: #a0b8cc; font-size: 10px; letter-spacing: .04em; }
         .mini-stat b { display: block; font-size: 20px; margin-top: 5px; }
         @media (max-width: 1280px) {
-          .top-bar { grid-template-columns: 1fr; min-height: auto; }
+          .top-bar { grid-template-columns: 1fr; min-height: auto; gap: 8px; }
           .top-title { order: -1; }
           .top-title p { white-space: normal; }
-          .top-stats { justify-content: center; }
+          .top-stats { justify-content: center; flex-wrap: wrap; }
           .top-back-btn { width: 100%; }
+        }
+        @media (max-width: 600px) {
+          .top-stats { gap: 6px; }
+          .mini-stat { min-width: 70px; padding: 6px 8px; }
+          .mini-stat b { font-size: 16px; }
         }
         .card { background: rgba(12,28,50,.88); border: 1px solid rgba(14,165,233,.16); border-radius: 14px; box-shadow: 0 14px 36px rgba(0,0,0,.28); padding: 12px; }
         .favorite-action { background: linear-gradient(135deg, #0ea5e9, #0284c7); color: #031220; }
@@ -4861,7 +4876,7 @@ const [watchText, setWatchText] = useState(() => {
           grid-row: 1 / span 2;
           position: sticky;
           top: 10px;
-          max-height: calc(100vh - 80px);
+          max-height: clamp(500px, calc(100vh - 80px), 900px);
           overflow-y: auto;
           scrollbar-width: thin;
           background: #0b1929;
@@ -4900,7 +4915,7 @@ const [watchText, setWatchText] = useState(() => {
         .view-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 12px; }
         .view-tabs button { background: rgba(14,165,233,.06); color: #b8ccd8; border: 1px solid rgba(14,165,233,.12); padding: 8px 6px; font-size: 12px; border-radius: 8px; font-weight: 600; }
         .view-tabs button.active { background: rgba(14,165,233,.18); color: #38bdf8; border-color: rgba(14,165,233,.45); font-weight: 700; }
-        .report-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; border-bottom: 1px solid rgba(56,189,248,.10); padding-bottom: 10px; }
+        .report-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; border-bottom: 1px solid rgba(56,189,248,.10); padding-bottom: 10px; overflow-x: auto; -webkit-overflow-scrolling: touch; }
         .report-tabs button { background: #0b1929; color: #dde3ea; border: 1px solid rgba(148,163,184,.22); }
         .report-tabs button.active { background: rgba(56,189,248,.22); color: #38bdf8; border-color: rgba(56,189,248,.55); }
         .terminal-home-clean { margin-bottom: 16px; }
@@ -4949,7 +4964,7 @@ const [watchText, setWatchText] = useState(() => {
         .strip-head { display: flex; justify-content: space-between; align-items: end; gap: 12px; margin-bottom: 14px; }
         .strip-head h3 { margin: 0; font-size: 18px; }
         .strip-head span { color: #b8ccd8; font-size: 12px; }
-        .sector-strip-grid { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 12px; }
+        .sector-strip-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 200px), 1fr)); gap: 12px; }
         .sector-tile { text-align: left; border: 1px solid rgba(148,163,184,.10); border-radius: 18px; background: rgba(6,14,26,.54); padding: 14px; transition: all .18s ease; }
         .sector-tile:hover { transform: translateY(-2px); border-color: rgba(94,234,212,.32); box-shadow: 0 16px 36px rgba(0,0,0,.22), 0 0 22px rgba(56,189,248,.08); }
         .sector-tile-top { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
@@ -4970,26 +4985,45 @@ const [watchText, setWatchText] = useState(() => {
           .market-core-meta span::after { display: none; }
           .sector-strip-grid { grid-template-columns: 1fr; }
         }
-        .report-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+        .report-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
+          gap: 12px;
+        }
         .report-card, .macro-card { background: #0e1e32; border: 1px solid rgba(14,165,233,.16); border-radius: 16px; padding: 14px; }
         .report-card h2, .macro-card h3 { margin-bottom: 12px; }
         .market-direction-badge { display: inline-flex; padding: 8px 12px; border-radius: 999px; font-weight: 900; margin-bottom: 12px; border: 1px solid rgba(148,163,184,.22); }
         .market-direction-badge.up { background: rgba(239,68,68,.14); color: #fca5a5; border-color: rgba(239,68,68,.35); }
         .market-direction-badge.down { background: rgba(34,197,94,.14); color: #86efac; border-color: rgba(34,197,94,.35); }
-        .market-stats-grid, .macro-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+        .market-stats-grid, .macro-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(min(100%, 140px), 1fr));
+          gap: 10px;
+        }
         .market-stats-grid div, .industry-item, .risk-item, .strategy-item { background: rgba(10,24,44,.85); border: 1px solid rgba(14,165,233,.14); border-radius: 14px; padding: 12px; }
         /* ── 今日大盤方向 排版 ─────────────────────────────────── */
         .market-layout { display: flex; flex-direction: column; gap: 10px; }
 
         /* 第一列：三格頂部色條卡片 */
         /* 首頁加權指數主角排版 */
-        .mkt-row1-hero { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .mkt-row1-hero {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+          gap: 10px;
+        }
         .mkt-hero-card { background: #0e1e32; border: 1px solid rgba(14,165,233,.20); border-radius: 14px; padding: 20px 24px; border-left: 4px solid #0ea5e9; display: flex; flex-direction: column; justify-content: center; }
         .mkt-hero-label { font-size: 12px; color: #b4cfe0; letter-spacing: .06em; margin-bottom: 8px; }
         .mkt-hero-price { font-size: 44px; font-weight: 800; color: #f1f5f9; letter-spacing: -.02em; line-height: 1; margin-bottom: 8px; }
         .mkt-hero-change { font-size: 20px; font-weight: 700; margin-bottom: 6px; }
         .mkt-hero-meta { font-size: 11px; color: #8ab4cc; }
-        .mkt-side-cards { display: flex; flex-direction: column; gap: 10px; }
+        .mkt-side-cards {
+          display: grid;
+          grid-template-columns: 1fr;
+          gap: 10px;
+        }
+        @media (max-width: 600px) {
+          .mkt-side-cards { grid-template-columns: 1fr 1fr; }
+        }
         .mkt-row1 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
         .mkt-card { background: #0e1e32; border: 1px solid rgba(14,165,233,.12); border-radius: 12px; padding: 14px 16px; border-top: 3px solid transparent; }
         .mkt-card-blue  { border-top-color: #0ea5e9; }
@@ -5000,12 +5034,20 @@ const [watchText, setWatchText] = useState(() => {
         .mkt-card-sub   { font-size: 12px; color: #b8ccd8; }
 
         /* 第二列：風險提醒橫排 */
-        .mkt-risk-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+        .mkt-risk-row {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
+          gap: 8px;
+        }
         .mkt-risk-item { background: rgba(251,191,36,.06); border: 1px solid rgba(251,191,36,.14); border-left: 2px solid #f59e0b; border-radius: 8px; padding: 9px 12px; font-size: 12px; color: #fbbf24; line-height: 1.5; display: flex; gap: 7px; align-items: flex-start; }
         .mkt-risk-dot { width: 5px; height: 5px; border-radius: 50%; background: #f59e0b; flex-shrink: 0; margin-top: 5px; }
 
         /* 第三列：左右各半 */
-        .mkt-row3 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .mkt-row3 {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+          gap: 10px;
+        }
         .mkt-half-card { background: #0e1e32; border: 1px solid rgba(14,165,233,.12); border-radius: 12px; padding: 14px 16px; }
         .mkt-half-title { font-size: 11px; font-weight: 700; color: #b8ccd8; letter-spacing: .05em; margin-bottom: 10px; display: flex; align-items: center; gap: 6px; }
         .mkt-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
@@ -5034,7 +5076,16 @@ const [watchText, setWatchText] = useState(() => {
         }
 
         /* ── 掃描頁共用版面（K線雷達 + 隔日沖） ─────────────────── */
-        .scan-layout { display: grid; grid-template-columns: 210px 1fr; gap: 12px; align-items: start; }
+        .scan-layout {
+          display: grid;
+          grid-template-columns: clamp(180px, 15vw, 220px) minmax(0, 1fr);
+          gap: 12px;
+          align-items: start;
+        }
+        @media (max-width: 800px) {
+          .scan-layout { grid-template-columns: 1fr; }
+          .scan-sidebar { position: static; }
+        }
 
         /* 左側篩選面板 */
         .scan-sidebar { background: #0b1929; border: 1px solid rgba(14,165,233,.14); border-radius: 14px; padding: 16px; position: sticky; top: 10px; display: flex; flex-direction: column; gap: 10px; }
@@ -5043,7 +5094,7 @@ const [watchText, setWatchText] = useState(() => {
         .scan-sidebar-section { font-size: 10px; font-weight: 700; color: #a0b8cc; letter-spacing: .06em; text-transform: uppercase; padding-top: 4px; border-top: .5px solid rgba(14,165,233,.10); }
 
         /* 統計格 */
-        .scan-stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+        .scan-stat-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; }
         .scan-stat { background: rgba(14,165,233,.07); border: 1px solid rgba(14,165,233,.14); border-radius: 8px; padding: 8px; }
         .scan-stat-label { font-size: 10px; color: #b8ccd8; letter-spacing: .03em; margin-bottom: 3px; }
         .scan-stat-val { font-size: 20px; font-weight: 700; color: #f1f5f9; line-height: 1; margin-bottom: 2px; }
@@ -5099,7 +5150,12 @@ const [watchText, setWatchText] = useState(() => {
         /* 右側結果 */
         .scan-result { background: #0b1929; border: 1px solid rgba(14,165,233,.14); border-radius: 14px; overflow: hidden; min-width: 0; }
         .scan-empty { padding: 60px 24px; text-align: center; color: #a0b8cc; font-size: 13px; }
-        .scan-table-wrap { overflow-x: auto; overflow-y: auto; max-height: calc(100vh - 180px); }
+        .scan-table-wrap {
+          overflow-x: auto;
+          overflow-y: auto;
+          max-height: clamp(300px, calc(100vh - 200px), 80vh);
+          -webkit-overflow-scrolling: touch;
+        }
 
         /* 表格 */
         .scan-table { width: 100%; border-collapse: collapse; font-size: 14px; }
@@ -5112,7 +5168,12 @@ const [watchText, setWatchText] = useState(() => {
         .scan-row:nth-child(even) td { background: rgba(14,165,233,.03); }
         .scan-row:nth-child(even):hover td { background: rgba(14,165,233,.08); }
         .scan-row:last-child td { border-bottom: none; }
-        .scan-table-wrap { overflow-x: auto; overflow-y: auto; max-height: calc(100vh - 180px); }
+        .scan-table-wrap {
+          overflow-x: auto;
+          overflow-y: auto;
+          max-height: clamp(300px, calc(100vh - 200px), 80vh);
+          -webkit-overflow-scrolling: touch;
+        }
 
         /* 表格內容元素 */
         .scan-rank { color: #a0b8cc; font-size: 11px; font-weight: 700; text-align: center; }
@@ -5150,7 +5211,7 @@ const [watchText, setWatchText] = useState(() => {
         .news-item-meta { display: flex; gap: 10px; font-size: 11px; color: #b8ccd8; }
         .news-item-snippet { font-size: 11px; color: #b8ccd8; margin: 2px 0 4px; line-height: 1.4; }
         .news-loading { font-size: 13px; color: #b8ccd8; padding: 12px 0; }
-        .news-tab-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; }
+        .news-tab-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 16px; }
         .news-tab-card { background: rgba(6,14,26,.78); border: 1px solid rgba(14,165,233,.12); border-radius: 14px; padding: 16px; }
         .news-tab-card-title { font-size: 15px; font-weight: 700; color: #e2e8f0; margin-bottom: 12px; }
         .news-tab-item { padding: 10px 0; border-bottom: 1px solid rgba(148,163,184,.08); }
@@ -5240,7 +5301,15 @@ const [watchText, setWatchText] = useState(() => {
         .score-main { background: linear-gradient(135deg, rgba(14,165,233,.18), rgba(3,105,161,.14)); border: 1px solid rgba(14,165,233,.25); border-radius: 10px; padding: 14px; text-align: center; margin-bottom: 10px; }
         .score-main b { display: block; font-size: 42px; line-height: 1; font-weight: 800; color: #38bdf8; }
         .score-main span { color: #7dd3fc; font-size: 13px; }
-        .metric-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 7px; min-width: 0; }
+        .metric-grid {
+          display: grid;
+          grid-template-columns: repeat(2, 1fr);
+          gap: 7px;
+          min-width: 0;
+        }
+        @media (max-width: 700px) {
+          .metric-grid { grid-template-columns: repeat(4, 1fr); }
+        }
         .metric-card { background: rgba(6,14,26,.70); border: 1px solid rgba(14,165,233,.12); border-radius: 8px; padding: 8px 10px; }
         .metric-card b { display: block; font-size: clamp(13px, 1.2vw, 16px); font-weight: 700; margin-bottom: 2px; color: #f1f5f9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .metric-card span { color: #a0b8cc; font-size: 10px; letter-spacing: .03em; }
@@ -5255,11 +5324,24 @@ const [watchText, setWatchText] = useState(() => {
         .signal-card { background: rgba(6,14,26,.70); border: 1px solid rgba(14,165,233,.10); border-radius: 8px; padding: 10px 12px; margin-top: 8px; }
         .signal-card b { display: block; font-size: 16px; margin-bottom: 6px; }
         .signal-card p { color: #cddae2; font-size: 13px; line-height: 1.55; margin: 0; }
-        .daytrade-grid { display: grid; grid-template-columns: 1.1fr .9fr; gap: 12px; align-items: start; }
+        .daytrade-grid {
+          display: grid;
+          grid-template-columns: minmax(0, 1.2fr) minmax(280px, .8fr);
+          gap: 12px;
+          align-items: start;
+        }
+        @media (max-width: 1000px) {
+          .daytrade-grid { grid-template-columns: 1fr; }
+        }
         .daytrade-score { background: linear-gradient(135deg, rgba(14,165,233,.18), rgba(34,197,94,.14)); border: 1px solid rgba(34,211,238,.28); border-radius: 18px; padding: 18px; text-align: center; }
         .daytrade-score b { display: block; font-size: 54px; line-height: 1; }
         .daytrade-score span { color: #bae6fd; font-weight: 900; }
-        .entry-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 12px; }
+        .entry-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(min(100%, 110px), 1fr));
+          gap: 10px;
+          margin-top: 12px;
+        }
         .entry-box { background: #0b1929; border: 1px solid rgba(14,165,233,.16); border-radius: 14px; padding: 12px; text-align: center; }
         .entry-box b { display: block; font-size: 20px; margin-top: 4px; }
         .radar-alert { border-radius: 16px; padding: 14px; margin-bottom: 12px; border: 1px solid rgba(250,204,21,.35); background: rgba(113,63,18,.2); }
@@ -5269,8 +5351,8 @@ const [watchText, setWatchText] = useState(() => {
         .instant-signal.buy { border-color: rgba(34,197,94,.55); background: rgba(20,83,45,.28); }
         .live-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #22c55e; margin-right: 6px; box-shadow: 0 0 12px #22c55e; }
         .watch-table-card { margin-top: 12px; }
-        .table-wrap { overflow-x: auto; overflow-y: auto; max-height: calc(100vh - 200px); border: 1px solid rgba(14,165,233,.14); border-radius: 12px; }
-        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        .table-wrap { overflow-x: auto; overflow-y: auto; max-height: calc(100vh - 200px); border: 1px solid rgba(14,165,233,.14); border-radius: 12px; -webkit-overflow-scrolling: touch; }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; table-layout: auto; }
         thead { position: sticky; top: 0; z-index: 10; }
         th, td { padding: 11px 10px; text-align: left; white-space: nowrap; }
         td { color: #f8fafc; font-weight: 500; border-bottom: 1px solid rgba(14,165,233,.14); }
@@ -5355,6 +5437,22 @@ const [watchText, setWatchText] = useState(() => {
         button:hover {filter: brightness(1.12);transform: translateY(-1px);}
         button.ghost:hover {background: #152236;border-color: #2d5a80;}
         button.danger:hover {filter: brightness(1.08);}
+      
+        /* ── 全站溢出防護 ─────────────────────────────────────────────── */
+        .content, .card, .scan-layout, .scan-sidebar, .scan-result,
+        .report-card, .macro-card, .analysis-layout, .right-panel-card {
+          min-width: 0;
+          overflow-wrap: break-word;
+          word-break: break-word;
+        }
+        /* 確保所有圖表區塊不超出容器 */
+        .chart-drawing-wrap, .trading-chart { max-width: 100%; }
+        /* 按鈕不換行但容器可以 */
+        .btn-row { flex-wrap: wrap; }
+        .report-tabs button, .view-tabs button, .drawing-mode-tabs button {
+          white-space: nowrap;
+          flex-shrink: 0;
+        }
       `}</style>
 
       <div className="app-frame">
@@ -6393,7 +6491,6 @@ const [watchText, setWatchText] = useState(() => {
                           <option value="1mo">月K</option>
                         </select>
                       </div>
-                      <DrawingTools targetStock={intradayStock} />
                       <TradingChart
                         stock={intradayStock}
                         showMA5={showMA5}
@@ -6407,6 +6504,7 @@ const [watchText, setWatchText] = useState(() => {
                         drawingTool={freeDrawingTool}
                         onCreateDrawing={(drawing) => addFreeDrawing(intradayStock, drawing)}
                       />
+                      <DrawingTools targetStock={intradayStock} />
                     </>
                   ) : (
                     <p className="empty">請先輸入股票代碼並查詢分K，或掃描當沖排行榜。</p>
