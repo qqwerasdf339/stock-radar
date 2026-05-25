@@ -317,7 +317,7 @@ app.get("/api/news/:symbol", async (req, res) => {
 // ─── Fugle 即時報價（需設定 FUGLE_API_KEY 環境變數） ───────────────────────────
 // 申請免費 API Key：https://developer.fugle.tw
 // 免費方案：每秒 5 次，含上市/上櫃即時報價與分K
-const FUGLE_API_KEY = MTZhYjYzMjAtYmI0My00ZWJmLWE4MjEtZmNmMGQyZjcwMzcwIGQ2OTA4YjJhLWZmMGEtNGU3OC1hM2I1LTc0MmJlMmE3NTA5MA== || "";
+const FUGLE_API_KEY = process.env.FUGLE_API_KEY || "MTZhYjYzMjAtYmI0My00ZWJmLWE4MjEtZmNmMGQyZjcwMzcwIGQ2OTA4YjJhLWZmMGEtNGU3OC1hM2I1LTc0MmJlMmE3NTA5MA==";
 const fugleQuoteCache = {};  // { symbol: { data, ts } }
 const FUGLE_QUOTE_TTL = 10 * 1000;  // 10秒快取（開盤中用）
 
@@ -369,13 +369,22 @@ app.get("/api/fugle/quote/:symbol", async (req, res) => {
 });
 
 // Fugle 即時分K（開盤中補充 Yahoo 的 15 分鐘延遲）
+const fugleCandleCache = {};
+const FUGLE_CANDLE_TTL = 15 * 1000; // 15 秒快取
+
 app.get("/api/fugle/candles/:symbol", async (req, res) => {
   if (!FUGLE_API_KEY) {
     return res.status(503).json({ error: "FUGLE_API_KEY 未設定" });
   }
 
   const symbol = String(req.params.symbol || "").replace(/\.(TW|TWO)$/i, "");
-  const timeframe = req.query.timeframe || "1";  // 1, 5, 10, 30, 60 分鐘
+  const timeframe = req.query.timeframe || "1";
+  const cacheKey = `${symbol}-${timeframe}`;
+
+  const cached = fugleCandleCache[cacheKey];
+  if (cached && Date.now() - cached.ts < FUGLE_CANDLE_TTL) {
+    return res.json(cached.data);
+  }
 
   try {
     const url = `https://api.fugle.tw/marketdata/v1.0/stock/intraday/candles/${symbol}`;
@@ -385,27 +394,131 @@ app.get("/api/fugle/candles/:symbol", async (req, res) => {
       timeout: 8000,
     });
 
-    // 轉換成前端 fetchYahooHistory 相容的格式
-    const candles = (r.data?.candles || []).map(c => ({
-      time: Math.floor(new Date(c.date).getTime() / 1000),  // unix timestamp
-      open:  c.open,
-      high:  c.high,
-      low:   c.low,
-      close: c.close,
-      volume: c.volume || 0,
-    })).filter(c => c.open && c.close);
+    // Fugle 回傳格式轉換 → 與 Yahoo 相容
+    const rawCandles = r.data?.candles || r.data?.data || [];
+    const candles = rawCandles.map(c => {
+      // Fugle 時間格式可能是 ISO string 或 unix
+      const t = c.date || c.time || c.datetime;
+      const ts = typeof t === "number" ? t : Math.floor(new Date(t).getTime() / 1000);
+      return {
+        time: ts,
+        open:   Number(c.open  || c.openPrice  || 0),
+        high:   Number(c.high  || c.highPrice  || 0),
+        low:    Number(c.low   || c.lowPrice   || 0),
+        close:  Number(c.close || c.closePrice || 0),
+        volume: Number(c.volume || c.tradeVolume || 0),
+      };
+    }).filter(c => c.open > 0 && c.close > 0);
 
-    res.json({
+    const result = {
       symbol,
       timeframe,
       candles,
+      count: candles.length,
+      latestTime: candles.at(-1)?.time,
       updatedAt: Date.now(),
       source: "fugle",
-    });
+    };
+
+    fugleCandleCache[cacheKey] = { data: result, ts: Date.now() };
+    res.json(result);
   } catch (err) {
-    console.warn("fugle candles error:", symbol, err.message);
+    console.warn("fugle candles error:", symbol, err.response?.status, err.message);
+    // 404 = 今日無資料（休市/非交易時間），不要報錯
+    if (err.response?.status === 404) {
+      return res.json({ symbol, candles: [], count: 0, source: "fugle", note: "今日無交易資料" });
+    }
     res.status(err.response?.status || 500).json({ error: "Fugle 分K暫時無法取得", symbol });
   }
+});
+
+// Fugle + Yahoo 合併 K 線：Yahoo 提供歷史，Fugle 補上今日即時分K
+app.get("/api/combined/chart/:symbol", async (req, res) => {
+  const symbol = String(req.params.symbol || "").replace(/\.(TW|TWO)$/i, "");
+  const interval = req.query.interval || "5m";
+  const range    = req.query.range    || "5d";
+
+  // timeframe 對照（Yahoo interval → Fugle timeframe）
+  const TF_MAP = { "1m": "1", "2m": "2", "5m": "5", "10m": "10", "15m": "15", "30m": "30", "60m": "60", "1h": "60" };
+  const fugleTimeframe = TF_MAP[interval] || "5";
+
+  // 同時抓 Yahoo（歷史）+ Fugle（今日即時）
+  const [yahooResult, fugleResult] = await Promise.allSettled([
+    // Yahoo 歷史
+    (async () => {
+      const tw = `${symbol}.TW`;
+      const two = `${symbol}.TWO`;
+      for (const sym of [tw, two, symbol]) {
+        try {
+          const r = await axios.get(`https://query1.finance.yahoo.com/v8/finance/chart/${sym}`, {
+            params: { range, interval },
+            headers: { "User-Agent": "Mozilla/5.0" },
+            timeout: 10000,
+          });
+          if (r.data?.chart?.result?.[0]) return { data: r.data, symbol: sym };
+        } catch {}
+      }
+      throw new Error("Yahoo chart failed");
+    })(),
+
+    // Fugle 今日即時分K
+    FUGLE_API_KEY ? axios.get(
+      `https://api.fugle.tw/marketdata/v1.0/stock/intraday/candles/${symbol}`,
+      { headers: { "X-API-KEY": FUGLE_API_KEY }, params: { timeframe: fugleTimeframe }, timeout: 8000 }
+    ).then(r => r.data).catch(() => null) : Promise.resolve(null),
+  ]);
+
+  // Yahoo 失敗就直接報錯
+  if (yahooResult.status === "rejected") {
+    return res.status(500).json({ error: "K線資料取得失敗" });
+  }
+
+  const yahooData = yahooResult.value.data;
+  const fugleData = fugleResult.status === "fulfilled" ? fugleResult.value : null;
+
+  // 如果 Fugle 有今日資料，把最新幾根 K 棒替換 Yahoo 的延遲資料
+  if (fugleData?.candles?.length) {
+    const result = yahooData.chart.result[0];
+    const existingTimes = new Set(result.timestamp || []);
+
+    const newTimestamps = [];
+    const newOpen = [], newHigh = [], newLow = [], newClose = [], newVolume = [];
+
+    (fugleData.candles || []).forEach(c => {
+      const t = typeof c.date === "number" ? c.date : Math.floor(new Date(c.date || c.time).getTime() / 1000);
+      if (!existingTimes.has(t)) {  // 只加 Yahoo 沒有的時間點
+        newTimestamps.push(t);
+        newOpen.push(Number(c.open || c.openPrice));
+        newHigh.push(Number(c.high || c.highPrice));
+        newLow.push(Number(c.low  || c.lowPrice));
+        newClose.push(Number(c.close || c.closePrice));
+        newVolume.push(Number(c.volume || 0));
+      }
+    });
+
+    if (newTimestamps.length > 0) {
+      result.timestamp = [...(result.timestamp || []), ...newTimestamps];
+      const q = result.indicators.quote[0];
+      q.open   = [...(q.open   || []), ...newOpen];
+      q.high   = [...(q.high   || []), ...newHigh];
+      q.low    = [...(q.low    || []), ...newLow];
+      q.close  = [...(q.close  || []), ...newClose];
+      q.volume = [...(q.volume || []), ...newVolume];
+      // 依時間排序
+      const indices = result.timestamp.map((t, i) => i).sort((a, b) => result.timestamp[a] - result.timestamp[b]);
+      result.timestamp = indices.map(i => result.timestamp[i]);
+      q.open   = indices.map(i => q.open[i]);
+      q.high   = indices.map(i => q.high[i]);
+      q.low    = indices.map(i => q.low[i]);
+      q.close  = indices.map(i => q.close[i]);
+      q.volume = indices.map(i => q.volume[i]);
+      // 標記資料已被 Fugle 補充
+      result.meta.fuglePatched = true;
+      result.meta.fugleCandlesAdded = newTimestamps.length;
+    }
+  }
+
+  res.json(yahooData);
 });
 
 // 健康檢查：順便回報 Fugle 是否已設定

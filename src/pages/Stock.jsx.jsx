@@ -877,7 +877,35 @@ function buildYahooSymbolCandidates(input) {
   return [...new Set(list.filter(Boolean))];
 }
 
+// 分K 模式（1m/5m/30m）優先嘗試 combined API（Yahoo+Fugle 合併）
+// 日K 以上直接用 Yahoo（無需 Fugle，日K 已是收盤後即時）
 async function fetchYahooChartResult(symbol, range = "6mo", interval = "1d") {
+  const isIntraday = ["1m","2m","5m","10m","15m","30m","60m","1h"].includes(interval);
+  const isTW = isTaiwanStock(symbol.replace(/\.(TW|TWO)$/i,""));
+
+  // 台股分K：優先用 combined（Yahoo歷史 + Fugle今日即時）
+  if (isIntraday && isTW) {
+    const sym = symbol.replace(/\.(TW|TWO)$/i, "");
+    try {
+      const url = `${API_BASE}/api/combined/chart/${encodeURIComponent(sym)}?range=${range}&interval=${interval}&_=${Date.now()}`;
+      const res = await fetch(url);
+      if (res.ok) {
+        const json = await res.json();
+        const result = json?.chart?.result?.[0];
+        if (result) {
+          // 如果 Fugle 有補充資料，在 meta 加上提示
+          if (result.meta?.fuglePatched) {
+            result.meta._dataNote = `Fugle 補充 ${result.meta.fugleCandlesAdded} 根即時K棒`;
+          }
+          return { result, symbol };
+        }
+      }
+    } catch (e) {
+      console.warn("combined chart failed, fallback to Yahoo", e.message);
+    }
+  }
+
+  // fallback：直接用 Yahoo
   const url = `${API_BASE}/api/yahoo/chart/${encodeURIComponent(symbol)}?range=${range}&interval=${interval}&_=${Date.now()}`;
   const res = await fetch(url);
   if (!res.ok) return null;
@@ -5528,7 +5556,10 @@ const [watchText, setWatchText] = useState(() => {
                           ? `${getDisplayName(stock.symbol, stock.name)} ${stock.symbol}`
                           : "請搜尋股票"}
                       </h1>
-                      <p className="muted">互動 K 線、MA5 / MA20 / MA60、布林通道、成交量</p>
+                      <p className="muted">
+                        互動 K 線、MA5 / MA20 / MA60、布林通道、成交量
+                        {fugleEnabled && isTaiwanStock(stock?.symbol || "") && ["1m","5m","30m"].includes(klineType) ? " · Fugle 即時" : ""}
+                      </p>
                     </div>
 
                     {stock && (
@@ -6335,7 +6366,12 @@ const [watchText, setWatchText] = useState(() => {
                           <h1>
                             {getDisplayName(intradayStock.symbol, intradayStock.name)} {intradayStock.symbol}
                           </h1>
-                          <p className="muted">目前使用 {klineLabel(klineType)}，資料來源為 Yahoo Finance K線（已加速輪詢，但 Yahoo 台股可能仍有延遲）。</p>
+                          <p className="muted">
+                        目前使用 {klineLabel(klineType)}。
+                        {["1m","5m","30m"].includes(klineType) && isTaiwanStock(intradayStock?.symbol || query)
+                          ? " 台股分K已啟用 Fugle 即時補充（今日K棒自動更新）。"
+                          : " 資料來源：Yahoo Finance。"}
+                      </p>
                         </div>
                         <div className={intradayStock.changePct >= 0 ? "price up" : "price down"}>
                           {intradayStock.close?.toFixed?.(2) ?? "--"}
