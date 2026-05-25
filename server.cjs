@@ -314,6 +314,109 @@ app.get("/api/news/:symbol", async (req, res) => {
   }
 });
 
+// ─── Fugle 即時報價（需設定 FUGLE_API_KEY 環境變數） ───────────────────────────
+// 申請免費 API Key：https://developer.fugle.tw
+// 免費方案：每秒 5 次，含上市/上櫃即時報價與分K
+const FUGLE_API_KEY = MTZhYjYzMjAtYmI0My00ZWJmLWE4MjEtZmNmMGQyZjcwMzcwIGQ2OTA4YjJhLWZmMGEtNGU3OC1hM2I1LTc0MmJlMmE3NTA5MA== || "";
+const fugleQuoteCache = {};  // { symbol: { data, ts } }
+const FUGLE_QUOTE_TTL = 10 * 1000;  // 10秒快取（開盤中用）
+
+// Fugle 即時報價（snapshot）
+app.get("/api/fugle/quote/:symbol", async (req, res) => {
+  if (!FUGLE_API_KEY) {
+    return res.status(503).json({ error: "FUGLE_API_KEY 未設定，請至 developer.fugle.tw 申請免費金鑰並設定環境變數" });
+  }
+
+  const symbol = String(req.params.symbol || "").replace(/\.(TW|TWO)$/i, "");
+  const cached = fugleQuoteCache[symbol];
+  if (cached && Date.now() - cached.ts < FUGLE_QUOTE_TTL) {
+    return res.json(cached.data);
+  }
+
+  try {
+    const url = `https://api.fugle.tw/marketdata/v1.0/stock/intraday/quote/${symbol}`;
+    const r = await axios.get(url, {
+      headers: { "X-API-KEY": FUGLE_API_KEY },
+      timeout: 5000,
+    });
+    const d = r.data;
+    const result = {
+      symbol,
+      price: d.lastPrice || d.closePrice || null,
+      open:  d.openPrice  || null,
+      high:  d.highPrice  || null,
+      low:   d.lowPrice   || null,
+      close: d.closePrice || null,
+      change: d.change    || null,
+      changePercent: d.changePercent || null,
+      volume: d.total?.tradeVolume || null,
+      isOpen: d.isTradingDay && !d.isHalted,
+      updatedAt: Date.now(),
+      source: "fugle",
+    };
+    fugleQuoteCache[symbol] = { data: result, ts: Date.now() };
+    res.json(result);
+  } catch (err) {
+    // Fugle 失敗時不要報錯，讓前端 fallback 到 Yahoo
+    console.warn("fugle quote error:", symbol, err.response?.status, err.message);
+    res.status(err.response?.status || 500).json({
+      error: err.response?.status === 403 ? "API金鑰無效或已過期" :
+             err.response?.status === 429 ? "請求過於頻繁，請稍後再試" :
+             "Fugle 報價暫時無法取得",
+      symbol,
+    });
+  }
+});
+
+// Fugle 即時分K（開盤中補充 Yahoo 的 15 分鐘延遲）
+app.get("/api/fugle/candles/:symbol", async (req, res) => {
+  if (!FUGLE_API_KEY) {
+    return res.status(503).json({ error: "FUGLE_API_KEY 未設定" });
+  }
+
+  const symbol = String(req.params.symbol || "").replace(/\.(TW|TWO)$/i, "");
+  const timeframe = req.query.timeframe || "1";  // 1, 5, 10, 30, 60 分鐘
+
+  try {
+    const url = `https://api.fugle.tw/marketdata/v1.0/stock/intraday/candles/${symbol}`;
+    const r = await axios.get(url, {
+      headers: { "X-API-KEY": FUGLE_API_KEY },
+      params: { timeframe },
+      timeout: 8000,
+    });
+
+    // 轉換成前端 fetchYahooHistory 相容的格式
+    const candles = (r.data?.candles || []).map(c => ({
+      time: Math.floor(new Date(c.date).getTime() / 1000),  // unix timestamp
+      open:  c.open,
+      high:  c.high,
+      low:   c.low,
+      close: c.close,
+      volume: c.volume || 0,
+    })).filter(c => c.open && c.close);
+
+    res.json({
+      symbol,
+      timeframe,
+      candles,
+      updatedAt: Date.now(),
+      source: "fugle",
+    });
+  } catch (err) {
+    console.warn("fugle candles error:", symbol, err.message);
+    res.status(err.response?.status || 500).json({ error: "Fugle 分K暫時無法取得", symbol });
+  }
+});
+
+// 健康檢查：順便回報 Fugle 是否已設定
+app.get("/api/status", (req, res) => {
+  res.json({
+    status: "ok",
+    fugle: FUGLE_API_KEY ? "configured" : "not_configured",
+    message: FUGLE_API_KEY ? "Fugle API 已啟用，可取得即時報價" : "未設定 FUGLE_API_KEY，使用 Yahoo（延遲 15 分鐘）",
+  });
+});
+
 // ─── 健康檢查 ──────────────────────────────────────────────────────────────────
 app.get("/", (req, res) => {
   res.send("Stock Radar API is running 🚀");
@@ -321,6 +424,12 @@ app.get("/", (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
+  if (FUGLE_API_KEY) {
+    console.log("✅ Fugle API Key 已載入，即時報價已啟用");
+  } else {
+    console.log("⚠️  FUGLE_API_KEY 未設定，使用 Yahoo（延遲 15 分鐘）");
+    console.log("   申請免費 Key：https://developer.fugle.tw");
+  }
 
   // 啟動時預先暖機 TWSE 清單，讓第一個搜尋不用等
   axios.get(`http://localhost:${PORT}/api/twse/list`).catch(() => {});

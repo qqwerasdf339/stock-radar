@@ -11,6 +11,48 @@ import "../App.css";
 
 const API_BASE = "https://stock-radar-api-os48.onrender.com";
 
+// ── Fugle 即時補丁：用 Fugle 報價取代 Yahoo 的 15 分鐘延遲 ────────────────────
+// 台股代號判斷（4碼數字 = 台股）
+function isTaiwanStock(symbol) {
+  return /^\d{4,6}$/.test(String(symbol || "").replace(/\.(TW|TWO)$/i, ""));
+}
+
+// 台股開盤時間（周一到周五，09:00–13:30 台灣時間）
+function isTWSEOpen() {
+  const now = new Date();
+  const tw = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
+  const day = tw.getDay();
+  if (day === 0 || day === 6) return false;
+  const h = tw.getHours(), m = tw.getMinutes();
+  const mins = h * 60 + m;
+  return mins >= 540 && mins <= 810;  // 09:00–13:30
+}
+
+// 從 Fugle 取得即時報價，更新 stock state（只在台股開盤中才用）
+async function fetchFugleQuote(symbol) {
+  if (!isTaiwanStock(symbol) || !isTWSEOpen()) return null;
+  try {
+    const r = await fetch(`${API_BASE}/api/fugle/quote/${encodeURIComponent(symbol)}`);
+    if (!r.ok) return null;
+    const data = await r.json();
+    if (data.error || !data.price) return null;
+    return data;
+  } catch {
+    return null;
+  }
+}
+
+// 檢查後端是否已設定 Fugle Key
+async function checkFugleStatus() {
+  try {
+    const r = await fetch(`${API_BASE}/api/status`);
+    const d = await r.json();
+    return d.fugle === "configured";
+  } catch {
+    return false;
+  }
+}
+
 // ─── 市場股票池（用於強勢掃描、K線雷達、隔日沖選股）────────────────────────
 // 格式：{ symbol, name, industry }
 // 掃描時只取前 N 筆避免太慢，可依需求調整 slice 數量
@@ -2561,6 +2603,8 @@ const [watchText, setWatchText] = useState(() => {
   const [reportTab, setReportTab] = useState("market");
   const [selectedIndustry, setSelectedIndustry] = useState(null);
   const [industryPopup, setIndustryPopup] = useState(null); // { name, side, stocks, avgChange }
+  const [fugleEnabled, setFugleEnabled] = useState(false);   // 後端是否有設定 Fugle Key
+  const [fugleLivePrice, setFugleLivePrice] = useState(null); // 即時報價覆蓋
 
   useEffect(() => {
     // 每 9 分鐘 ping 後端，防止 Render 免費方案冷啟動
@@ -2570,6 +2614,37 @@ const [watchText, setWatchText] = useState(() => {
 
     return () => clearInterval(keepAliveInterval);
   }, []);
+
+  // 初始化：檢查 Fugle 是否可用
+  useEffect(() => {
+    checkFugleStatus().then(enabled => {
+      setFugleEnabled(enabled);
+      if (enabled) console.log("✅ Fugle 即時報價已啟用");
+      else console.log("ℹ️ 使用 Yahoo 資料（延遲 15 分鐘），如需即時報價請設定 FUGLE_API_KEY");
+    });
+  }, []);
+
+  // Fugle 即時報價輪詢：當看板有台股且 Fugle 已啟用時，每 10 秒更新一次
+  useEffect(() => {
+    if (!fugleEnabled || !stock?.symbol || !isTaiwanStock(stock.symbol)) return;
+    if (activeMenu !== "analysis") return;
+
+    const poll = async () => {
+      const quote = await fetchFugleQuote(stock.symbol);
+      if (quote?.price) {
+        setFugleLivePrice(quote);
+      }
+    };
+
+    poll(); // 立即執行一次
+    const interval = setInterval(poll, 10000); // 每 10 秒
+    return () => clearInterval(interval);
+  }, [fugleEnabled, stock?.symbol, activeMenu]);
+
+  // 切換股票時清除舊的即時報價
+  useEffect(() => {
+    setFugleLivePrice(null);
+  }, [stock?.symbol]);
 
   // 切換頁面時自動執行掃描
   // 有資料 → silent: true（背景更新，不清空畫面、不跳掉）
@@ -5283,8 +5358,13 @@ const [watchText, setWatchText] = useState(() => {
 
             <div className="top-stats">
               <div className="mini-stat"><span>目前標的</span><b>{stock?.symbol || query}</b></div>
+              <div className="mini-stat">
+                <span>現價</span>
+                <b className={fugleLivePrice ? (fugleLivePrice.changePercent >= 0 ? "up" : "down") : ""}>
+                  {fugleLivePrice ? fugleLivePrice.price?.toFixed?.(2) : (stock?.close?.toFixed?.(2) ?? "--")}
+                </b>
+              </div>
               <div className="mini-stat"><span>AI分數</span><b>{stock?.score ?? "--"}</b></div>
-              <div className="mini-stat"><span>勝率預測</span><b>{stock?.winRatePredict ? `${stock.winRatePredict}%` : "--"}</b></div>
             </div>
           </header>
 
@@ -5376,11 +5456,23 @@ const [watchText, setWatchText] = useState(() => {
                     {getDisplayName(stock?.symbol, stock?.name) || "尚未載入資料"}
                   </div>
                   <div className="selected-symbol">{stock?.symbol || query}</div>
-                  <div className={stock?.changePct >= 0 ? "price up" : "price down"}>
+                  <div className={
+                    fugleLivePrice ? (fugleLivePrice.changePercent >= 0 ? "price up" : "price down")
+                    : (stock?.changePct >= 0 ? "price up" : "price down")
+                  }>
                     <span className="price-label">現價</span>
-                    {stock?.close?.toFixed?.(2) ?? "--"}
-                    <small>{stock?.changePct?.toFixed?.(2) ?? "--"}%</small>
+                    {fugleLivePrice ? fugleLivePrice.price?.toFixed?.(2) : (stock?.close?.toFixed?.(2) ?? "--")}
+                    <small>
+                      {fugleLivePrice
+                        ? `${fugleLivePrice.changePercent >= 0 ? "+" : ""}${fugleLivePrice.changePercent?.toFixed?.(2)}%`
+                        : `${stock?.changePct?.toFixed?.(2) ?? "--"}%`}
+                    </small>
                   </div>
+                  {fugleLivePrice && (
+                    <div style={{fontSize:10,color:"#22c55e",marginTop:4}}>
+                      ● 即時更新
+                    </div>
+                  )}
                 </div>
               
                   <div className="profile-mini-card">
@@ -5440,10 +5532,34 @@ const [watchText, setWatchText] = useState(() => {
                     </div>
 
                     {stock && (
-                      <div className={stock.changePct >= 0 ? "price up" : "price down"}>
-                        <span style={{ fontSize: 16, marginRight: 8, color: "#e5e7eb" }}>現價</span>
-                        {stock.close?.toFixed?.(2)}
-                        <small>{stock.changePct.toFixed(2)}%</small>
+                      <div style={{textAlign:"right"}}>
+                        {/* 即時報價（Fugle）or 延遲報價（Yahoo） */}
+                        <div className={fugleLivePrice ? (fugleLivePrice.changePercent >= 0 ? "price up" : "price down") : (stock.changePct >= 0 ? "price up" : "price down")}>
+                          <span style={{ fontSize: 16, marginRight: 8, color: "#e5e7eb" }}>現價</span>
+                          {fugleLivePrice ? fugleLivePrice.price?.toFixed?.(2) : stock.close?.toFixed?.(2)}
+                          <small>
+                            {fugleLivePrice
+                              ? `${fugleLivePrice.changePercent >= 0 ? "+" : ""}${fugleLivePrice.changePercent?.toFixed?.(2)}%`
+                              : `${stock.changePct.toFixed(2)}%`}
+                          </small>
+                        </div>
+                        {/* 資料來源標示 */}
+                        {isTaiwanStock(stock.symbol) && (
+                          <div style={{fontSize:11,marginTop:4,textAlign:"right"}}>
+                            {fugleLivePrice ? (
+                              <span style={{color:"#22c55e",display:"flex",alignItems:"center",justifyContent:"flex-end",gap:4}}>
+                                <span style={{width:6,height:6,borderRadius:"50%",background:"#22c55e",display:"inline-block"}} />
+                                即時報價 · {new Date(fugleLivePrice.updatedAt).toLocaleTimeString("zh-TW",{hour:"2-digit",minute:"2-digit",second:"2-digit"})}
+                              </span>
+                            ) : fugleEnabled ? (
+                              <span style={{color:"#f59e0b"}}>
+                                {isTWSEOpen() ? "⏳ 取得即時報價中..." : "📴 非交易時間"}
+                              </span>
+                            ) : (
+                              <span style={{color:"#adc4d4"}}>⏱ Yahoo 延遲約 15 分鐘</span>
+                            )}
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
