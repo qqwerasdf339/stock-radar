@@ -29,25 +29,77 @@ function isTWSEOpen() {
 }
 
 // 從 Fugle 取得即時報價，更新 stock state（只在台股開盤中才用）
+// ── Fugle 直接從瀏覽器呼叫（不走後端，繞過 Host allowlist 問題）───────────
+const FUGLE_KEY = "16ab6320-bb43-4ebf-a821-fcf0d2f70370";
+const FUGLE_BASE = "https://api.fugle.tw/marketdata/v1.0/stock";
+
 async function fetchFugleQuote(symbol) {
   if (!isTaiwanStock(symbol) || !isTWSEOpen()) return null;
   try {
-    const r = await fetch(`${API_BASE}/api/fugle/quote/${encodeURIComponent(symbol)}`);
+    const r = await fetch(`${FUGLE_BASE}/intraday/quote/${symbol}`, {
+      headers: { "X-API-KEY": FUGLE_KEY },
+    });
     if (!r.ok) return null;
-    const data = await r.json();
-    if (data.error || !data.price) return null;
-    return data;
+    const d = await r.json();
+    if (!d || d.error) return null;
+    // Fugle quote 回傳欄位轉換
+    const price = d.lastPrice ?? d.closePrice ?? null;
+    if (!price) return null;
+    return {
+      symbol,
+      price,
+      open:  d.openPrice  ?? null,
+      high:  d.highPrice  ?? null,
+      low:   d.lowPrice   ?? null,
+      close: d.closePrice ?? price,
+      change: d.change    ?? null,
+      changePercent: d.changePercent ?? null,
+      volume: d.total?.tradeVolume ?? null,
+      updatedAt: Date.now(),
+      source: "fugle-direct",
+    };
   } catch {
     return null;
   }
 }
 
-// 檢查後端是否已設定 Fugle Key
+// 從瀏覽器端直接呼叫 Fugle 取分K（補充 Yahoo 延遲）
+async function fetchFugleCandles(symbol, timeframe = "5") {
+  if (!isTaiwanStock(symbol)) return null;
+  try {
+    const r = await fetch(`${FUGLE_BASE}/intraday/candles/${symbol}?timeframe=${timeframe}`, {
+      headers: { "X-API-KEY": FUGLE_KEY },
+    });
+    if (!r.ok) return null;
+    const d = await r.json();
+    const candles = (d.candles || d.data || []).map(c => {
+      const t = typeof c.date === "number" ? c.date : Math.floor(new Date(c.date || c.time || "").getTime() / 1000);
+      return {
+        time: t,
+        open:   Number(c.open  || c.openPrice  || 0),
+        high:   Number(c.high  || c.highPrice  || 0),
+        low:    Number(c.low   || c.lowPrice   || 0),
+        close:  Number(c.close || c.closePrice || 0),
+        volume: Number(c.volume || 0),
+      };
+    }).filter(c => c.open > 0 && c.close > 0 && c.time > 0);
+    return candles;
+  } catch {
+    return null;
+  }
+}
+
+// 檢查 Fugle 是否可用（直接試打 API）
 async function checkFugleStatus() {
   try {
-    const r = await fetch(`${API_BASE}/api/status`);
-    const d = await r.json();
-    return d.fugle === "configured";
+    const r = await fetch(`${FUGLE_BASE}/intraday/quote/2330`, {
+      headers: { "X-API-KEY": FUGLE_KEY },
+    });
+    if (r.ok) {
+      const d = await r.json();
+      return !!(d.lastPrice || d.closePrice);
+    }
+    return false;
   } catch {
     return false;
   }
@@ -877,42 +929,59 @@ function buildYahooSymbolCandidates(input) {
   return [...new Set(list.filter(Boolean))];
 }
 
-// 分K 模式（1m/5m/30m）優先嘗試 combined API（Yahoo+Fugle 合併）
-// 日K 以上直接用 Yahoo（無需 Fugle，日K 已是收盤後即時）
+// 分K 模式：Yahoo 歷史 + Fugle 即時（前端直接合併，不走後端）
 async function fetchYahooChartResult(symbol, range = "6mo", interval = "1d") {
   const isIntraday = ["1m","2m","5m","10m","15m","30m","60m","1h"].includes(interval);
   const isTW = isTaiwanStock(symbol.replace(/\.(TW|TWO)$/i,""));
 
-  // 台股分K：優先用 combined（Yahoo歷史 + Fugle今日即時）
-  if (isIntraday && isTW) {
-    const sym = symbol.replace(/\.(TW|TWO)$/i, "");
-    try {
-      const url = `${API_BASE}/api/combined/chart/${encodeURIComponent(sym)}?range=${range}&interval=${interval}&_=${Date.now()}`;
-      const res = await fetch(url);
-      if (res.ok) {
-        const json = await res.json();
-        const result = json?.chart?.result?.[0];
-        if (result) {
-          // 如果 Fugle 有補充資料，在 meta 加上提示
-          if (result.meta?.fuglePatched) {
-            result.meta._dataNote = `Fugle 補充 ${result.meta.fugleCandlesAdded} 根即時K棒`;
-          }
-          return { result, symbol };
-        }
-      }
-    } catch (e) {
-      console.warn("combined chart failed, fallback to Yahoo", e.message);
-    }
-  }
-
-  // fallback：直接用 Yahoo
+  // 先抓 Yahoo 歷史
   const url = `${API_BASE}/api/yahoo/chart/${encodeURIComponent(symbol)}?range=${range}&interval=${interval}&_=${Date.now()}`;
   const res = await fetch(url);
   if (!res.ok) return null;
-
   const json = await res.json();
   const result = json?.chart?.result?.[0];
-  return result ? { result, symbol } : null;
+  if (!result) return null;
+
+  // 台股分K：前端直接向 Fugle 拿今日即時K棒，補進 Yahoo 資料
+  if (isIntraday && isTW) {
+    const sym = symbol.replace(/\.(TW|TWO)$/i, "");
+    const TF_MAP = {"1m":"1","2m":"2","5m":"5","10m":"10","15m":"15","30m":"30","60m":"60","1h":"60"};
+    const tf = TF_MAP[interval] || "5";
+    try {
+      const fugleCandles = await fetchFugleCandles(sym, tf);
+      if (fugleCandles && fugleCandles.length > 0) {
+        const existingTimes = new Set(result.timestamp || []);
+        const newTs = [], newO = [], newH = [], newL = [], newC = [], newV = [];
+        fugleCandles.forEach(c => {
+          if (!existingTimes.has(c.time) && c.time > 0) {
+            newTs.push(c.time); newO.push(c.open); newH.push(c.high);
+            newL.push(c.low);  newC.push(c.close); newV.push(c.volume);
+          }
+        });
+        if (newTs.length > 0) {
+          result.timestamp = [...(result.timestamp||[]), ...newTs];
+          const q = result.indicators.quote[0];
+          q.open   = [...(q.open||[]),   ...newO];
+          q.high   = [...(q.high||[]),   ...newH];
+          q.low    = [...(q.low||[]),    ...newL];
+          q.close  = [...(q.close||[]),  ...newC];
+          q.volume = [...(q.volume||[]), ...newV];
+          // 排序
+          const idx = result.timestamp.map((_,i)=>i).sort((a,b)=>result.timestamp[a]-result.timestamp[b]);
+          result.timestamp = idx.map(i=>result.timestamp[i]);
+          q.open=idx.map(i=>q.open[i]); q.high=idx.map(i=>q.high[i]);
+          q.low=idx.map(i=>q.low[i]);   q.close=idx.map(i=>q.close[i]);
+          q.volume=idx.map(i=>q.volume[i]);
+          result.meta._fugleAdded = newTs.length;
+          console.log(`✅ Fugle 補充 ${newTs.length} 根即時K棒`);
+        }
+      }
+    } catch(e) {
+      console.warn("Fugle candles 補充失敗（不影響基本功能）", e.message);
+    }
+  }
+
+  return { result, symbol };
 }
 
 async function fetchYahooHistory(input, range = "6mo", interval = "1d") {
