@@ -2693,6 +2693,7 @@ const [watchText, setWatchText] = useState(() => {
   const [taiwanMarketUpdatedAt, setTaiwanMarketUpdatedAt] = useState(null);
   const [strongCategory, setStrongCategory] = useState("全部");
   const [favoritePickerStock, setFavoritePickerStock] = useState(null);
+  const [favoritePickerPos, setFavoritePickerPos] = useState(null);
   const [favoriteGroupFilter, setFavoriteGroupFilter] = useState("全部");
   const [nextDayList, setNextDayList] = useState([]);
   const [nextDayLoading, setNextDayLoading] = useState(false);
@@ -2839,6 +2840,7 @@ const [watchText, setWatchText] = useState(() => {
 
   useEffect(() => {
     setFavoritePickerStock(null);
+    setFavoritePickerPos(null);
   }, [stock?.symbol, activeMenu]);
 
 
@@ -4848,9 +4850,9 @@ const [watchText, setWatchText] = useState(() => {
         .favorite-action { background: linear-gradient(135deg, #0ea5e9, #0284c7); color: #031220; }
         .favorite-action.saved { background: #14532d; color: #bbf7d0; border: 1px solid rgba(34,197,94,.45); }
         .favorite-notice { margin-top: 8px; color: #facc15; font-size: 13px; }
-        .favorite-picker { position: absolute; z-index: 50; min-width: 150px; background: #0b1929; border: 1px solid rgba(56,189,248,.22); border-radius: 14px; padding: 8px; box-shadow: 0 18px 50px rgba(0,0,0,.45); }
-        .favorite-picker button { width: 100%; margin-bottom: 6px; background: #111f30; color: #e5e7eb; border: 1px solid #1e3a55; }
-        .favorite-picker button:last-child { margin-bottom: 0; }
+        .favorite-picker { position: fixed; z-index: 9999; min-width: 160px; background: #0b1929; border: 1px solid rgba(56,189,248,.22); border-radius: 14px; padding: 8px; box-shadow: 0 18px 50px rgba(0,0,0,.65); display: flex; flex-direction: column; gap: 4px; }
+        .favorite-picker button { width: 100%; margin-bottom: 0; background: #111f30; color: #e5e7eb; border: 1px solid #1e3a55; display: block; text-align: left; padding: 8px 12px; border-radius: 8px; white-space: nowrap; }
+        .favorite-picker button:hover { background: rgba(14,165,233,.18); color: #38bdf8; border-color: rgba(14,165,233,.35); }
         .watch-actions { position: relative; display: inline-block; }
         .watch-menu { position: absolute; right: 0; top: 44px; z-index: 20; width: 280px; background: #0b1929; border: 1px solid rgba(14,165,233,.20); border-radius: 16px; padding: 12px; box-shadow: 0 18px 50px rgba(0,0,0,.45); }
         .chart-tools { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
@@ -6106,13 +6108,22 @@ const [watchText, setWatchText] = useState(() => {
                           <span style={{ position: "relative", display: "inline-block" }}>
                             <button className="ghost small" onClick={(e) => {
                               e.stopPropagation();
-                              setFavoritePickerStock((prev) => prev?.symbol === s.symbol ? null : s);
+                              if (favoritePickerStock?.symbol === s.symbol) {
+                                setFavoritePickerStock(null);
+                                setFavoritePickerPos(null);
+                              } else {
+                                const rect = e.currentTarget.getBoundingClientRect();
+                                setFavoritePickerPos({ top: rect.bottom + 4, left: rect.left });
+                                setFavoritePickerStock(s);
+                              }
                             }}>收藏</button>
-                            {favoritePickerStock && favoritePickerStock.symbol === s.symbol && (
-                              <div className="favorite-picker" onClick={(e) => e.stopPropagation()}>
+                            {favoritePickerStock && favoritePickerStock.symbol === s.symbol && favoritePickerPos && (
+                              <div className="favorite-picker"
+                                style={{ top: favoritePickerPos.top, left: favoritePickerPos.left }}
+                                onClick={(e) => e.stopPropagation()}>
                                 {FAVORITE_GROUPS.map((group) => (
-                                  <button key={group} onClick={() => addFavorite(s, group)}>
-                                    收藏到 {group}
+                                  <button key={group} onClick={() => { addFavorite(s, group); setFavoritePickerStock(null); setFavoritePickerPos(null); }}>
+                                    ＋ 收藏到 {group}
                                   </button>
                                 ))}
                               </div>
