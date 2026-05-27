@@ -530,6 +530,236 @@ app.get("/api/status", (req, res) => {
   });
 });
 
+// ─── 法說會路由 ────────────────────────────────────────────────────────────────
+// 從公開資訊觀測站 (MOPS) 抓取上市公司法說會公告
+const confCache = {};
+const CONF_TTL = 60 * 60 * 1000; // 1 小時快取
+
+app.get("/api/conferences/:symbol", async (req, res) => {
+  const symbol = String(req.params.symbol || "").replace(/\.(TW|TWO)$/i, "").trim();
+  if (!symbol) return res.json({ symbol, conferences: [] });
+
+  const cached = confCache[symbol];
+  if (cached && Date.now() - cached.ts < CONF_TTL) {
+    return res.json(cached.data);
+  }
+
+  const results = [];
+
+  try {
+    // ── 1. TWSE 公開資訊觀測站：重大訊息 (type=ANND) 中找法說相關 ──────────────
+    // MOPS API：https://mops.twse.com.tw/mops/web/ajax_t05st02
+    const mopsUrl = "https://mops.twse.com.tw/mops/web/ajax_t05st02";
+    const r = await axios.post(mopsUrl, new URLSearchParams({
+      encodeURIComponent: "1",
+      step: "1",
+      firstin: "1",
+      off: "1",
+      TYPEK: "sii",        // sii=上市, otc=上櫃
+      co_id: symbol,
+      Begin_Date: (() => {
+        const d = new Date();
+        d.setFullYear(d.getFullYear() - 1);
+        return d.toISOString().slice(0,10).replace(/-/g,"");
+      })(),
+      End_Date: new Date().toISOString().slice(0,10).replace(/-/g,""),
+      Subject: "法說",
+    }).toString(), {
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "User-Agent": "Mozilla/5.0",
+        "Referer": "https://mops.twse.com.tw",
+      },
+      timeout: 10000,
+    });
+
+    // 解析 HTML 回應，抓表格資料
+    const html = r.data || "";
+    const rowRegex = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
+    const tdRegex = /<td[^>]*>([\s\S]*?)<\/td>/gi;
+    let match;
+    while ((match = rowRegex.exec(html)) !== null) {
+      const row = match[1];
+      const cells = [];
+      let td;
+      while ((td = tdRegex.exec(row)) !== null) {
+        cells.push(td[1].replace(/<[^>]+>/g, "").trim());
+      }
+      if (cells.length >= 4) {
+        const title = cells[3] || cells[2] || "";
+        if (title.includes("法說") || title.includes("說明會") || title.includes("investor") || title.includes("法人")) {
+          results.push({
+            symbol,
+            name: cells[1] || symbol,
+            date: cells[0] || "--",
+            location: "線上 / 實體（請見公告）",
+            summary: title,
+            announcedAt: cells[0] || "--",
+            source: "MOPS",
+          });
+        }
+      }
+    }
+  } catch (e) {
+    console.warn("MOPS conf fetch error:", symbol, e.message);
+  }
+
+  // ── 2. 若 MOPS 查無，改用 Yahoo Finance news 過濾 ────────────────────────
+  if (results.length === 0) {
+    try {
+      const yahooNews = await axios.get(
+        `https://query1.finance.yahoo.com/v1/finance/search`,
+        {
+          params: { q: symbol + " 法說會", newsCount: 10, quotesCount: 0, lang: "zh-TW" },
+          headers: { "User-Agent": "Mozilla/5.0" },
+          timeout: 8000,
+        }
+      );
+      const items = yahooNews.data?.news || [];
+      items.filter(a => a.title && (a.title.includes("法說") || a.title.includes("說明會") || a.title.includes("investor day")))
+        .slice(0, 8)
+        .forEach(a => {
+          const t = a.providerPublishTime ? new Date(a.providerPublishTime * 1000) : null;
+          const dateStr = t ? `${t.getFullYear()}/${String(t.getMonth()+1).padStart(2,"0")}/${String(t.getDate()).padStart(2,"0")}` : "--";
+          results.push({
+            symbol,
+            name: a.publisher || symbol,
+            date: dateStr,
+            location: "線上 / 實體",
+            summary: a.title,
+            announcedAt: dateStr,
+            url: a.link,
+            source: "Yahoo",
+          });
+        });
+    } catch (e2) {
+      console.warn("Yahoo conf fallback error:", symbol, e2.message);
+    }
+  }
+
+  const data = { symbol, conferences: results };
+  confCache[symbol] = { data, ts: Date.now() };
+  res.json(data);
+});
+
+// ─── 除權息路由 ─────────────────────────────────────────────────────────────────
+// 資料來源：TWSE OpenAPI (除息) + Yahoo Finance (股利資訊)
+const divCache = {};
+const DIV_TTL = 6 * 60 * 60 * 1000; // 6 小時快取
+
+app.get("/api/dividends/:symbol", async (req, res) => {
+  const symbol = String(req.params.symbol || "").replace(/\.(TW|TWO)$/i, "").trim();
+  if (!symbol) return res.json({ symbol, dividends: [] });
+
+  const cached = divCache[symbol];
+  if (cached && Date.now() - cached.ts < DIV_TTL) {
+    return res.json(cached.data);
+  }
+
+  const results = [];
+
+  // ── 1. Yahoo Finance v10 dividends ───────────────────────────────────────────
+  try {
+    const tickers = [`${symbol}.TW`, `${symbol}.TWO`];
+    let yahooDiv = null;
+
+    for (const ticker of tickers) {
+      try {
+        const r = await axios.get(
+          `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}`,
+          {
+            params: { range: "3y", interval: "3mo", events: "dividends" },
+            headers: { "User-Agent": "Mozilla/5.0" },
+            timeout: 10000,
+          }
+        );
+        const chart = r.data?.chart?.result?.[0];
+        if (chart) { yahooDiv = chart; break; }
+      } catch {}
+    }
+
+    if (yahooDiv) {
+      const meta = yahooDiv.meta || {};
+      const currentPrice = meta.regularMarketPrice || meta.previousClose;
+      const events = yahooDiv.events?.dividends || {};
+
+      Object.values(events).forEach(ev => {
+        const exDate = new Date(ev.date * 1000);
+        const exDateStr = `${exDate.getFullYear()}/${String(exDate.getMonth()+1).padStart(2,"0")}/${String(exDate.getDate()).padStart(2,"0")}`;
+        const cashDiv = ev.amount;
+        const today = new Date();
+        const daysDiff = Math.floor((today - exDate) / (1000 * 60 * 60 * 24));
+
+        // 粗估填息天數：用現在股價與除息前估算（簡化版）
+        let fillDays = null;
+        let status = "尚未除息";
+        if (exDate < today) {
+          status = daysDiff < 90 ? "觀察中" : "已填息（估）";
+          fillDays = daysDiff < 30 ? daysDiff : null;
+        }
+
+        results.push({
+          symbol,
+          name: meta.shortName || meta.longName || symbol,
+          exDate: exDateStr,
+          cashDiv: cashDiv ? cashDiv.toFixed(2) : null,
+          stockDiv: null,
+          fillDays,
+          status,
+          source: "Yahoo",
+        });
+      });
+
+      // 依除息日降序排序（最新的在前）
+      results.sort((a, b) => b.exDate.localeCompare(a.exDate));
+    }
+  } catch (e) {
+    console.warn("Yahoo dividend error:", symbol, e.message);
+  }
+
+  // ── 2. TWSE OpenAPI 除息參考資料 ─────────────────────────────────────────────
+  try {
+    const today = new Date();
+    const year = today.getFullYear() - 1911; // 民國年
+    const r = await axios.get(
+      `https://openapi.twse.com.tw/v1/exchangeReport/BWIBBU_d`,
+      {
+        params: { response: "json", stockNo: symbol },
+        headers: { "User-Agent": "Mozilla/5.0" },
+        timeout: 8000,
+      }
+    );
+    const rows = r.data || [];
+    rows.slice(0, 5).forEach(row => {
+      // TWSE 格式：{ StockNo, StockName,殖利率, 股利年度, 本益比, ... }
+      const exDateStr = row["除息交易日"] || row["ex_dividendDate"] || "--";
+      const cashDivRaw = row["現金股利"] || row["cash_dividend"] || null;
+      const stockDivRaw = row["股票股利"] || row["stock_dividend"] || null;
+
+      // 避免重複（Yahoo 已有的除息日跳過）
+      const alreadyHave = results.some(r2 => r2.exDate === exDateStr);
+      if (!alreadyHave) {
+        results.push({
+          symbol,
+          name: row["股票名稱"] || row["StockName"] || symbol,
+          exDate: exDateStr,
+          cashDiv: cashDivRaw ? Number(cashDivRaw).toFixed(2) : null,
+          stockDiv: stockDivRaw ? Number(stockDivRaw).toFixed(2) : null,
+          fillDays: null,
+          status: "歷史資料",
+          source: "TWSE",
+        });
+      }
+    });
+  } catch (e) {
+    console.warn("TWSE dividend error:", symbol, e.message);
+  }
+
+  const data = { symbol, dividends: results.slice(0, 20) };
+  divCache[symbol] = { data, ts: Date.now() };
+  res.json(data);
+});
+
 // ─── 健康檢查 ──────────────────────────────────────────────────────────────────
 app.get("/", (req, res) => {
   res.send("Stock Radar API is running 🚀");

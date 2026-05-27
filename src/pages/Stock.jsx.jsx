@@ -2552,6 +2552,75 @@ useEffect(() => {
   // 股票名稱改由 stockUniverse / Yahoo K線資料流程處理。
 }, []);
 
+  // ── 發說會頁面 state ─────────────────────────────────────────────
+  const [corpEventQuery, setCorpEventQuery] = useState("");
+  const [corpEventType, setCorpEventType] = useState("all");
+  const [corpEventLoading, setCorpEventLoading] = useState(false);
+  const [corpEventResults, setCorpEventResults] = useState(null);
+  const [corpEventError, setCorpEventError] = useState("");
+
+  async function searchCorpEvents(overrideQuery) {
+    const q = (overrideQuery !== undefined ? overrideQuery : corpEventQuery).trim();
+    if (!q) { setCorpEventError("請輸入股票代號或公司名稱"); return; }
+    setCorpEventLoading(true);
+    setCorpEventError("");
+    setCorpEventResults(null);
+    try {
+      const matchedStock = reportUniverse.find(s =>
+        s.symbol === q || s.name === q || s.name.includes(q) || q.includes(s.symbol)
+      );
+      const sym = matchedStock ? matchedStock.symbol : q.replace(/\.(TW|TWO)$/i, "");
+      const compName = matchedStock ? matchedStock.name : q;
+      const [confRes, divRes] = await Promise.allSettled([
+        fetchConferences(sym, compName),
+        fetchDividends(sym, compName),
+      ]);
+      setCorpEventResults({
+        conferences: confRes.status === "fulfilled" ? confRes.value : [],
+        dividends: divRes.status === "fulfilled" ? divRes.value : [],
+      });
+    } catch (e) {
+      setCorpEventError("搜尋失敗：" + (e.message || "未知錯誤"));
+    } finally {
+      setCorpEventLoading(false);
+    }
+  }
+
+  async function fetchConferences(sym, compName) {
+    try {
+      const r = await fetch(API_BASE + "/api/conferences/" + encodeURIComponent(sym));
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      const data = await r.json();
+      if (data && data.error) throw new Error(data.error);
+      return (data && data.conferences) ? data.conferences : [];
+    } catch {
+      const nd = newsData[sym + ".TW"] || newsData[sym];
+      if (nd && nd.articles && nd.articles.length) {
+        return nd.articles
+          .filter(a => a.title && (a.title.includes("法說") || a.title.includes("說明會")))
+          .slice(0, 8)
+          .map(a => {
+            const t = a.providerPublishTime ? new Date(a.providerPublishTime * 1000) : null;
+            const dateStr = t ? t.toLocaleDateString("zh-TW") : "--";
+            return { symbol: sym, name: compName, date: dateStr, location: "線上 / 實體", summary: a.title, announcedAt: dateStr };
+          });
+      }
+      return [];
+    }
+  }
+
+  async function fetchDividends(sym, compName) {
+    try {
+      const r = await fetch(API_BASE + "/api/dividends/" + encodeURIComponent(sym));
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      const data = await r.json();
+      if (data && data.error) throw new Error(data.error);
+      return (data && data.dividends) ? data.dividends : [];
+    } catch {
+      return [];
+    }
+  }
+
 const [watchText, setWatchText] = useState(() => {
   const savedWatchText = localStorage.getItem("stockRadarWatchText");
 
@@ -5303,7 +5372,28 @@ const [watchText, setWatchText] = useState(() => {
 
 
 
-        .score-main { background: linear-gradient(135deg, rgba(14,165,233,.18), rgba(3,105,161,.14)); border: 1px solid rgba(14,165,233,.25); border-radius: 10px; padding: 14px; text-align: center; margin-bottom: 10px; }
+        /* ── 發說會頁面 CSS ────────────────────────────────────────── */
+        .corp-event-header { display: flex; align-items: baseline; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
+        .corp-search-row { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+        .corp-search-input { flex: 1; min-width: 200px; background: rgba(6,14,26,.80); border: 1px solid rgba(14,165,233,.25); border-radius: 8px; padding: 9px 12px; color: #f1f5f9; font-size: 14px; }
+        .corp-search-input:focus { outline: none; border-color: rgba(14,165,233,.55); }
+        .corp-type-select { background: rgba(6,14,26,.80); border: 1px solid rgba(14,165,233,.20); border-radius: 8px; padding: 9px 10px; color: #cddae2; font-size: 13px; }
+        .corp-search-btn { background: rgba(14,165,233,.20); border: 1px solid rgba(14,165,233,.40); color: #38bdf8; padding: 9px 18px; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer; }
+        .corp-search-btn:hover { background: rgba(14,165,233,.32); }
+        .corp-search-btn:disabled { opacity: .5; cursor: not-allowed; }
+        .corp-quick-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+        .corp-quick-tag { background: rgba(14,165,233,.07); border: 1px solid rgba(14,165,233,.18); color: #7dd3fc; padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: 700; cursor: pointer; }
+        .corp-quick-tag:hover { background: rgba(14,165,233,.16); }
+        .corp-section { margin-top: 10px; }
+        .corp-section-title { font-size: 13px; font-weight: 700; color: #38bdf8; letter-spacing: .05em; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid rgba(14,165,233,.14); }
+        .corp-intro-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 20px; }
+        @media (max-width: 800px) { .corp-intro-grid { grid-template-columns: 1fr; } }
+        .corp-intro-card { background: rgba(6,14,26,.60); border: 1px solid rgba(14,165,233,.14); border-radius: 12px; padding: 20px 16px; text-align: center; }
+        .corp-intro-icon { font-size: 32px; margin-bottom: 10px; }
+        .corp-intro-title { font-size: 15px; font-weight: 700; color: #f1f5f9; margin-bottom: 8px; }
+        .corp-intro-desc { font-size: 12px; color: #adc4d4; line-height: 1.6; }
+
+                .score-main { background: linear-gradient(135deg, rgba(14,165,233,.18), rgba(3,105,161,.14)); border: 1px solid rgba(14,165,233,.25); border-radius: 10px; padding: 14px; text-align: center; margin-bottom: 10px; }
         .score-main b { display: block; font-size: 42px; line-height: 1; font-weight: 800; color: #38bdf8; }
         .score-main span { color: #7dd3fc; font-size: 13px; }
         .metric-grid {
@@ -6593,7 +6683,7 @@ const [watchText, setWatchText] = useState(() => {
               <div className="report-tabs">
                 <button className={reportTab === "market" ? "active" : ""} onClick={() => setReportTab("market")}>📊 今日大盤方向</button>
                 <button className={reportTab === "industry" ? "active" : ""} onClick={() => setReportTab("industry")}>🏭 台股強弱產業</button>
-                <button className={reportTab === "us" ? "active" : ""} onClick={() => setReportTab("us")}>🇺🇸 美股科技股</button>
+                <button className={reportTab === "us" ? "active" : ""} onClick={() => setReportTab("us")}>📣 發說會</button>
                 <button className={reportTab === "macro" ? "active" : ""} onClick={() => setReportTab("macro")}>💱 匯率 / 美債 / BTC</button>
                 <button className={reportTab === "strength" ? "active" : ""} onClick={() => setReportTab("strength")}>🔥 強弱勢Top50</button>
                 <button className={reportTab === "nextday" ? "active" : ""} onClick={() => setReportTab("nextday")}>🌙 隔日沖候選</button>
@@ -6787,30 +6877,159 @@ const [watchText, setWatchText] = useState(() => {
 
               {reportTab === "us" && (
                 <div className="report-card">
-                  <h2>🇺🇸 美股科技股觀察</h2>
-                  {usTechWatchList.length === 0 ? (
-                    <p className="report-empty">尚未有美股科技股資料。可將 NVDA、AAPL、TSLA、MSFT、META、AMD 加入自選後自動更新。</p>
-                  ) : (
-                    <div className="table-wrap">
-                      <table>
-                        <thead><tr><th>股票</th><th>AI分數</th><th>趨勢</th><th>觀察</th><th>量比</th></tr></thead>
-                        <tbody>
-                          {usTechWatchList.map((s) => (
-                            <tr key={s.symbol} onClick={() => openStockAnalysisFromList(s)}>
-                              <td>
-                                <div className="stock-name-stack">
-                                  <span className="stock-name-main small">{getDisplayName(s.symbol, s.name)}</span>
-                                  <span className="stock-name-code">{s.symbol}</span>
-                                </div>
-                              </td>
-                              <td>{s.score ?? "--"}</td>
-                              <td className={s.changePct >= 0 ? "up" : "down"}>{s.changePct?.toFixed?.(2) ?? "--"}%</td>
-                              <td><span className="badge">{s.tradeSignal?.action || "觀望"}</span></td>
-                              <td>{s.volumeRatio?.toFixed?.(2) ?? "--"}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                  {/* ── 發說會：法說會 + 除權息 搜尋頁 ── */}
+                  <div className="corp-event-header">
+                    <h2 style={{margin:0}}>📣 發說會 ／ 除權息行事曆</h2>
+                    <span className="muted" style={{fontSize:12}}>搜尋全台股上市公司法說會報告與除權息資訊</span>
+                  </div>
+
+                  {/* 搜尋列 */}
+                  <div className="corp-search-row">
+                    <input
+                      className="corp-search-input"
+                      value={corpEventQuery}
+                      onChange={e => { setCorpEventQuery(e.target.value); if (!e.target.value.trim()) { setCorpEventResults(null); setCorpEventError(""); } }}
+                      placeholder="輸入股票代號或公司名稱，如 2330、台積電、鴻海…"
+                      onKeyDown={e => e.key === "Enter" && searchCorpEvents()}
+                    />
+                    <select className="corp-type-select" value={corpEventType} onChange={e => setCorpEventType(e.target.value)}>
+                      <option value="all">全部</option>
+                      <option value="conf">法說會</option>
+                      <option value="div">除權息</option>
+                    </select>
+                    <button className="corp-search-btn" onClick={searchCorpEvents} disabled={corpEventLoading}>
+                      {corpEventLoading ? "搜尋中..." : "🔍 搜尋"}
+                    </button>
+                  </div>
+
+                  {/* 快速標籤：熱門標的 */}
+                  <div className="corp-quick-tags">
+                    {["2330","2317","2454","2382","3711","2881","2882","2412","2603"].map(sym => (
+                      <button key={sym} className="corp-quick-tag"
+                        onClick={() => { setCorpEventQuery(sym); setCorpEventType("all"); searchCorpEvents(sym); }}>
+                        {sym}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* 錯誤訊息 */}
+                  {corpEventError && <p className="error">{corpEventError}</p>}
+
+                  {/* 結果區 */}
+                  {corpEventLoading && (
+                    <div style={{padding:"24px",textAlign:"center",color:"#adc4d4"}}>資料載入中…</div>
+                  )}
+
+                  {corpEventResults && !corpEventLoading && (
+                    <>
+                      {/* 法說會結果 */}
+                      {(corpEventType === "all" || corpEventType === "conf") && (
+                        <div className="corp-section">
+                          <div className="corp-section-title">📋 法說會 / 重大說明會</div>
+                          {corpEventResults.conferences?.length > 0 ? (
+                            <div className="table-wrap">
+                              <table>
+                                <thead>
+                                  <tr>
+                                    <th>公司</th>
+                                    <th>法說會日期</th>
+                                    <th>地點 / 形式</th>
+                                    <th>說明</th>
+                                    <th>公告日</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {corpEventResults.conferences.map((ev, i) => (
+                                    <tr key={i} onClick={() => ev.symbol && openStockAnalysisFromList({ symbol: ev.symbol, name: ev.name })}>
+                                      <td>
+                                        <div className="stock-name-stack">
+                                          <span className="stock-name-main small">{ev.name}</span>
+                                          <span className="stock-name-code">{ev.symbol}</span>
+                                        </div>
+                                      </td>
+                                      <td style={{color:"#38bdf8",fontWeight:700}}>{ev.date || "--"}</td>
+                                      <td>{ev.location || "--"}</td>
+                                      <td style={{maxWidth:240,whiteSpace:"normal",fontSize:12,color:"#cddae2"}}>{ev.summary || "--"}</td>
+                                      <td style={{fontSize:11,color:"#8ab4cc"}}>{ev.announcedAt || "--"}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          ) : (
+                            <p className="report-empty">查無法說會資料（此期間可能尚未公告）</p>
+                          )}
+                        </div>
+                      )}
+
+                      {/* 除權息結果 */}
+                      {(corpEventType === "all" || corpEventType === "div") && (
+                        <div className="corp-section" style={{marginTop:16}}>
+                          <div className="corp-section-title">💰 除權息行事曆</div>
+                          {corpEventResults.dividends?.length > 0 ? (
+                            <div className="table-wrap">
+                              <table>
+                                <thead>
+                                  <tr>
+                                    <th>公司</th>
+                                    <th>除息/除權日</th>
+                                    <th>現金股利</th>
+                                    <th>股票股利</th>
+                                    <th>填息天數</th>
+                                    <th>狀態</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {corpEventResults.dividends.map((dv, i) => (
+                                    <tr key={i} onClick={() => dv.symbol && openStockAnalysisFromList({ symbol: dv.symbol, name: dv.name })}>
+                                      <td>
+                                        <div className="stock-name-stack">
+                                          <span className="stock-name-main small">{dv.name}</span>
+                                          <span className="stock-name-code">{dv.symbol}</span>
+                                        </div>
+                                      </td>
+                                      <td style={{color:"#fbbf24",fontWeight:700}}>{dv.exDate || "--"}</td>
+                                      <td className="up">{dv.cashDiv ? `$${dv.cashDiv}` : "--"}</td>
+                                      <td style={{color:"#38bdf8"}}>{dv.stockDiv ? `${dv.stockDiv}股` : "--"}</td>
+                                      <td style={{color: dv.fillDays != null ? (dv.fillDays <= 10 ? "#4ade80" : dv.fillDays <= 30 ? "#fbbf24" : "#fb7185") : "#adc4d4"}}>
+                                        {dv.fillDays != null ? `${dv.fillDays}天` : "待觀察"}
+                                      </td>
+                                      <td>
+                                        <span className={`badge ${dv.status === "已填息" ? "up" : dv.status === "未填息" ? "down" : ""}`}>
+                                          {dv.status || "尚未除息"}
+                                        </span>
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          ) : (
+                            <p className="report-empty">查無除權息資料</p>
+                          )}
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  {/* 初始說明 */}
+                  {!corpEventResults && !corpEventLoading && (
+                    <div className="corp-intro-grid">
+                      <div className="corp-intro-card">
+                        <div className="corp-intro-icon">📋</div>
+                        <div className="corp-intro-title">法說會報告</div>
+                        <div className="corp-intro-desc">搜尋上市公司最新法說會日期、地點與重點摘要，掌握公司最新展望與財報說明</div>
+                      </div>
+                      <div className="corp-intro-card">
+                        <div className="corp-intro-icon">💰</div>
+                        <div className="corp-intro-title">除權息行事曆</div>
+                        <div className="corp-intro-desc">查詢除息日、現金股利、股票股利及歷史填息天數，評估是否參與除息操作</div>
+                      </div>
+                      <div className="corp-intro-card">
+                        <div className="corp-intro-icon">🔍</div>
+                        <div className="corp-intro-title">一鍵搜尋</div>
+                        <div className="corp-intro-desc">輸入股票代號或名稱，即時從 TWSE / 公開資訊觀測站取得最新公告資料</div>
+                      </div>
                     </div>
                   )}
                 </div>
