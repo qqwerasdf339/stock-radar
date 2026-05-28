@@ -684,6 +684,33 @@ function buildKlineRadarSignal(stock) {
     radarScore >= 62 ? "B級追蹤" :
     bearishScore > bullishScore ? "風險優先" : "一般";
 
+  // ── 圖1形態學：目標價計算 ─────────────────────────────────────────────
+  // 根據形態學「整理區有多高，突破後通常就有機會走同樣距離」
+  const highs = (stock?.history || []).map(x => x.high).filter(Number.isFinite);
+  const lows  = (stock?.history || []).map(x => x.low).filter(Number.isFinite);
+  const recentHigh20 = highs.length >= 20 ? Math.max(...highs.slice(-20)) : 0;
+  const recentLow20  = lows.length  >= 20 ? Math.min(...lows.slice(-20))  : 0;
+  const patternHeight = recentHigh20 - recentLow20;
+
+  // 突破方向目標價（圖1核心公式）
+  const breakoutTargetUp   = recentHigh20 > 0 ? +(recentHigh20 + patternHeight).toFixed(2) : null;
+  const breakoutTargetDown = recentLow20  > 0 ? +(recentLow20  - patternHeight).toFixed(2) : null;
+
+  // 旗形/三角形目標（旗桿高度 = 近40根最高 - 起漲低點）
+  const flagpoleHigh  = highs.length >= 40 ? Math.max(...highs.slice(-40)) : recentHigh20;
+  const flagpoleLow   = lows.length  >= 40 ? Math.min(...lows.slice(-20))  : recentLow20;
+  const flagpoleH     = flagpoleHigh - flagpoleLow;
+  const flagTarget    = recentHigh20 > 0 ? +(recentHigh20 + flagpoleH).toFixed(2) : null;
+
+  // 量能確認等級（圖1量能判斷表）
+  const volConfirmLevel =
+    volumeRatio >= 2.0 ? "強（突破確認）" :
+    volumeRatio >= 1.5 ? "正常（有效）"   :
+    volumeRatio >= 1.0 ? "弱（需謹慎）"   : "縮量（易失敗）";
+
+  // 主要形態識別
+  const primaryPattern = bullishSignals[0]?.signalName || bearishSignals[0]?.signalName || "無明確型態";
+
   return {
     radarScore,
     radarLevel,
@@ -700,10 +727,17 @@ function buildKlineRadarSignal(stock) {
       ...bullishSignals.slice(0, 2).map((s) => s.description),
       ...bearishSignals.slice(0, 2).map((s) => s.description),
     ].filter(Boolean),
-    candleTitle: bullishSignals[0]?.signalName || bearishSignals[0]?.signalName || stock?.candlePattern?.title || "未觸發明確型態",
+    candleTitle: primaryPattern,
     volumeTitle: volumeRatio >= 1.5 ? `成交量放大 ${volumeRatio.toFixed(2)}倍` : stock?.volumeSignal?.title || "量能一般",
     trendPosition,
     nearBreakout: nearHigh,
+    // 圖1形態學新增欄位
+    breakoutTargetUp,
+    breakoutTargetDown,
+    flagTarget,
+    patternHeight: +patternHeight.toFixed(2),
+    volConfirmLevel,
+    primaryPattern,
   };
 }
 
@@ -720,6 +754,9 @@ function calcRecent3DayStrength(stock) {
       recent3DayChange: 0,
       recent3DayVolumeRatio: stock?.volumeRatio || 0,
       recent3DayType: "資料不足",
+      maPattern: "",
+      volumePattern: "",
+      entrySignal: "",
     };
   }
 
@@ -727,19 +764,57 @@ function calcRecent3DayStrength(stock) {
     ? ((latest.close - base.close) / base.close) * 100
     : 0;
 
-  const avg3Volume =
-    last3.reduce((sum, x) => sum + (x.volume || 0), 0) / last3.length;
-
+  const avg3Volume = last3.reduce((sum, x) => sum + (x.volume || 0), 0) / last3.length;
   const prev20 = history.slice(-24, -4);
   const avg20Volume = prev20.length
     ? prev20.reduce((sum, x) => sum + (x.volume || 0), 0) / prev20.length
     : avg3Volume || 1;
 
   const recent3DayVolumeRatio = avg20Volume ? avg3Volume / avg20Volume : 0;
-  const closeNearHigh =
-    latest.high && latest.close
-      ? ((latest.high - latest.close) / latest.close) * 100
-      : 999;
+  const closeNearHigh = latest.high && latest.close
+    ? ((latest.high - latest.close) / latest.close) * 100 : 999;
+
+  // ── 圖2：均線形態判斷 ─────────────────────────────────────────────────
+  const ma5 = stock.ma5 || 0;
+  const ma20 = stock.ma20 || 0;
+  const ma60 = stock.ma60 || 0;
+  const close = stock.close || latest.close || 0;
+
+  // 均線多頭排列（圖2核心：MA5 > MA20 > MA60）
+  const maFullBull = ma5 > ma20 && ma20 > ma60 && close > ma5;
+  // 20日線止跌看反彈（圖2邏輯5）
+  const nearMA20 = ma20 > 0 && Math.abs(close - ma20) / ma20 < 0.02;
+  // 60日線不穿不進（圖2邏輯6）
+  const aboveMA60 = close > ma60;
+  // 5日線不跌破續抱（圖2邏輯7）
+  const aboveMA5 = close > ma5;
+  // 線上縮量陰進場（圖2邏輯2）
+  const shrinkVolOnSupport = close > ma20 && recent3DayVolumeRatio < 1.0 && recent3DayChange > -2 && recent3DayChange < 2;
+
+  // 均線形態標籤
+  let maPattern = "";
+  if (maFullBull) maPattern = "均線多頭排列";
+  else if (close > ma20 && ma5 > ma20) maPattern = "站上MA20";
+  else if (nearMA20 && close > ma20) maPattern = "MA20止跌支撐";
+  else if (close < ma60) maPattern = "60日線下方";
+  else if (close < ma20) maPattern = "MA20壓力";
+
+  // 量能形態標籤（圖2邏輯）
+  let volumePattern = "";
+  if (shrinkVolOnSupport) volumePattern = "縮量回踩（健康回測）";
+  else if (recent3DayVolumeRatio >= 2.0) volumePattern = "爆量突破";
+  else if (recent3DayVolumeRatio >= 1.5) volumePattern = "放量強攻";
+  else if (recent3DayVolumeRatio >= 1.2) volumePattern = "量增趨勢";
+  else if (recent3DayVolumeRatio < 0.7) volumePattern = "縮量整理";
+
+  // 進場訊號（圖2 每日SOP）
+  let entrySignal = "";
+  if (maFullBull && recent3DayVolumeRatio >= 1.5) entrySignal = "▲ 放量突破，強烈進場";
+  else if (maFullBull && shrinkVolOnSupport) entrySignal = "↩ 縮量回踩，低風險買點";
+  else if (nearMA20 && recent3DayVolumeRatio >= 1.0) entrySignal = "↗ MA20止跌反彈，觀察";
+  else if (close < ma60) entrySignal = "✗ 60日線下，不輕易進場";
+  else if (close < ma20) entrySignal = "⚠ MA20壓力，等突破";
+  else entrySignal = "→ 觀察量能變化";
 
   let recent3DayScore = 0;
   if (recent3DayChange >= 3) recent3DayScore += 30;
@@ -749,11 +824,16 @@ function calcRecent3DayStrength(stock) {
   if (recent3DayVolumeRatio >= 2) recent3DayScore += 20;
   if (closeNearHigh <= 1.2) recent3DayScore += 15;
   if ((stock.score || 0) >= 70) recent3DayScore += 15;
+  // 圖2加分
+  if (maFullBull) recent3DayScore += 20;
+  if (shrinkVolOnSupport) recent3DayScore += 10;
+  if (aboveMA60 && aboveMA5) recent3DayScore += 10;
 
   let recent3DayType = "近3日觀察";
   if (recent3DayChange >= 6 && recent3DayVolumeRatio >= 1.5) recent3DayType = "近3日爆量強勢";
   else if (recent3DayChange >= 6) recent3DayType = "近3日漲幅強勢";
   else if (recent3DayVolumeRatio >= 1.5) recent3DayType = "近3日量能強勢";
+  else if (maFullBull && shrinkVolOnSupport) recent3DayType = "縮量健康回踩";
   else if ((stock.score || 0) >= 80) recent3DayType = "AI強勢";
 
   return {
@@ -761,7 +841,18 @@ function calcRecent3DayStrength(stock) {
     recent3DayChange,
     recent3DayVolumeRatio,
     recent3DayType,
+    maPattern,
+    volumePattern,
+    entrySignal,
   };
+}
+
+// ── 買賣量格式化 helper ────────────────────────────────────────────────────
+function fmtVol(v) {
+  if (!v || !Number.isFinite(v)) return "--";
+  if (v >= 1e8) return (v / 1e8).toFixed(1) + "億";
+  if (v >= 1e4) return (v / 1e3).toFixed(0) + "K";
+  return String(v);
 }
 
 function sleep(ms) {
@@ -1536,11 +1627,28 @@ function analyzeStock(stock) {
     })
   );
 
+  // ── 買賣量估算（收盤當日，圖1量能確認依據）──────────────────────────
+  // Yahoo Finance 不提供精確買/賣量，依K棒收尾位置做估算
+  const todayVolume = latest?.volume || 0;
+  let buyVolume = 0, sellVolume = 0;
+  if (latest && todayVolume > 0) {
+    const lHigh = latest.high || close;
+    const lLow  = latest.low  || close;
+    const lOpen = latest.open || close;
+    const lRange = lHigh - lLow;
+    // 收盤強弱比（收盤偏高 → 買方主導，偏低 → 賣方主導）
+    const closeRatio = lRange > 0 ? (close - lLow) / lRange : 0.5;
+    buyVolume  = Math.round(todayVolume * closeRatio);
+    sellVolume = todayVolume - buyVolume;
+  }
+
   return {
     ...stock,
     close,
     changePct,
     volume: latest?.volume || 0,
+    buyVolume,
+    sellVolume,
     volumeRatio,
     rsi,
     k: kd.k,
@@ -1666,6 +1774,8 @@ function calcNextDayScore(stock) {
   const close = cleanNumber(stock.close) || 0;
   const prevClose = cleanNumber(stock.prevClose) || 0;
   const high = cleanNumber(stock.high) || 0;
+  const low = cleanNumber(stock.low) || 0;
+  const open = cleanNumber(stock.open) || 0;
   const volume = cleanNumber(stock.volume) || 0;
   const avgVolume5 = cleanNumber(stock.avgVolume5) || 1;
   const highest5 = cleanNumber(stock.highest5) || 0;
@@ -1685,27 +1795,52 @@ function calcNextDayScore(stock) {
   const changePercent = prevClose ? ((close - prevClose) / prevClose) * 100 : 0;
   const volumeRatio = avgVolume5 ? volume / avgVolume5 : 0;
   const closeToHigh = close ? ((high - close) / close) * 100 : 999;
+  const range = high - low;
+  const body = Math.abs(close - open);
+  const upperShadow = high - Math.max(close, open);
 
+  // ── 基本動能 ───────────────────────────────────────────────────────────
   if (changePercent >= 3) score += 15;
   if (changePercent >= 5) score += 25;
 
+  // ── 量能（圖2量能確認） ────────────────────────────────────────────────
   if (volumeRatio >= 1.5) score += 15;
   if (volumeRatio >= 2) score += 25;
   if (volumeRatio >= 3) score += 35;
 
+  // ── 收盤位置（圖1收近高點確認有效突破） ────────────────────────────────
   if (closeToHigh <= 1) score += 20;
   if (closeToHigh <= 0.5) score += 30;
 
+  // ── 突破條件（圖1形態學） ─────────────────────────────────────────────
   if (close > highest5) score += 25;
   if (close > highest20) score += 40;
 
-  if (ma5 > ma20 && ma20 > ma60) score += 30;
+  // ── 圖2均線多頭排列（均線方向 + 股價位置） ───────────────────────────
+  if (ma5 > ma20 && ma20 > ma60) score += 30;         // 完整多頭排列
+  if (close > ma5 && ma5 > ma20) score += 15;          // 站上MA5且短均多頭
+  if (close > ma20) score += 10;                        // 站上20日線
+  if (close > ma60) score += 8;                         // 60日線上方
+
+  // ── RSI、MACD ──────────────────────────────────────────────────────────
   if (rsi >= 55 && rsi <= 75) score += 15;
   if (macd > macdSignal) score += 15;
+
+  // ── 籌碼 ──────────────────────────────────────────────────────────────
   if (institutionalTotal > 0) score += 20;
   if (marketIndexChange > -1) score += 10;
 
+  // ── 圖2 K棒形態（線上縮量小陰進場） ───────────────────────────────────
+  const isBlackCandle = close < open;
+  const shrinkVol = volumeRatio < 0.9;
+  if (close > ma20 && isBlackCandle && shrinkVol) score += 15; // 縮量陰線回踩
+
+  // ── 圖1 假突破陷阱（重扣分） ──────────────────────────────────────────
   if (detectFakeBreakoutForNextDay(stock)) score -= 50;
+  // 上影線過長（圖1假突破特徵：量大但收盤回落）
+  if (upperShadow > body * 2 && volumeRatio >= 1.5) score -= 30;
+  // 爆量收黑（圖1出貨訊號）
+  if (isBlackCandle && volumeRatio >= 2.5) score -= 25;
 
   return Math.max(0, Math.round(score));
 }
@@ -6179,10 +6314,25 @@ const [watchText, setWatchText] = useState(() => {
 
                 <div className="scan-sidebar-section">系統條件</div>
                 <div className="scan-criteria-list">
-                  <div className="scan-criteria-item">近3日漲幅 + 強度</div>
-                  <div className="scan-criteria-item">成交量能放大</div>
-                  <div className="scan-criteria-item">收盤位置強弱</div>
-                  <div className="scan-criteria-item">AI分數加權</div>
+                  <div className="scan-criteria-item">均線多頭排列（MA5＞MA20＞MA60）</div>
+                  <div className="scan-criteria-item">近3日漲幅 + 強度評分</div>
+                  <div className="scan-criteria-item">縮量回踩 = 低風險買點</div>
+                  <div className="scan-criteria-item">放量突破 = 強烈進場</div>
+                  <div className="scan-criteria-item">60日線下方不輕易進場</div>
+                </div>
+
+                <div style={{margin:"8px 0",padding:"8px 10px",background:"rgba(14,165,233,.07)",borderRadius:8,border:"1px solid rgba(14,165,233,.14)"}}>
+                  <div style={{fontSize:11,color:"#38bdf8",fontWeight:700,marginBottom:6}}>📗 均線秘訣</div>
+                  <div style={{fontSize:11,color:"#cddae2",lineHeight:1.7}}>
+                    黏 = 均線黏合等發散<br/>
+                    踩 = 突破後等回踩<br/>
+                    縮 = 線上縮量是好事<br/>
+                    抱 = 5日線不破續抱<br/>
+                    破 = 跌破均線要小心<br/>
+                    量 = 線下爆量不一定好<br/>
+                    下 = 60日線下偏空<br/>
+                    跑 = 量能轉弱要出場
+                  </div>
                 </div>
 
                 <button onClick={scanSystemStrongStocks} disabled={systemStrongLoading} className="scan-btn">
@@ -6202,47 +6352,82 @@ const [watchText, setWatchText] = useState(() => {
                       <thead>
                         <tr>
                           <th style={{width:36}}>#</th>
-                          <th style={{minWidth:160}}>股票</th>
-                          <th style={{width:110}}>強勢分類</th>
-                          <th style={{width:80}}>近3日強度</th>
-                          <th style={{width:80}}>近3日漲幅</th>
-                          <th style={{width:50}}>AI</th>
-                          <th style={{width:60}}>勝率</th>
+                          <th style={{minWidth:150}}>股票</th>
+                          <th style={{width:100}}>主要型態</th>
+                          <th style={{width:70}}>雷達分數</th>
+                          <th style={{width:90}}>市場結構</th>
                           <th style={{width:60}}>量比</th>
-                          <th style={{width:80}}>訊號</th>
-                          <th style={{minWidth:140}}>判斷條件</th>
-                          <th style={{minWidth:150}}>建議</th>
-                          <th style={{minWidth:160}}>理由</th>
+                          <th style={{width:110,color:"#4ade80"}}>買量（估）</th>
+                          <th style={{width:110,color:"#fb7185"}}>賣量（估）</th>
+                          <th style={{width:80}}>量能確認</th>
+                          <th style={{width:90}}>突破目標▲</th>
+                          <th style={{width:90}}>跌破目標▼</th>
+                          <th style={{width:80}}>多頭訊號</th>
+                          <th style={{width:80}}>空頭訊號</th>
+                          <th style={{minWidth:120}}>建議</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {filteredSystemStrongList.map((s, i) => {
+                        {sortedKlineRadarList.map((s, i) => {
                           const adv = buildAutoTradeAdvice(s);
+                          const buyV = s.buyVolume ?? 0;
+                          const sellV = s.sellVolume ?? 0;
+                          const totalV = buyV + sellV;
+                          const buyPct = totalV > 0 ? Math.round(buyV / totalV * 100) : 50;
+                          const isBull = (s.bullishSignals?.length || 0) >= (s.bearishSignals?.length || 0);
                           return (
                             <tr key={s.symbol} onClick={() => openStockAnalysisFromList(s)} className="scan-row">
                               <td className="scan-rank">{i + 1}</td>
                               <td>
                                 <div className="scan-stock-name">{getDisplayName(s.symbol, s.name)}</div>
                                 <div className="scan-stock-code">{s.symbol}</div>
+                                <div style={{fontSize:10,color:"#fbbf24",marginTop:2}}>{s.radarLevel || ""}</div>
                               </td>
-                              <td><div className="scan-badge">{s.recent3DayType || s.strongType || s.baseType || "系統候選"}</div></td>
-                              <td><div className="scan-score">{s.recent3DayScore ?? "--"}</div></td>
-                              <td className={s.recent3DayChange >= 0 ? "up" : "down"} style={{fontWeight:600}}>{s.recent3DayChange?.toFixed?.(2) ?? "--"}%</td>
-                              <td style={{fontWeight:600,color:"#38bdf8"}}>{s.score}</td>
-                              <td>{s.winRatePredict}%</td>
-                              <td style={{fontSize:11}}>{s.volumeRatio?.toFixed(2) ?? "--"}</td>
-                              <td><div className="scan-badge">{s.tradeSignal.action}</div></td>
+                              <td style={{fontSize:11,color:"#e2e8f0",lineHeight:1.5}}>
+                                <div style={{fontWeight:600}}>{s.primaryPattern || s.candleTitle || "--"}</div>
+                              </td>
                               <td>
-                                <div className="condition-mini-list">
-                                  {adv.conditionTags.slice(0, 4).map((tag) => <span key={tag}>{tag}</span>)}
+                                <div className="scan-score" style={{color: s.radarScore >= 78 ? "#4ade80" : s.radarScore >= 55 ? "#fbbf24" : "#fb7185"}}>
+                                  {s.radarScore ?? "--"}
                                 </div>
                               </td>
+                              <td style={{fontSize:11,color: s.marketStructure?.includes("起漲") || s.marketStructure?.includes("主升") ? "#4ade80" : s.marketStructure?.includes("空頭") || s.marketStructure?.includes("轉弱") ? "#fb7185" : "#fbbf24"}}>
+                                {s.marketStructure || "--"}
+                              </td>
+                              <td style={{fontSize:11}}>{s.volumeRatio?.toFixed(2) ?? "--"}</td>
                               <td>
-                                <div className="scan-advice-main">開高 {adv.openHighProbability}% · 續強 {adv.continueProbability}%</div>
-                                <div className="scan-advice-risk">出貨風險 {adv.sellRisk}%</div>
+                                <div style={{fontSize:12,color:"#4ade80",fontWeight:600}}>{fmtVol(buyV)}</div>
+                                <div style={{fontSize:10,color:"#8ab4cc"}}>{buyPct}% 買方</div>
+                              </td>
+                              <td>
+                                <div style={{fontSize:12,color:"#fb7185",fontWeight:600}}>{fmtVol(sellV)}</div>
+                                <div style={{fontSize:10,color:"#8ab4cc"}}>{100-buyPct}% 賣方</div>
+                              </td>
+                              <td style={{fontSize:11,color: s.volConfirmLevel?.includes("強") ? "#4ade80" : s.volConfirmLevel?.includes("縮量") ? "#fb7185" : "#fbbf24"}}>
+                                {s.volConfirmLevel || "--"}
+                              </td>
+                              <td style={{fontSize:12,color:"#4ade80",fontWeight:600}}>
+                                {s.breakoutTargetUp ? s.breakoutTargetUp.toFixed(2) : "--"}
+                                {s.patternHeight > 0 && <div style={{fontSize:10,color:"#8ab4cc"}}>幅度 {s.patternHeight.toFixed(1)}</div>}
+                              </td>
+                              <td style={{fontSize:12,color:"#fb7185",fontWeight:600}}>
+                                {s.breakoutTargetDown ? s.breakoutTargetDown.toFixed(2) : "--"}
+                              </td>
+                              <td style={{fontSize:11,color:"#4ade80"}}>
+                                {(s.bullishSignals?.slice(0,2) || []).map(sig => (
+                                  <div key={sig.signalName} style={{marginBottom:1}}>{sig.signalName?.split("：")[0] || sig.signalName}</div>
+                                ))}
+                              </td>
+                              <td style={{fontSize:11,color:"#fb7185"}}>
+                                {(s.bearishSignals?.slice(0,2) || []).map(sig => (
+                                  <div key={sig.signalName} style={{marginBottom:1}}>{sig.signalName?.split("：")[0] || sig.signalName}</div>
+                                ))}
+                              </td>
+                              <td>
+                                <div className="scan-advice-main">{isBull ? "多方" : "空方"} {s.mainUpProbability}%</div>
+                                <div className="scan-advice-risk">風險 {s.fakeBreakoutRisk}%</div>
                                 <div className="scan-advice-note">{adv.strategy}</div>
                               </td>
-                              <td style={{fontSize:12,color:"#cddae2",lineHeight:1.6}}>{buildScanReason(s)}</td>
                             </tr>
                           );
                         })}
@@ -6320,6 +6505,21 @@ const [watchText, setWatchText] = useState(() => {
                   <div className="scan-criteria-item">收盤位置強弱</div>
                   <div className="scan-criteria-item">爆量長上影過濾</div>
                   <div className="scan-criteria-item">假突破風險評估</div>
+                </div>
+
+                <div style={{margin:"8px 0",padding:"8px 10px",background:"rgba(14,165,233,.07)",borderRadius:8,border:"1px solid rgba(14,165,233,.14)"}}>
+                  <div style={{fontSize:11,color:"#38bdf8",fontWeight:700,marginBottom:6}}>📙 形態學核心</div>
+                  <div style={{fontSize:11,color:"#cddae2",lineHeight:1.7}}>
+                    <b style={{color:"#f1f5f9"}}>目標價公式：</b><br/>
+                    突破目標 = 突破點 + 整理高度 H<br/>
+                    跌破目標 = 跌破點 − 整理高度 H<br/><br/>
+                    <b style={{color:"#4ade80"}}>量能確認：</b><br/>
+                    整理期縮量 → 突破爆量 ✓<br/>
+                    無量突破 → 易失敗 ✗<br/><br/>
+                    <b style={{color:"#fbbf24"}}>假突破辨識：</b><br/>
+                    突破後迅速回到區間內<br/>
+                    量大但收盤位置差
+                  </div>
                 </div>
 
                 <button onClick={scanKlineRadar} disabled={klineRadarLoading} className="scan-btn">
@@ -6449,6 +6649,18 @@ const [watchText, setWatchText] = useState(() => {
                   <div className="scan-criteria-item">假突破自動過濾</div>
                 </div>
 
+                <div style={{margin:"8px 0",padding:"8px 10px",background:"rgba(14,165,233,.07)",borderRadius:8,border:"1px solid rgba(14,165,233,.14)"}}>
+                  <div style={{fontSize:11,color:"#38bdf8",fontWeight:700,marginBottom:6}}>📘 每日抓股 SOP</div>
+                  <div style={{fontSize:11,color:"#cddae2",lineHeight:1.7}}>
+                    ① 先看大盤是否站上20日線<br/>
+                    ② 股價在20日線上 + 線上彎<br/>
+                    ③ 量縮回踩均線找買點<br/>
+                    ④ 不破支撐 → 低風險進場<br/>
+                    ⑤ 進場後：強勢股不破5日線抱<br/>
+                    ⑥ 賣出：爆量長黑或跌破5/20日
+                  </div>
+                </div>
+
                 <button onClick={() => scanNextDayList()} disabled={nextDayLoading} className="scan-btn">
                   {nextDayLoading ? "更新中..." : "立即刷新"}
                 </button>
@@ -6466,21 +6678,34 @@ const [watchText, setWatchText] = useState(() => {
                       <thead>
                         <tr>
                           <th style={{width:36}}>#</th>
-                          <th style={{minWidth:160}}>股票</th>
+                          <th style={{minWidth:150}}>股票</th>
                           <th style={{width:100}}>分數 / 等級</th>
                           <th style={{width:70}}>開高機率</th>
-                          <th style={{width:80}}>訊號</th>
                           <th style={{width:70}}>漲跌</th>
                           <th style={{width:60}}>量比</th>
+                          <th style={{width:110,color:"#4ade80"}}>買量（估）</th>
+                          <th style={{width:110,color:"#fb7185"}}>賣量（估）</th>
+                          <th style={{width:100}}>均線位置</th>
                           <th style={{width:70}}>假突破</th>
-                          <th style={{minWidth:120}}>判斷條件</th>
-                          <th style={{minWidth:150}}>建議</th>
-                          <th style={{minWidth:120}}>觀察標籤</th>
+                          <th style={{width:80}}>訊號</th>
+                          <th style={{minWidth:140}}>建議</th>
+                          <th style={{minWidth:110}}>觀察標籤</th>
                         </tr>
                       </thead>
                       <tbody>
                         {sortedNextDayList.map((s, i) => {
                           const adv = buildAutoTradeAdvice(s);
+                          const buyV = s.buyVolume ?? 0;
+                          const sellV = s.sellVolume ?? 0;
+                          const totalV = buyV + sellV;
+                          const buyPct = totalV > 0 ? Math.round(buyV / totalV * 100) : 50;
+                          // 圖2均線位置判斷
+                          const cl = s.close || 0;
+                          const ma5v = s.ma5 || 0, ma20v = s.ma20 || 0, ma60v = s.ma60 || 0;
+                          const maPos = ma5v > 0 && ma20v > 0 && ma60v > 0
+                            ? (cl > ma5v && ma5v > ma20v && ma20v > ma60v ? "多頭排列" : cl > ma20v ? "站上MA20" : cl > ma60v ? "MA20下方" : "60日線下")
+                            : "--";
+                          const maPosColor = maPos === "多頭排列" ? "#4ade80" : maPos === "站上MA20" ? "#fbbf24" : "#fb7185";
                           return (
                             <tr key={s.symbol} onClick={() => openStockAnalysisFromList(s)} className="scan-row">
                               <td className="scan-rank">{i + 1}</td>
@@ -6491,24 +6716,27 @@ const [watchText, setWatchText] = useState(() => {
                               <td>
                                 <div className="scan-score">{s.nextDay?.nextDayScore ?? "--"}<span>{s.nextDay?.nextDayRank || "待觀察"}</span></div>
                               </td>
-                              <td style={{fontWeight:600}}>{s.nextDay?.gapUpProbability ?? "--"}%</td>
-                              <td><div className="scan-badge">{s.nextDay?.nextDaySignal || "觀望"}</div></td>
+                              <td style={{fontWeight:600,color: (s.nextDay?.gapUpProbability||0) >= 65 ? "#4ade80" : "#fbbf24"}}>{s.nextDay?.gapUpProbability ?? "--"}%</td>
                               <td className={s.changePct >= 0 ? "up" : "down"} style={{fontWeight:600}}>{s.changePct?.toFixed?.(2) ?? "--"}%</td>
                               <td style={{fontSize:11}}>{s.volumeRatio?.toFixed?.(2) ?? "--"}</td>
-                              <td className={s.nextDay?.fakeBreakout ? "down" : "up"} style={{fontSize:11,fontWeight:600}}>
-                                {s.nextDay?.fakeBreakout ? "有風險" : "通過"}
+                              <td>
+                                <div style={{fontSize:12,color:"#4ade80",fontWeight:600}}>{fmtVol(buyV)}</div>
+                                <div style={{fontSize:10,color:"#8ab4cc"}}>{buyPct}% 買方</div>
                               </td>
                               <td>
-                                <div className="condition-mini-list">
-                                  {adv.conditionTags.slice(0, 4).map((tag) => <span key={tag}>{tag}</span>)}
-                                </div>
+                                <div style={{fontSize:12,color:"#fb7185",fontWeight:600}}>{fmtVol(sellV)}</div>
+                                <div style={{fontSize:10,color:"#8ab4cc"}}>{100-buyPct}% 賣方</div>
                               </td>
+                              <td style={{fontSize:11,fontWeight:600,color:maPosColor}}>{maPos}</td>
+                              <td className={s.nextDay?.fakeBreakout ? "down" : "up"} style={{fontSize:11,fontWeight:600}}>
+                                {s.nextDay?.fakeBreakout ? "⚠ 風險" : "✓ 通過"}
+                              </td>
+                              <td><div className="scan-badge">{s.nextDay?.nextDaySignal || "觀望"}</div></td>
                               <td>
                                 <div className="scan-advice-main">開高 {adv.openHighProbability}% · 續強 {adv.continueProbability}%</div>
                                 <div className="scan-advice-risk">出貨風險 {adv.sellRisk}%</div>
-                                <div className="scan-advice-note">{adv.strategy}</div>
                               </td>
-                              <td style={{fontSize:11,color:"var(--color-text-secondary)"}}>{s.tags?.slice(0, 3).join("、") || s.volumeSignal?.title || "等待確認"}</td>
+                              <td style={{fontSize:11,color:"#cddae2"}}>{s.tags?.slice(0, 3).join("、") || s.volumeSignal?.title || "等待確認"}</td>
                             </tr>
                           );
                         })}
