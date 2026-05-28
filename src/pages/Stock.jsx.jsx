@@ -684,33 +684,6 @@ function buildKlineRadarSignal(stock) {
     radarScore >= 62 ? "B級追蹤" :
     bearishScore > bullishScore ? "風險優先" : "一般";
 
-  // ── 圖1形態學：目標價計算 ─────────────────────────────────────────────
-  // 根據形態學「整理區有多高，突破後通常就有機會走同樣距離」
-  const highs = (stock?.history || []).map(x => x.high).filter(Number.isFinite);
-  const lows  = (stock?.history || []).map(x => x.low).filter(Number.isFinite);
-  const recentHigh20 = highs.length >= 20 ? Math.max(...highs.slice(-20)) : 0;
-  const recentLow20  = lows.length  >= 20 ? Math.min(...lows.slice(-20))  : 0;
-  const patternHeight = recentHigh20 - recentLow20;
-
-  // 突破方向目標價（圖1核心公式）
-  const breakoutTargetUp   = recentHigh20 > 0 ? +(recentHigh20 + patternHeight).toFixed(2) : null;
-  const breakoutTargetDown = recentLow20  > 0 ? +(recentLow20  - patternHeight).toFixed(2) : null;
-
-  // 旗形/三角形目標（旗桿高度 = 近40根最高 - 起漲低點）
-  const flagpoleHigh  = highs.length >= 40 ? Math.max(...highs.slice(-40)) : recentHigh20;
-  const flagpoleLow   = lows.length  >= 40 ? Math.min(...lows.slice(-20))  : recentLow20;
-  const flagpoleH     = flagpoleHigh - flagpoleLow;
-  const flagTarget    = recentHigh20 > 0 ? +(recentHigh20 + flagpoleH).toFixed(2) : null;
-
-  // 量能確認等級（圖1量能判斷表）
-  const volConfirmLevel =
-    volumeRatio >= 2.0 ? "強（突破確認）" :
-    volumeRatio >= 1.5 ? "正常（有效）"   :
-    volumeRatio >= 1.0 ? "弱（需謹慎）"   : "縮量（易失敗）";
-
-  // 主要形態識別
-  const primaryPattern = bullishSignals[0]?.signalName || bearishSignals[0]?.signalName || "無明確型態";
-
   return {
     radarScore,
     radarLevel,
@@ -727,17 +700,10 @@ function buildKlineRadarSignal(stock) {
       ...bullishSignals.slice(0, 2).map((s) => s.description),
       ...bearishSignals.slice(0, 2).map((s) => s.description),
     ].filter(Boolean),
-    candleTitle: primaryPattern,
+    candleTitle: bullishSignals[0]?.signalName || bearishSignals[0]?.signalName || stock?.candlePattern?.title || "未觸發明確型態",
     volumeTitle: volumeRatio >= 1.5 ? `成交量放大 ${volumeRatio.toFixed(2)}倍` : stock?.volumeSignal?.title || "量能一般",
     trendPosition,
     nearBreakout: nearHigh,
-    // 圖1形態學新增欄位
-    breakoutTargetUp,
-    breakoutTargetDown,
-    flagTarget,
-    patternHeight: +patternHeight.toFixed(2),
-    volConfirmLevel,
-    primaryPattern,
   };
 }
 
@@ -754,9 +720,6 @@ function calcRecent3DayStrength(stock) {
       recent3DayChange: 0,
       recent3DayVolumeRatio: stock?.volumeRatio || 0,
       recent3DayType: "資料不足",
-      maPattern: "",
-      volumePattern: "",
-      entrySignal: "",
     };
   }
 
@@ -764,57 +727,19 @@ function calcRecent3DayStrength(stock) {
     ? ((latest.close - base.close) / base.close) * 100
     : 0;
 
-  const avg3Volume = last3.reduce((sum, x) => sum + (x.volume || 0), 0) / last3.length;
+  const avg3Volume =
+    last3.reduce((sum, x) => sum + (x.volume || 0), 0) / last3.length;
+
   const prev20 = history.slice(-24, -4);
   const avg20Volume = prev20.length
     ? prev20.reduce((sum, x) => sum + (x.volume || 0), 0) / prev20.length
     : avg3Volume || 1;
 
   const recent3DayVolumeRatio = avg20Volume ? avg3Volume / avg20Volume : 0;
-  const closeNearHigh = latest.high && latest.close
-    ? ((latest.high - latest.close) / latest.close) * 100 : 999;
-
-  // ── 圖2：均線形態判斷 ─────────────────────────────────────────────────
-  const ma5 = stock.ma5 || 0;
-  const ma20 = stock.ma20 || 0;
-  const ma60 = stock.ma60 || 0;
-  const close = stock.close || latest.close || 0;
-
-  // 均線多頭排列（圖2核心：MA5 > MA20 > MA60）
-  const maFullBull = ma5 > ma20 && ma20 > ma60 && close > ma5;
-  // 20日線止跌看反彈（圖2邏輯5）
-  const nearMA20 = ma20 > 0 && Math.abs(close - ma20) / ma20 < 0.02;
-  // 60日線不穿不進（圖2邏輯6）
-  const aboveMA60 = close > ma60;
-  // 5日線不跌破續抱（圖2邏輯7）
-  const aboveMA5 = close > ma5;
-  // 線上縮量陰進場（圖2邏輯2）
-  const shrinkVolOnSupport = close > ma20 && recent3DayVolumeRatio < 1.0 && recent3DayChange > -2 && recent3DayChange < 2;
-
-  // 均線形態標籤
-  let maPattern = "";
-  if (maFullBull) maPattern = "均線多頭排列";
-  else if (close > ma20 && ma5 > ma20) maPattern = "站上MA20";
-  else if (nearMA20 && close > ma20) maPattern = "MA20止跌支撐";
-  else if (close < ma60) maPattern = "60日線下方";
-  else if (close < ma20) maPattern = "MA20壓力";
-
-  // 量能形態標籤（圖2邏輯）
-  let volumePattern = "";
-  if (shrinkVolOnSupport) volumePattern = "縮量回踩（健康回測）";
-  else if (recent3DayVolumeRatio >= 2.0) volumePattern = "爆量突破";
-  else if (recent3DayVolumeRatio >= 1.5) volumePattern = "放量強攻";
-  else if (recent3DayVolumeRatio >= 1.2) volumePattern = "量增趨勢";
-  else if (recent3DayVolumeRatio < 0.7) volumePattern = "縮量整理";
-
-  // 進場訊號（圖2 每日SOP）
-  let entrySignal = "";
-  if (maFullBull && recent3DayVolumeRatio >= 1.5) entrySignal = "▲ 放量突破，強烈進場";
-  else if (maFullBull && shrinkVolOnSupport) entrySignal = "↩ 縮量回踩，低風險買點";
-  else if (nearMA20 && recent3DayVolumeRatio >= 1.0) entrySignal = "↗ MA20止跌反彈，觀察";
-  else if (close < ma60) entrySignal = "✗ 60日線下，不輕易進場";
-  else if (close < ma20) entrySignal = "⚠ MA20壓力，等突破";
-  else entrySignal = "→ 觀察量能變化";
+  const closeNearHigh =
+    latest.high && latest.close
+      ? ((latest.high - latest.close) / latest.close) * 100
+      : 999;
 
   let recent3DayScore = 0;
   if (recent3DayChange >= 3) recent3DayScore += 30;
@@ -824,16 +749,11 @@ function calcRecent3DayStrength(stock) {
   if (recent3DayVolumeRatio >= 2) recent3DayScore += 20;
   if (closeNearHigh <= 1.2) recent3DayScore += 15;
   if ((stock.score || 0) >= 70) recent3DayScore += 15;
-  // 圖2加分
-  if (maFullBull) recent3DayScore += 20;
-  if (shrinkVolOnSupport) recent3DayScore += 10;
-  if (aboveMA60 && aboveMA5) recent3DayScore += 10;
 
   let recent3DayType = "近3日觀察";
   if (recent3DayChange >= 6 && recent3DayVolumeRatio >= 1.5) recent3DayType = "近3日爆量強勢";
   else if (recent3DayChange >= 6) recent3DayType = "近3日漲幅強勢";
   else if (recent3DayVolumeRatio >= 1.5) recent3DayType = "近3日量能強勢";
-  else if (maFullBull && shrinkVolOnSupport) recent3DayType = "縮量健康回踩";
   else if ((stock.score || 0) >= 80) recent3DayType = "AI強勢";
 
   return {
@@ -841,13 +761,10 @@ function calcRecent3DayStrength(stock) {
     recent3DayChange,
     recent3DayVolumeRatio,
     recent3DayType,
-    maPattern,
-    volumePattern,
-    entrySignal,
   };
 }
 
-// ── 買賣量格式化 helper ────────────────────────────────────────────────────
+// ── 買賣量格式化 ──────────────────────────────────────────────────────────
 function fmtVol(v) {
   if (!v || !Number.isFinite(v)) return "--";
   if (v >= 1e8) return (v / 1e8).toFixed(1) + "億";
@@ -1627,19 +1544,14 @@ function analyzeStock(stock) {
     })
   );
 
-  // ── 買賣量估算（收盤當日，圖1量能確認依據）──────────────────────────
-  // Yahoo Finance 不提供精確買/賣量，依K棒收尾位置做估算
-  const todayVolume = latest?.volume || 0;
+  // 買賣量估算（依收盤位置）
+  const todayVol = latest?.volume || 0;
   let buyVolume = 0, sellVolume = 0;
-  if (latest && todayVolume > 0) {
-    const lHigh = latest.high || close;
-    const lLow  = latest.low  || close;
-    const lOpen = latest.open || close;
-    const lRange = lHigh - lLow;
-    // 收盤強弱比（收盤偏高 → 買方主導，偏低 → 賣方主導）
-    const closeRatio = lRange > 0 ? (close - lLow) / lRange : 0.5;
-    buyVolume  = Math.round(todayVolume * closeRatio);
-    sellVolume = todayVolume - buyVolume;
+  if (latest && todayVol > 0) {
+    const lHigh = latest.high || close, lLow = latest.low || close, lOpen = latest.open || close;
+    const closeRatio = (lHigh - lLow) > 0 ? (close - lLow) / (lHigh - lLow) : 0.5;
+    buyVolume = Math.round(todayVol * closeRatio);
+    sellVolume = todayVol - buyVolume;
   }
 
   return {
@@ -1774,8 +1686,6 @@ function calcNextDayScore(stock) {
   const close = cleanNumber(stock.close) || 0;
   const prevClose = cleanNumber(stock.prevClose) || 0;
   const high = cleanNumber(stock.high) || 0;
-  const low = cleanNumber(stock.low) || 0;
-  const open = cleanNumber(stock.open) || 0;
   const volume = cleanNumber(stock.volume) || 0;
   const avgVolume5 = cleanNumber(stock.avgVolume5) || 1;
   const highest5 = cleanNumber(stock.highest5) || 0;
@@ -1795,52 +1705,27 @@ function calcNextDayScore(stock) {
   const changePercent = prevClose ? ((close - prevClose) / prevClose) * 100 : 0;
   const volumeRatio = avgVolume5 ? volume / avgVolume5 : 0;
   const closeToHigh = close ? ((high - close) / close) * 100 : 999;
-  const range = high - low;
-  const body = Math.abs(close - open);
-  const upperShadow = high - Math.max(close, open);
 
-  // ── 基本動能 ───────────────────────────────────────────────────────────
   if (changePercent >= 3) score += 15;
   if (changePercent >= 5) score += 25;
 
-  // ── 量能（圖2量能確認） ────────────────────────────────────────────────
   if (volumeRatio >= 1.5) score += 15;
   if (volumeRatio >= 2) score += 25;
   if (volumeRatio >= 3) score += 35;
 
-  // ── 收盤位置（圖1收近高點確認有效突破） ────────────────────────────────
   if (closeToHigh <= 1) score += 20;
   if (closeToHigh <= 0.5) score += 30;
 
-  // ── 突破條件（圖1形態學） ─────────────────────────────────────────────
   if (close > highest5) score += 25;
   if (close > highest20) score += 40;
 
-  // ── 圖2均線多頭排列（均線方向 + 股價位置） ───────────────────────────
-  if (ma5 > ma20 && ma20 > ma60) score += 30;         // 完整多頭排列
-  if (close > ma5 && ma5 > ma20) score += 15;          // 站上MA5且短均多頭
-  if (close > ma20) score += 10;                        // 站上20日線
-  if (close > ma60) score += 8;                         // 60日線上方
-
-  // ── RSI、MACD ──────────────────────────────────────────────────────────
+  if (ma5 > ma20 && ma20 > ma60) score += 30;
   if (rsi >= 55 && rsi <= 75) score += 15;
   if (macd > macdSignal) score += 15;
-
-  // ── 籌碼 ──────────────────────────────────────────────────────────────
   if (institutionalTotal > 0) score += 20;
   if (marketIndexChange > -1) score += 10;
 
-  // ── 圖2 K棒形態（線上縮量小陰進場） ───────────────────────────────────
-  const isBlackCandle = close < open;
-  const shrinkVol = volumeRatio < 0.9;
-  if (close > ma20 && isBlackCandle && shrinkVol) score += 15; // 縮量陰線回踩
-
-  // ── 圖1 假突破陷阱（重扣分） ──────────────────────────────────────────
   if (detectFakeBreakoutForNextDay(stock)) score -= 50;
-  // 上影線過長（圖1假突破特徵：量大但收盤回落）
-  if (upperShadow > body * 2 && volumeRatio >= 1.5) score -= 30;
-  // 爆量收黑（圖1出貨訊號）
-  if (isBlackCandle && volumeRatio >= 2.5) score -= 25;
 
   return Math.max(0, Math.round(score));
 }
@@ -2687,76 +2572,36 @@ useEffect(() => {
   // 股票名稱改由 stockUniverse / Yahoo K線資料流程處理。
 }, []);
 
-  // ── 發說會頁面 state ─────────────────────────────────────────────
+// ── 發說會 state ─────────────────────────────────────────────────────────
   const [corpEventQuery, setCorpEventQuery] = useState("");
   const [corpEventType, setCorpEventType] = useState("all");
   const [corpEventLoading, setCorpEventLoading] = useState(false);
   const [corpEventResults, setCorpEventResults] = useState(null);
   const [corpEventError, setCorpEventError] = useState("");
 
-  async function searchCorpEvents(overrideQuery) {
-    const q = (overrideQuery !== undefined ? overrideQuery : corpEventQuery).trim();
+  async function searchCorpEvents(oq) {
+    const q = (oq !== undefined ? oq : corpEventQuery).trim();
     if (!q) { setCorpEventError("請輸入股票代號或公司名稱"); return; }
-    setCorpEventLoading(true);
-    setCorpEventError("");
-    setCorpEventResults(null);
+    setCorpEventLoading(true); setCorpEventError(""); setCorpEventResults(null);
     try {
-      const matchedStock = reportUniverse.find(s =>
-        s.symbol === q || s.name === q || s.name.includes(q) || q.includes(s.symbol)
-      );
-      const sym = matchedStock ? matchedStock.symbol : q.replace(/\.(TW|TWO)$/i, "");
-      const compName = matchedStock ? matchedStock.name : q;
-      const [confRes, divRes] = await Promise.allSettled([
-        fetchConferences(sym, compName),
-        fetchDividends(sym, compName),
-      ]);
-      setCorpEventResults({
-        conferences: confRes.status === "fulfilled" ? confRes.value : [],
-        dividends: divRes.status === "fulfilled" ? divRes.value : [],
-      });
-    } catch (e) {
-      setCorpEventError("搜尋失敗：" + (e.message || "未知錯誤"));
-    } finally {
-      setCorpEventLoading(false);
-    }
+      const ms = reportUniverse.find(s => s.symbol === q || s.name === q || s.name.includes(q) || q.includes(s.symbol));
+      const sym = ms ? ms.symbol : q.replace(/\.(TW|TWO)$/i, "");
+      const nm = ms ? ms.name : q;
+      const [cr, dr] = await Promise.allSettled([fetchConferences(sym, nm), fetchDividends(sym, nm)]);
+      setCorpEventResults({ conferences: cr.status==="fulfilled"?cr.value:[], dividends: dr.status==="fulfilled"?dr.value:[] });
+    } catch(e) { setCorpEventError("搜尋失敗："+(e.message||"未知")); }
+    finally { setCorpEventLoading(false); }
+  }
+  async function fetchConferences(sym, nm) {
+    try { const r=await fetch(API_BASE+"/api/conferences/"+encodeURIComponent(sym)); if(!r.ok)throw new Error("err"); const d=await r.json(); return d&&d.conferences?d.conferences:[]; }
+    catch { const nd=newsData[sym+".TW"]||newsData[sym]; if(nd&&nd.articles) return nd.articles.filter(a=>a.title&&(a.title.includes("法說")||a.title.includes("說明會"))).slice(0,8).map(a=>{const t=a.providerPublishTime?new Date(a.providerPublishTime*1000):null;const ds=t?t.toLocaleDateString("zh-TW"):"--";return{symbol:sym,name:nm,date:ds,location:"線上/實體",summary:a.title,announcedAt:ds};}); return []; }
+  }
+  async function fetchDividends(sym) {
+    try { const r=await fetch(API_BASE+"/api/dividends/"+encodeURIComponent(sym)); if(!r.ok)throw new Error("err"); const d=await r.json(); return d&&d.dividends?d.dividends:[]; }
+    catch { return []; }
   }
 
-  async function fetchConferences(sym, compName) {
-    try {
-      const r = await fetch(API_BASE + "/api/conferences/" + encodeURIComponent(sym));
-      if (!r.ok) throw new Error("HTTP " + r.status);
-      const data = await r.json();
-      if (data && data.error) throw new Error(data.error);
-      return (data && data.conferences) ? data.conferences : [];
-    } catch {
-      const nd = newsData[sym + ".TW"] || newsData[sym];
-      if (nd && nd.articles && nd.articles.length) {
-        return nd.articles
-          .filter(a => a.title && (a.title.includes("法說") || a.title.includes("說明會")))
-          .slice(0, 8)
-          .map(a => {
-            const t = a.providerPublishTime ? new Date(a.providerPublishTime * 1000) : null;
-            const dateStr = t ? t.toLocaleDateString("zh-TW") : "--";
-            return { symbol: sym, name: compName, date: dateStr, location: "線上 / 實體", summary: a.title, announcedAt: dateStr };
-          });
-      }
-      return [];
-    }
-  }
-
-  async function fetchDividends(sym, compName) {
-    try {
-      const r = await fetch(API_BASE + "/api/dividends/" + encodeURIComponent(sym));
-      if (!r.ok) throw new Error("HTTP " + r.status);
-      const data = await r.json();
-      if (data && data.error) throw new Error(data.error);
-      return (data && data.dividends) ? data.dividends : [];
-    } catch {
-      return [];
-    }
-  }
-
-const [watchText, setWatchText] = useState(() => {
+  const [watchText, setWatchText] = useState(() => {
   const savedWatchText = localStorage.getItem("stockRadarWatchText");
 
   if (savedWatchText && savedWatchText.trim()) {
@@ -2975,7 +2820,6 @@ const [watchText, setWatchText] = useState(() => {
 
   useEffect(() => {
     setFavoritePickerStock(null);
-    setFavoritePickerPos(null);
   }, [stock?.symbol, activeMenu]);
 
 
@@ -4936,7 +4780,7 @@ const [watchText, setWatchText] = useState(() => {
         @media (max-width: 1100px) { .kline-radar-hero { grid-template-columns: repeat(2, minmax(0,1fr)); } }
         @media (max-width: 720px) { .kline-radar-hero { grid-template-columns: 1fr; } }
         .content { padding: 12px 16px; margin-left: clamp(130px, 12vw, 170px); min-width: 0; box-sizing: border-box; }
-        .top-bar { position: relative; display: grid; grid-template-columns: minmax(180px, 240px) 1fr minmax(280px, 360px); align-items: center; gap: 12px; margin-bottom: 14px; min-height: 80px; }
+        .top-bar { position: relative; display: flex; align-items: center; gap: 16px; margin-bottom: 14px; min-height: 64px; }
         .floating-header { /* no shadow */
           position: sticky;
           top: 0;
@@ -4960,26 +4804,16 @@ const [watchText, setWatchText] = useState(() => {
           background: linear-gradient(90deg, transparent, rgba(14,165,233,.20), transparent);
           pointer-events: none;
         }
-        .top-back-btn { height: 44px; border-radius: 10px; background: rgba(10,24,44,.90); color: #cddae2; border: 1px solid rgba(14,165,233,.18); font-size: 13px; font-weight: 600; box-shadow: none; padding: 0 16px; }
+        .top-back-btn { height: 44px; border-radius: 10px; background: rgba(10,24,44,.90); color: #cddae2; border: 1px solid rgba(14,165,233,.18); font-size: 13px; font-weight: 600; box-shadow: none; padding: 0 16px; flex-shrink: 0; white-space: nowrap; }
         .top-back-btn:hover { background: rgba(14,165,233,.12); border-color: rgba(14,165,233,.35); color: #38bdf8; }
-        .top-title { text-align: center; justify-self: center; }
-        .top-title h1 { font-size: clamp(20px, 2.5vw, 32px); letter-spacing: 2px; font-weight: 900; }
+        .top-title { text-align: center; flex: 1; min-width: 0; }
+        .top-title h1 { font-size: clamp(18px, 2.2vw, 30px); letter-spacing: 2px; font-weight: 900; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .top-title p { color: #cddae2; font-size: 13px; margin: 8px 0 0; white-space: nowrap; }
-        .top-stats { display: flex; gap: 12px; align-items: center; justify-content: flex-end; }
-        .mini-stat { min-width: 80px; background: rgba(14,165,233,.06); border: 1px solid rgba(14,165,233,.14); border-radius: 8px; padding: 8px 12px; text-align: center; }
-        .mini-stat span { color: #a0b8cc; font-size: 10px; letter-spacing: .04em; }
-        .mini-stat b { display: block; font-size: 20px; margin-top: 5px; }
         @media (max-width: 1280px) {
-          .top-bar { grid-template-columns: 1fr; min-height: auto; gap: 8px; }
-          .top-title { order: -1; }
           .top-title p { white-space: normal; }
-          .top-stats { justify-content: center; flex-wrap: wrap; }
-          .top-back-btn { width: 100%; }
         }
         @media (max-width: 600px) {
-          .top-stats { gap: 6px; }
-          .mini-stat { min-width: 70px; padding: 6px 8px; }
-          .mini-stat b { font-size: 16px; }
+          /* mobile tweaks */
         }
         .card { background: rgba(12,28,50,.88); border: 1px solid rgba(14,165,233,.16); border-radius: 14px; box-shadow: 0 14px 36px rgba(0,0,0,.28); padding: 12px; }
         .favorite-action { background: linear-gradient(135deg, #0ea5e9, #0284c7); color: #031220; }
@@ -5363,8 +5197,7 @@ const [watchText, setWatchText] = useState(() => {
         .scan-empty { padding: 60px 24px; text-align: center; color: #a0b8cc; font-size: 13px; }
         .scan-table-wrap {
           overflow-x: auto;
-          overflow-y: auto;
-          max-height: clamp(300px, calc(100vh - 200px), 80vh);
+          overflow-y: visible;
           -webkit-overflow-scrolling: touch;
         }
 
@@ -5381,8 +5214,7 @@ const [watchText, setWatchText] = useState(() => {
         .scan-row:last-child td { border-bottom: none; }
         .scan-table-wrap {
           overflow-x: auto;
-          overflow-y: auto;
-          max-height: clamp(300px, calc(100vh - 200px), 80vh);
+          overflow-y: visible;
           -webkit-overflow-scrolling: touch;
         }
 
@@ -5509,28 +5341,7 @@ const [watchText, setWatchText] = useState(() => {
 
 
 
-        /* ── 發說會頁面 CSS ────────────────────────────────────────── */
-        .corp-event-header { display: flex; align-items: baseline; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
-        .corp-search-row { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
-        .corp-search-input { flex: 1; min-width: 200px; background: rgba(6,14,26,.80); border: 1px solid rgba(14,165,233,.25); border-radius: 8px; padding: 9px 12px; color: #f1f5f9; font-size: 14px; }
-        .corp-search-input:focus { outline: none; border-color: rgba(14,165,233,.55); }
-        .corp-type-select { background: rgba(6,14,26,.80); border: 1px solid rgba(14,165,233,.20); border-radius: 8px; padding: 9px 10px; color: #cddae2; font-size: 13px; }
-        .corp-search-btn { background: rgba(14,165,233,.20); border: 1px solid rgba(14,165,233,.40); color: #38bdf8; padding: 9px 18px; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer; }
-        .corp-search-btn:hover { background: rgba(14,165,233,.32); }
-        .corp-search-btn:disabled { opacity: .5; cursor: not-allowed; }
-        .corp-quick-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
-        .corp-quick-tag { background: rgba(14,165,233,.07); border: 1px solid rgba(14,165,233,.18); color: #7dd3fc; padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: 700; cursor: pointer; }
-        .corp-quick-tag:hover { background: rgba(14,165,233,.16); }
-        .corp-section { margin-top: 10px; }
-        .corp-section-title { font-size: 13px; font-weight: 700; color: #38bdf8; letter-spacing: .05em; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid rgba(14,165,233,.14); }
-        .corp-intro-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 20px; }
-        @media (max-width: 800px) { .corp-intro-grid { grid-template-columns: 1fr; } }
-        .corp-intro-card { background: rgba(6,14,26,.60); border: 1px solid rgba(14,165,233,.14); border-radius: 12px; padding: 20px 16px; text-align: center; }
-        .corp-intro-icon { font-size: 32px; margin-bottom: 10px; }
-        .corp-intro-title { font-size: 15px; font-weight: 700; color: #f1f5f9; margin-bottom: 8px; }
-        .corp-intro-desc { font-size: 12px; color: #adc4d4; line-height: 1.6; }
-
-                .score-main { background: linear-gradient(135deg, rgba(14,165,233,.18), rgba(3,105,161,.14)); border: 1px solid rgba(14,165,233,.25); border-radius: 10px; padding: 14px; text-align: center; margin-bottom: 10px; }
+        .score-main { background: linear-gradient(135deg, rgba(14,165,233,.18), rgba(3,105,161,.14)); border: 1px solid rgba(14,165,233,.25); border-radius: 10px; padding: 14px; text-align: center; margin-bottom: 10px; }
         .score-main b { display: block; font-size: 42px; line-height: 1; font-weight: 800; color: #38bdf8; }
         .score-main span { color: #7dd3fc; font-size: 13px; }
         .metric-grid {
@@ -5603,7 +5414,7 @@ const [watchText, setWatchText] = useState(() => {
         .error { color: #fecaca; background: rgba(127,29,29,.4); padding: 10px; border-radius: 12px; margin-top: 12px; }
         .up { color: #fb7185 !important; }
         .down { color: #34d399 !important; }
-        .price, .selected-panel .price, .top-stats b { color: #f8fafc; }
+        .price, .selected-panel .price { color: #f8fafc; }
                 .up,
         b.up,
         td.up,
@@ -5714,16 +5525,7 @@ const [watchText, setWatchText] = useState(() => {
               <p>追蹤台股、美股與 ETF，整合 AI 分數、K線、量價與進出場提示。</p>
             </div>
 
-            <div className="top-stats">
-              <div className="mini-stat"><span>目前標的</span><b>{stock?.symbol || query}</b></div>
-              <div className="mini-stat">
-                <span>現價</span>
-                <b className={fugleLivePrice ? (fugleLivePrice.changePercent >= 0 ? "up" : "down") : ""}>
-                  {fugleLivePrice ? fugleLivePrice.price?.toFixed?.(2) : (stock?.close?.toFixed?.(2) ?? "--")}
-                </b>
-              </div>
-              <div className="mini-stat"><span>AI分數</span><b>{stock?.score ?? "--"}</b></div>
-            </div>
+{/* 右上角三格已移除 */}
           </header>
 
           {activeMenu === "analysis" && (
@@ -6244,8 +6046,7 @@ const [watchText, setWatchText] = useState(() => {
                             <button className="ghost small" onClick={(e) => {
                               e.stopPropagation();
                               if (favoritePickerStock?.symbol === s.symbol) {
-                                setFavoritePickerStock(null);
-                                setFavoritePickerPos(null);
+                                setFavoritePickerStock(null); setFavoritePickerPos(null);
                               } else {
                                 const rect = e.currentTarget.getBoundingClientRect();
                                 setFavoritePickerPos({ top: rect.bottom + 4, left: rect.left });
@@ -6253,9 +6054,7 @@ const [watchText, setWatchText] = useState(() => {
                               }
                             }}>收藏</button>
                             {favoritePickerStock && favoritePickerStock.symbol === s.symbol && favoritePickerPos && (
-                              <div className="favorite-picker"
-                                style={{ top: favoritePickerPos.top, left: favoritePickerPos.left }}
-                                onClick={(e) => e.stopPropagation()}>
+                              <div className="favorite-picker" style={{ top: favoritePickerPos.top, left: favoritePickerPos.left }} onClick={(e) => e.stopPropagation()}>
                                 {FAVORITE_GROUPS.map((group) => (
                                   <button key={group} onClick={() => { addFavorite(s, group); setFavoritePickerStock(null); setFavoritePickerPos(null); }}>
                                     ＋ 收藏到 {group}
@@ -6279,64 +6078,36 @@ const [watchText, setWatchText] = useState(() => {
 
               {/* 左側篩選面板 */}
               <div className="scan-sidebar">
-                <div className="scan-sidebar-title">🚨 強勢掃描</div>
-                <p className="scan-sidebar-desc">依近3日漲幅、量能與AI分數掃描上市/上櫃強勢股前50檔</p>
-
-                <div className="scan-stat-grid">
-                  <div className="scan-stat">
-                    <div className="scan-stat-label">強勢候選</div>
-                    <div className="scan-stat-val">{filteredSystemStrongList.length}</div>
-                    <div className="scan-stat-sub">近3日強勢</div>
-                  </div>
-                  <div className="scan-stat">
-                    <div className="scan-stat-label">S級強勢</div>
-                    <div className="scan-stat-val">{filteredSystemStrongList.filter(s => (s.recent3DayScore||0) >= 120).length}</div>
-                    <div className="scan-stat-sub">最強動能</div>
-                  </div>
-                  <div className="scan-stat">
-                    <div className="scan-stat-label">爆量強勢</div>
-                    <div className="scan-stat-val">{filteredSystemStrongList.filter(s => (s.volumeRatio||0) >= 2).length}</div>
-                    <div className="scan-stat-sub">量能放大</div>
-                  </div>
-                  <div className="scan-stat">
-                    <div className="scan-stat-label">BUY訊號</div>
-                    <div className="scan-stat-val">{filteredSystemStrongList.filter(s => s.tradeSignal?.action === "BUY").length}</div>
-                    <div className="scan-stat-sub">建議進場</div>
-                  </div>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",borderBottom:"1px solid rgba(14,165,233,.12)",paddingBottom:8}}>
+                  <div style={{fontSize:13,fontWeight:800,color:"#f1f5f9"}}>🚨 強勢掃描</div>
+                  <div style={{fontSize:11,color:"#38bdf8",fontWeight:700}}>{filteredSystemStrongList.length} 檔</div>
                 </div>
-
-                <div className="scan-sidebar-section">產業篩選</div>
-                <select value={strongCategory} onChange={(e) => setStrongCategory(e.target.value)} className="scan-select">
-                  {strongCategoryOptions.map((item) => (
-                    <option key={item} value={item}>{item}</option>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:5}}>
+                  {[{val:filteredSystemStrongList.length,label:"候選",c:"#38bdf8"},{val:filteredSystemStrongList.filter(s=>s.tradeSignal?.action==="BUY").length,label:"BUY",c:"#4ade80"},{val:filteredSystemStrongList.filter(s=>Math.min(s.recent3DayScore||0,100)>=80).length,label:"極強",c:"#fbbf24"},{val:filteredSystemStrongList.filter(s=>(s.volumeRatio||0)>=2).length,label:"爆量",c:"#fb7185"}].map(({val,label,c})=>(
+                    <div key={label} style={{background:"rgba(14,165,233,.06)",border:"1px solid rgba(14,165,233,.12)",borderRadius:8,padding:"7px 5px",textAlign:"center"}}>
+                      <div style={{fontSize:20,fontWeight:800,color:c,lineHeight:1}}>{val}</div>
+                      <div style={{fontSize:10,color:"#6b8fa8",marginTop:2}}>{label}</div>
+                    </div>
                   ))}
-                </select>
-
-                <div className="scan-sidebar-section">系統條件</div>
-                <div className="scan-criteria-list">
-                  <div className="scan-criteria-item">均線多頭排列（MA5＞MA20＞MA60）</div>
-                  <div className="scan-criteria-item">近3日漲幅 + 強度評分</div>
-                  <div className="scan-criteria-item">縮量回踩 = 低風險買點</div>
-                  <div className="scan-criteria-item">放量突破 = 強烈進場</div>
-                  <div className="scan-criteria-item">60日線下方不輕易進場</div>
                 </div>
-
-                <div style={{margin:"8px 0",padding:"8px 10px",background:"rgba(14,165,233,.07)",borderRadius:8,border:"1px solid rgba(14,165,233,.14)"}}>
-                  <div style={{fontSize:11,color:"#38bdf8",fontWeight:700,marginBottom:6}}>📗 均線秘訣</div>
-                  <div style={{fontSize:11,color:"#cddae2",lineHeight:1.7}}>
-                    黏 = 均線黏合等發散<br/>
-                    踩 = 突破後等回踩<br/>
-                    縮 = 線上縮量是好事<br/>
-                    抱 = 5日線不破續抱<br/>
-                    破 = 跌破均線要小心<br/>
-                    量 = 線下爆量不一定好<br/>
-                    下 = 60日線下偏空<br/>
-                    跑 = 量能轉弱要出場
+                <div>
+                  <div style={{fontSize:10,fontWeight:700,color:"#6b8fa8",letterSpacing:".06em",marginBottom:5}}>產業篩選</div>
+                  <select value={strongCategory} onChange={(e)=>setStrongCategory(e.target.value)} className="scan-select" style={{width:"100%",fontSize:12}}>
+                    {strongCategoryOptions.map((item)=>(<option key={item} value={item}>{item}</option>))}
+                  </select>
+                </div>
+                <details>
+                  <summary style={{cursor:"pointer",fontSize:11,fontWeight:700,color:"#6b8fa8",listStyle:"none",display:"flex",justifyContent:"space-between",padding:"4px 0",userSelect:"none"}}>
+                    <span>📋 篩選條件</span><span>▼</span>
+                  </summary>
+                  <div style={{marginTop:6,display:"flex",flexDirection:"column",gap:3}}>
+                    {["均線多頭排列","近3日漲幅+強度","縮量回踩低風險","放量突破強進場","60日線下不輕易進"].map(t=>(
+                      <div key={t} style={{fontSize:11,color:"#adc4d4",padding:"3px 6px",background:"rgba(14,165,233,.05)",borderRadius:4,borderLeft:"2px solid rgba(14,165,233,.2)"}}>{t}</div>
+                    ))}
                   </div>
-                </div>
-
+                </details>
                 <button onClick={scanSystemStrongStocks} disabled={systemStrongLoading} className="scan-btn">
-                  {systemStrongLoading ? "掃描中..." : "重新掃描"}
+                  {systemStrongLoading?"掃描中...":"🔄 重新掃描"}
                 </button>
               </div>
 
@@ -6351,82 +6122,92 @@ const [watchText, setWatchText] = useState(() => {
                     <table className="scan-table">
                       <thead>
                         <tr>
-                          <th style={{width:36}}>#</th>
-                          <th style={{minWidth:150}}>股票</th>
-                          <th style={{width:100}}>主要型態</th>
-                          <th style={{width:70}}>雷達分數</th>
-                          <th style={{width:90}}>市場結構</th>
-                          <th style={{width:60}}>量比</th>
-                          <th style={{width:110,color:"#4ade80"}}>買量（估）</th>
-                          <th style={{width:110,color:"#fb7185"}}>賣量（估）</th>
-                          <th style={{width:80}}>量能確認</th>
-                          <th style={{width:90}}>突破目標▲</th>
-                          <th style={{width:90}}>跌破目標▼</th>
-                          <th style={{width:80}}>多頭訊號</th>
-                          <th style={{width:80}}>空頭訊號</th>
-                          <th style={{minWidth:120}}>建議</th>
+                          <th style={{width:36,textAlign:"center"}}>#</th>
+                          <th style={{minWidth:160}}>股票</th>
+                          <th style={{width:90,textAlign:"center"}}>強度/100</th>
+                          <th style={{width:90,textAlign:"right"}}>近3日漲幅</th>
+                          <th style={{width:120}}>量能</th>
+                          <th style={{width:100}}>均線形態</th>
+                          <th style={{width:80,textAlign:"center"}}>訊號</th>
+                          <th style={{minWidth:150}}>進場提示</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {sortedKlineRadarList.map((s, i) => {
+                        {filteredSystemStrongList.map((s, i) => {
                           const adv = buildAutoTradeAdvice(s);
                           const buyV = s.buyVolume ?? 0;
                           const sellV = s.sellVolume ?? 0;
-                          const totalV = buyV + sellV;
-                          const buyPct = totalV > 0 ? Math.round(buyV / totalV * 100) : 50;
-                          const isBull = (s.bullishSignals?.length || 0) >= (s.bearishSignals?.length || 0);
+                          const totalV = buyV + sellV || 1;
+                          const buyPct = Math.round(buyV / totalV * 100);
+                          const score100 = Math.min(s.recent3DayScore ?? 0, 100);
+                          const scoreColor = score100 >= 80 ? "#4ade80" : score100 >= 60 ? "#38bdf8" : score100 >= 40 ? "#fbbf24" : "#fb7185";
+                          const scoreBand = score100 >= 80 ? "極強" : score100 >= 60 ? "強勢" : score100 >= 40 ? "普通" : "偏弱";
+                          const maColor = (s.maPattern||"").includes("多頭") ? "#4ade80" : (s.maPattern||"").includes("壓力")||(s.maPattern||"").includes("下方") ? "#fb7185" : "#fbbf24";
+                          let scanAction = "WATCH", scanTone = "hold";
+                          if ((s.maPattern||"").includes("多頭") && (s.volumeRatio||0) >= 1.5) { scanAction="BUY"; scanTone="buy"; }
+                          else if ((s.maPattern||"").includes("多頭") || (s.maPattern||"").includes("MA20")) { scanAction="HOLD"; scanTone="hold"; }
+                          else if ((s.maPattern||"").includes("壓力") || (s.maPattern||"").includes("下方")) { scanAction="CAUTION"; scanTone="sell"; }
+                          let hint = "", hintColor = "#6b8fa8";
+                          if ((s.entrySignal||"").includes("▲")) { hint="放量突破，可積極進場"; hintColor="#4ade80"; }
+                          else if ((s.entrySignal||"").includes("↩")) { hint="縮量回踩，低風險買點"; hintColor="#38bdf8"; }
+                          else if ((s.entrySignal||"").includes("↗")) { hint="MA20止跌反彈"; hintColor="#fbbf24"; }
+                          else if ((s.entrySignal||"").includes("✗")) { hint="60日線下，暫不進場"; hintColor="#fb7185"; }
+                          else if ((s.entrySignal||"").includes("⚠")) { hint="等MA20突破確認"; hintColor="#f59e0b"; }
+                          else if ((s.recent3DayChange||0)>=10 && (s.volumeRatio||0)>=2) { hint="強勢突破，追漲注意停損"; hintColor="#fbbf24"; }
+                          else if ((s.volumeRatio||0)>=1.5) { hint="量能放大，等回踩再進"; hintColor="#38bdf8"; }
+                          else { hint="量能不足，等量能配合"; hintColor="#6b8fa8"; }
+                          const cleanSym = String(s.symbol||"").replace(/\.(TW|TWO)$/i,"");
                           return (
                             <tr key={s.symbol} onClick={() => openStockAnalysisFromList(s)} className="scan-row">
-                              <td className="scan-rank">{i + 1}</td>
-                              <td>
-                                <div className="scan-stock-name">{getDisplayName(s.symbol, s.name)}</div>
-                                <div className="scan-stock-code">{s.symbol}</div>
-                                <div style={{fontSize:10,color:"#fbbf24",marginTop:2}}>{s.radarLevel || ""}</div>
-                              </td>
-                              <td style={{fontSize:11,color:"#e2e8f0",lineHeight:1.5}}>
-                                <div style={{fontWeight:600}}>{s.primaryPattern || s.candleTitle || "--"}</div>
-                              </td>
-                              <td>
-                                <div className="scan-score" style={{color: s.radarScore >= 78 ? "#4ade80" : s.radarScore >= 55 ? "#fbbf24" : "#fb7185"}}>
-                                  {s.radarScore ?? "--"}
+                              <td className="scan-rank" style={{textAlign:"center",padding:"12px 6px"}}>{i+1}</td>
+                              <td style={{padding:"10px 10px"}}>
+                                <div style={{display:"flex",alignItems:"center",gap:8}}>
+                                  <div style={{width:44,height:34,borderRadius:7,background:"rgba(14,165,233,.10)",border:"1px solid rgba(14,165,233,.18)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:900,color:"#38bdf8",flexShrink:0}}>{cleanSym}</div>
+                                  <div>
+                                    <div style={{fontSize:14,fontWeight:700,color:"#f1f5f9"}}>{getDisplayName(s.symbol, s.name)}</div>
+                                    <div style={{fontSize:10,color:"#fbbf24",background:"rgba(251,191,36,.10)",border:"1px solid rgba(251,191,36,.20)",padding:"1px 5px",borderRadius:3,display:"inline-block",marginTop:2}}>{s.recent3DayType||"候選"}</div>
+                                  </div>
                                 </div>
                               </td>
-                              <td style={{fontSize:11,color: s.marketStructure?.includes("起漲") || s.marketStructure?.includes("主升") ? "#4ade80" : s.marketStructure?.includes("空頭") || s.marketStructure?.includes("轉弱") ? "#fb7185" : "#fbbf24"}}>
-                                {s.marketStructure || "--"}
+                              <td style={{textAlign:"center",padding:"10px 8px"}}>
+                                <div style={{fontSize:22,fontWeight:800,color:scoreColor,lineHeight:1}}>{score100}</div>
+                                <div style={{fontSize:10,color:scoreColor,marginTop:1,fontWeight:600}}>{scoreBand}</div>
+                                <div style={{fontSize:9,color:"#6b8fa8"}}>/ 100</div>
                               </td>
-                              <td style={{fontSize:11}}>{s.volumeRatio?.toFixed(2) ?? "--"}</td>
-                              <td>
-                                <div style={{fontSize:12,color:"#4ade80",fontWeight:600}}>{fmtVol(buyV)}</div>
-                                <div style={{fontSize:10,color:"#8ab4cc"}}>{buyPct}% 買方</div>
+                              <td style={{textAlign:"right",padding:"10px 10px"}}>
+                                <div className={(s.recent3DayChange||0)>=0?"up":"down"} style={{fontSize:14,fontWeight:700}}>{(s.recent3DayChange||0)>=0?"▲":"▼"} {Math.abs(s.recent3DayChange||0).toFixed(2)}%</div>
+                                <div style={{fontSize:11,color:"#8ab4cc"}}>{s.close?.toFixed(2)??""}</div>
                               </td>
-                              <td>
-                                <div style={{fontSize:12,color:"#fb7185",fontWeight:600}}>{fmtVol(sellV)}</div>
-                                <div style={{fontSize:10,color:"#8ab4cc"}}>{100-buyPct}% 賣方</div>
+                              <td style={{padding:"10px 8px"}}>
+                                <div style={{fontSize:13,fontWeight:700,color:(s.volumeRatio||0)>=2?"#4ade80":(s.volumeRatio||0)>=1.5?"#fbbf24":"#cddae2"}}>{s.volumeRatio?.toFixed(2)??"--"}x</div>
+                                <div style={{display:"flex",alignItems:"center",gap:3,margin:"4px 0"}}>
+                                  <span style={{fontSize:10,color:"#4ade80",width:16,flexShrink:0}}>買</span>
+                                  <div style={{flex:1,background:"rgba(14,165,233,.08)",borderRadius:3,height:5,overflow:"hidden"}}>
+                                    <div style={{width:buyPct+"%",height:"100%",background:"#4ade80",borderRadius:3}}/>
+                                  </div>
+                                  <span style={{fontSize:10,color:"#fb7185",width:16,flexShrink:0,textAlign:"right"}}>賣</span>
+                                </div>
+                                <div style={{display:"flex",justifyContent:"space-between",fontSize:10}}>
+                                  <span style={{color:"#4ade80"}}>{fmtVol(buyV)}</span>
+                                  <span style={{color:"#6b8fa8"}}>{buyPct}:{100-buyPct}</span>
+                                  <span style={{color:"#fb7185"}}>{fmtVol(sellV)}</span>
+                                </div>
                               </td>
-                              <td style={{fontSize:11,color: s.volConfirmLevel?.includes("強") ? "#4ade80" : s.volConfirmLevel?.includes("縮量") ? "#fb7185" : "#fbbf24"}}>
-                                {s.volConfirmLevel || "--"}
+                              <td style={{padding:"10px 8px"}}>
+                                <div style={{fontSize:11,fontWeight:600,color:maColor}}>{s.maPattern||"--"}</div>
+                                <div style={{fontSize:10,color:"#6b8fa8",marginTop:2}}>{s.volumePattern||""}</div>
                               </td>
-                              <td style={{fontSize:12,color:"#4ade80",fontWeight:600}}>
-                                {s.breakoutTargetUp ? s.breakoutTargetUp.toFixed(2) : "--"}
-                                {s.patternHeight > 0 && <div style={{fontSize:10,color:"#8ab4cc"}}>幅度 {s.patternHeight.toFixed(1)}</div>}
+                              <td style={{textAlign:"center",padding:"10px 6px"}}>
+                                <span style={{display:"inline-block",fontSize:11,fontWeight:700,padding:"4px 8px",borderRadius:5,
+                                  background:scanTone==="buy"?"rgba(34,197,94,.14)":scanTone==="sell"?"rgba(248,113,113,.12)":"rgba(251,191,36,.12)",
+                                  color:scanTone==="buy"?"#4ade80":scanTone==="sell"?"#fb7185":"#fbbf24",
+                                  border:`1px solid ${scanTone==="buy"?"rgba(34,197,94,.25)":scanTone==="sell"?"rgba(248,113,113,.22)":"rgba(251,191,36,.22)"}`}}>
+                                  {scanAction}
+                                </span>
                               </td>
-                              <td style={{fontSize:12,color:"#fb7185",fontWeight:600}}>
-                                {s.breakoutTargetDown ? s.breakoutTargetDown.toFixed(2) : "--"}
-                              </td>
-                              <td style={{fontSize:11,color:"#4ade80"}}>
-                                {(s.bullishSignals?.slice(0,2) || []).map(sig => (
-                                  <div key={sig.signalName} style={{marginBottom:1}}>{sig.signalName?.split("：")[0] || sig.signalName}</div>
-                                ))}
-                              </td>
-                              <td style={{fontSize:11,color:"#fb7185"}}>
-                                {(s.bearishSignals?.slice(0,2) || []).map(sig => (
-                                  <div key={sig.signalName} style={{marginBottom:1}}>{sig.signalName?.split("：")[0] || sig.signalName}</div>
-                                ))}
-                              </td>
-                              <td>
-                                <div className="scan-advice-main">{isBull ? "多方" : "空方"} {s.mainUpProbability}%</div>
-                                <div className="scan-advice-risk">風險 {s.fakeBreakoutRisk}%</div>
-                                <div className="scan-advice-note">{adv.strategy}</div>
+                              <td style={{padding:"10px 10px"}}>
+                                <div style={{fontSize:12,fontWeight:600,color:hintColor,marginBottom:3}}>{hint}</div>
+                                <div style={{fontSize:11,color:"#6b8fa8"}}>開高 {adv.openHighProbability}%{adv.sellRisk>=50?<span style={{color:"#f59e0b",marginLeft:6}}>⚠ 出貨{adv.sellRisk}%</span>:null}</div>
                               </td>
                             </tr>
                           );
@@ -6505,21 +6286,6 @@ const [watchText, setWatchText] = useState(() => {
                   <div className="scan-criteria-item">收盤位置強弱</div>
                   <div className="scan-criteria-item">爆量長上影過濾</div>
                   <div className="scan-criteria-item">假突破風險評估</div>
-                </div>
-
-                <div style={{margin:"8px 0",padding:"8px 10px",background:"rgba(14,165,233,.07)",borderRadius:8,border:"1px solid rgba(14,165,233,.14)"}}>
-                  <div style={{fontSize:11,color:"#38bdf8",fontWeight:700,marginBottom:6}}>📙 形態學核心</div>
-                  <div style={{fontSize:11,color:"#cddae2",lineHeight:1.7}}>
-                    <b style={{color:"#f1f5f9"}}>目標價公式：</b><br/>
-                    突破目標 = 突破點 + 整理高度 H<br/>
-                    跌破目標 = 跌破點 − 整理高度 H<br/><br/>
-                    <b style={{color:"#4ade80"}}>量能確認：</b><br/>
-                    整理期縮量 → 突破爆量 ✓<br/>
-                    無量突破 → 易失敗 ✗<br/><br/>
-                    <b style={{color:"#fbbf24"}}>假突破辨識：</b><br/>
-                    突破後迅速回到區間內<br/>
-                    量大但收盤位置差
-                  </div>
                 </div>
 
                 <button onClick={scanKlineRadar} disabled={klineRadarLoading} className="scan-btn">
@@ -6649,18 +6415,6 @@ const [watchText, setWatchText] = useState(() => {
                   <div className="scan-criteria-item">假突破自動過濾</div>
                 </div>
 
-                <div style={{margin:"8px 0",padding:"8px 10px",background:"rgba(14,165,233,.07)",borderRadius:8,border:"1px solid rgba(14,165,233,.14)"}}>
-                  <div style={{fontSize:11,color:"#38bdf8",fontWeight:700,marginBottom:6}}>📘 每日抓股 SOP</div>
-                  <div style={{fontSize:11,color:"#cddae2",lineHeight:1.7}}>
-                    ① 先看大盤是否站上20日線<br/>
-                    ② 股價在20日線上 + 線上彎<br/>
-                    ③ 量縮回踩均線找買點<br/>
-                    ④ 不破支撐 → 低風險進場<br/>
-                    ⑤ 進場後：強勢股不破5日線抱<br/>
-                    ⑥ 賣出：爆量長黑或跌破5/20日
-                  </div>
-                </div>
-
                 <button onClick={() => scanNextDayList()} disabled={nextDayLoading} className="scan-btn">
                   {nextDayLoading ? "更新中..." : "立即刷新"}
                 </button>
@@ -6678,34 +6432,21 @@ const [watchText, setWatchText] = useState(() => {
                       <thead>
                         <tr>
                           <th style={{width:36}}>#</th>
-                          <th style={{minWidth:150}}>股票</th>
+                          <th style={{minWidth:160}}>股票</th>
                           <th style={{width:100}}>分數 / 等級</th>
                           <th style={{width:70}}>開高機率</th>
+                          <th style={{width:80}}>訊號</th>
                           <th style={{width:70}}>漲跌</th>
                           <th style={{width:60}}>量比</th>
-                          <th style={{width:110,color:"#4ade80"}}>買量（估）</th>
-                          <th style={{width:110,color:"#fb7185"}}>賣量（估）</th>
-                          <th style={{width:100}}>均線位置</th>
                           <th style={{width:70}}>假突破</th>
-                          <th style={{width:80}}>訊號</th>
-                          <th style={{minWidth:140}}>建議</th>
-                          <th style={{minWidth:110}}>觀察標籤</th>
+                          <th style={{minWidth:120}}>判斷條件</th>
+                          <th style={{minWidth:150}}>建議</th>
+                          <th style={{minWidth:120}}>觀察標籤</th>
                         </tr>
                       </thead>
                       <tbody>
                         {sortedNextDayList.map((s, i) => {
                           const adv = buildAutoTradeAdvice(s);
-                          const buyV = s.buyVolume ?? 0;
-                          const sellV = s.sellVolume ?? 0;
-                          const totalV = buyV + sellV;
-                          const buyPct = totalV > 0 ? Math.round(buyV / totalV * 100) : 50;
-                          // 圖2均線位置判斷
-                          const cl = s.close || 0;
-                          const ma5v = s.ma5 || 0, ma20v = s.ma20 || 0, ma60v = s.ma60 || 0;
-                          const maPos = ma5v > 0 && ma20v > 0 && ma60v > 0
-                            ? (cl > ma5v && ma5v > ma20v && ma20v > ma60v ? "多頭排列" : cl > ma20v ? "站上MA20" : cl > ma60v ? "MA20下方" : "60日線下")
-                            : "--";
-                          const maPosColor = maPos === "多頭排列" ? "#4ade80" : maPos === "站上MA20" ? "#fbbf24" : "#fb7185";
                           return (
                             <tr key={s.symbol} onClick={() => openStockAnalysisFromList(s)} className="scan-row">
                               <td className="scan-rank">{i + 1}</td>
@@ -6716,27 +6457,24 @@ const [watchText, setWatchText] = useState(() => {
                               <td>
                                 <div className="scan-score">{s.nextDay?.nextDayScore ?? "--"}<span>{s.nextDay?.nextDayRank || "待觀察"}</span></div>
                               </td>
-                              <td style={{fontWeight:600,color: (s.nextDay?.gapUpProbability||0) >= 65 ? "#4ade80" : "#fbbf24"}}>{s.nextDay?.gapUpProbability ?? "--"}%</td>
+                              <td style={{fontWeight:600}}>{s.nextDay?.gapUpProbability ?? "--"}%</td>
+                              <td><div className="scan-badge">{s.nextDay?.nextDaySignal || "觀望"}</div></td>
                               <td className={s.changePct >= 0 ? "up" : "down"} style={{fontWeight:600}}>{s.changePct?.toFixed?.(2) ?? "--"}%</td>
                               <td style={{fontSize:11}}>{s.volumeRatio?.toFixed?.(2) ?? "--"}</td>
-                              <td>
-                                <div style={{fontSize:12,color:"#4ade80",fontWeight:600}}>{fmtVol(buyV)}</div>
-                                <div style={{fontSize:10,color:"#8ab4cc"}}>{buyPct}% 買方</div>
-                              </td>
-                              <td>
-                                <div style={{fontSize:12,color:"#fb7185",fontWeight:600}}>{fmtVol(sellV)}</div>
-                                <div style={{fontSize:10,color:"#8ab4cc"}}>{100-buyPct}% 賣方</div>
-                              </td>
-                              <td style={{fontSize:11,fontWeight:600,color:maPosColor}}>{maPos}</td>
                               <td className={s.nextDay?.fakeBreakout ? "down" : "up"} style={{fontSize:11,fontWeight:600}}>
-                                {s.nextDay?.fakeBreakout ? "⚠ 風險" : "✓ 通過"}
+                                {s.nextDay?.fakeBreakout ? "有風險" : "通過"}
                               </td>
-                              <td><div className="scan-badge">{s.nextDay?.nextDaySignal || "觀望"}</div></td>
+                              <td>
+                                <div className="condition-mini-list">
+                                  {adv.conditionTags.slice(0, 4).map((tag) => <span key={tag}>{tag}</span>)}
+                                </div>
+                              </td>
                               <td>
                                 <div className="scan-advice-main">開高 {adv.openHighProbability}% · 續強 {adv.continueProbability}%</div>
                                 <div className="scan-advice-risk">出貨風險 {adv.sellRisk}%</div>
+                                <div className="scan-advice-note">{adv.strategy}</div>
                               </td>
-                              <td style={{fontSize:11,color:"#cddae2"}}>{s.tags?.slice(0, 3).join("、") || s.volumeSignal?.title || "等待確認"}</td>
+                              <td style={{fontSize:11,color:"var(--color-text-secondary)"}}>{s.tags?.slice(0, 3).join("、") || s.volumeSignal?.title || "等待確認"}</td>
                             </tr>
                           );
                         })}
@@ -7116,159 +6854,74 @@ const [watchText, setWatchText] = useState(() => {
 
               {reportTab === "us" && (
                 <div className="report-card">
-                  {/* ── 發說會：法說會 + 除權息 搜尋頁 ── */}
-                  <div className="corp-event-header">
+                  <div style={{marginBottom:14}}>
                     <h2 style={{margin:0}}>📣 發說會 ／ 除權息行事曆</h2>
-                    <span className="muted" style={{fontSize:12}}>搜尋全台股上市公司法說會報告與除權息資訊</span>
+                    <span style={{fontSize:12,color:"#8ab4cc"}}>搜尋全台股上市公司法說會報告與除權息資訊</span>
                   </div>
-
-                  {/* 搜尋列 */}
-                  <div className="corp-search-row">
-                    <input
-                      className="corp-search-input"
-                      value={corpEventQuery}
-                      onChange={e => { setCorpEventQuery(e.target.value); if (!e.target.value.trim()) { setCorpEventResults(null); setCorpEventError(""); } }}
-                      placeholder="輸入股票代號或公司名稱，如 2330、台積電、鴻海…"
-                      onKeyDown={e => e.key === "Enter" && searchCorpEvents()}
-                    />
-                    <select className="corp-type-select" value={corpEventType} onChange={e => setCorpEventType(e.target.value)}>
-                      <option value="all">全部</option>
-                      <option value="conf">法說會</option>
-                      <option value="div">除權息</option>
+                  <div style={{display:"flex",gap:8,marginBottom:10,flexWrap:"wrap"}}>
+                    <input value={corpEventQuery} onChange={e=>{setCorpEventQuery(e.target.value);if(!e.target.value.trim()){setCorpEventResults(null);setCorpEventError("");}}}
+                      placeholder="輸入股票代號或名稱，如 2330、台積電…"
+                      onKeyDown={e=>e.key==="Enter"&&searchCorpEvents()}
+                      style={{flex:1,minWidth:200,background:"rgba(6,14,26,.80)",border:"1px solid rgba(14,165,233,.25)",borderRadius:8,padding:"9px 12px",color:"#f1f5f9",fontSize:14}}/>
+                    <select value={corpEventType} onChange={e=>setCorpEventType(e.target.value)} style={{background:"rgba(6,14,26,.80)",border:"1px solid rgba(14,165,233,.20)",borderRadius:8,padding:"9px 10px",color:"#cddae2",fontSize:13}}>
+                      <option value="all">全部</option><option value="conf">法說會</option><option value="div">除權息</option>
                     </select>
-                    <button className="corp-search-btn" onClick={searchCorpEvents} disabled={corpEventLoading}>
+                    <button onClick={()=>searchCorpEvents()} disabled={corpEventLoading} style={{background:"rgba(14,165,233,.20)",border:"1px solid rgba(14,165,233,.40)",color:"#38bdf8",padding:"9px 18px",borderRadius:8,fontSize:13,fontWeight:700,cursor:"pointer"}}>
                       {corpEventLoading ? "搜尋中..." : "🔍 搜尋"}
                     </button>
                   </div>
-
-                  {/* 快速標籤：熱門標的 */}
-                  <div className="corp-quick-tags">
-                    {["2330","2317","2454","2382","3711","2881","2882","2412","2603"].map(sym => (
-                      <button key={sym} className="corp-quick-tag"
-                        onClick={() => { setCorpEventQuery(sym); setCorpEventType("all"); searchCorpEvents(sym); }}>
-                        {sym}
-                      </button>
+                  <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:14}}>
+                    {["2330","2317","2454","2382","3711","2881","2882","2412","2603"].map(sym=>(
+                      <button key={sym} onClick={()=>{setCorpEventQuery(sym);searchCorpEvents(sym);}} style={{background:"rgba(14,165,233,.07)",border:"1px solid rgba(14,165,233,.18)",color:"#7dd3fc",padding:"4px 10px",borderRadius:6,fontSize:12,fontWeight:700,cursor:"pointer"}}>{sym}</button>
                     ))}
                   </div>
-
-                  {/* 錯誤訊息 */}
-                  {corpEventError && <p className="error">{corpEventError}</p>}
-
-                  {/* 結果區 */}
-                  {corpEventLoading && (
-                    <div style={{padding:"24px",textAlign:"center",color:"#adc4d4"}}>資料載入中…</div>
-                  )}
-
+                  {corpEventError && <p style={{color:"#fb7185",fontSize:13}}>{corpEventError}</p>}
+                  {corpEventLoading && <div style={{padding:"24px",textAlign:"center",color:"#adc4d4"}}>資料載入中…</div>}
                   {corpEventResults && !corpEventLoading && (
                     <>
-                      {/* 法說會結果 */}
-                      {(corpEventType === "all" || corpEventType === "conf") && (
-                        <div className="corp-section">
-                          <div className="corp-section-title">📋 法說會 / 重大說明會</div>
-                          {corpEventResults.conferences?.length > 0 ? (
-                            <div className="table-wrap">
-                              <table>
-                                <thead>
-                                  <tr>
-                                    <th>公司</th>
-                                    <th>法說會日期</th>
-                                    <th>地點 / 形式</th>
-                                    <th>說明</th>
-                                    <th>公告日</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {corpEventResults.conferences.map((ev, i) => (
-                                    <tr key={i} onClick={() => ev.symbol && openStockAnalysisFromList({ symbol: ev.symbol, name: ev.name })}>
-                                      <td>
-                                        <div className="stock-name-stack">
-                                          <span className="stock-name-main small">{ev.name}</span>
-                                          <span className="stock-name-code">{ev.symbol}</span>
-                                        </div>
-                                      </td>
-                                      <td style={{color:"#38bdf8",fontWeight:700}}>{ev.date || "--"}</td>
-                                      <td>{ev.location || "--"}</td>
-                                      <td style={{maxWidth:240,whiteSpace:"normal",fontSize:12,color:"#cddae2"}}>{ev.summary || "--"}</td>
-                                      <td style={{fontSize:11,color:"#8ab4cc"}}>{ev.announcedAt || "--"}</td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                            </div>
-                          ) : (
-                            <p className="report-empty">查無法說會資料（此期間可能尚未公告）</p>
-                          )}
+                      {(corpEventType==="all"||corpEventType==="conf") && (
+                        <div style={{marginBottom:16}}>
+                          <div style={{fontSize:13,fontWeight:700,color:"#38bdf8",marginBottom:8,paddingBottom:6,borderBottom:"1px solid rgba(14,165,233,.14)"}}>📋 法說會 / 重大說明會</div>
+                          {corpEventResults.conferences?.length>0?(
+                            <div className="table-wrap"><table><thead><tr><th>公司</th><th>日期</th><th>地點</th><th>說明</th></tr></thead>
+                            <tbody>{corpEventResults.conferences.map((ev,i)=>(
+                              <tr key={i} onClick={()=>ev.symbol&&openStockAnalysisFromList({symbol:ev.symbol,name:ev.name})}>
+                                <td><div style={{fontWeight:700}}>{ev.name}</div><div style={{fontSize:11,color:"#6b8fa8"}}>{ev.symbol}</div></td>
+                                <td style={{color:"#38bdf8",fontWeight:700}}>{ev.date||"--"}</td>
+                                <td>{ev.location||"--"}</td>
+                                <td style={{fontSize:12,color:"#cddae2",maxWidth:240,whiteSpace:"normal"}}>{ev.summary||"--"}</td>
+                              </tr>
+                            ))}</tbody></table></div>
+                          ):<p className="report-empty">查無法說會資料</p>}
                         </div>
                       )}
-
-                      {/* 除權息結果 */}
-                      {(corpEventType === "all" || corpEventType === "div") && (
-                        <div className="corp-section" style={{marginTop:16}}>
-                          <div className="corp-section-title">💰 除權息行事曆</div>
-                          {corpEventResults.dividends?.length > 0 ? (
-                            <div className="table-wrap">
-                              <table>
-                                <thead>
-                                  <tr>
-                                    <th>公司</th>
-                                    <th>除息/除權日</th>
-                                    <th>現金股利</th>
-                                    <th>股票股利</th>
-                                    <th>填息天數</th>
-                                    <th>狀態</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {corpEventResults.dividends.map((dv, i) => (
-                                    <tr key={i} onClick={() => dv.symbol && openStockAnalysisFromList({ symbol: dv.symbol, name: dv.name })}>
-                                      <td>
-                                        <div className="stock-name-stack">
-                                          <span className="stock-name-main small">{dv.name}</span>
-                                          <span className="stock-name-code">{dv.symbol}</span>
-                                        </div>
-                                      </td>
-                                      <td style={{color:"#fbbf24",fontWeight:700}}>{dv.exDate || "--"}</td>
-                                      <td className="up">{dv.cashDiv ? `$${dv.cashDiv}` : "--"}</td>
-                                      <td style={{color:"#38bdf8"}}>{dv.stockDiv ? `${dv.stockDiv}股` : "--"}</td>
-                                      <td style={{color: dv.fillDays != null ? (dv.fillDays <= 10 ? "#4ade80" : dv.fillDays <= 30 ? "#fbbf24" : "#fb7185") : "#adc4d4"}}>
-                                        {dv.fillDays != null ? `${dv.fillDays}天` : "待觀察"}
-                                      </td>
-                                      <td>
-                                        <span className={`badge ${dv.status === "已填息" ? "up" : dv.status === "未填息" ? "down" : ""}`}>
-                                          {dv.status || "尚未除息"}
-                                        </span>
-                                      </td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                            </div>
-                          ) : (
-                            <p className="report-empty">查無除權息資料</p>
-                          )}
+                      {(corpEventType==="all"||corpEventType==="div") && (
+                        <div>
+                          <div style={{fontSize:13,fontWeight:700,color:"#38bdf8",marginBottom:8,paddingBottom:6,borderBottom:"1px solid rgba(14,165,233,.14)"}}>💰 除權息行事曆</div>
+                          {corpEventResults.dividends?.length>0?(
+                            <div className="table-wrap"><table><thead><tr><th>公司</th><th>除息日</th><th>現金股利</th><th>股票股利</th><th>狀態</th></tr></thead>
+                            <tbody>{corpEventResults.dividends.map((dv,i)=>(
+                              <tr key={i}><td><div style={{fontWeight:700}}>{dv.name}</div><div style={{fontSize:11,color:"#6b8fa8"}}>{dv.symbol}</div></td>
+                                <td style={{color:"#fbbf24",fontWeight:700}}>{dv.exDate||"--"}</td>
+                                <td style={{color:"#4ade80"}}>{dv.cashDiv?`$${dv.cashDiv}`:"--"}</td>
+                                <td style={{color:"#38bdf8"}}>{dv.stockDiv?`${dv.stockDiv}股`:"--"}</td>
+                                <td><span className="badge">{dv.status||"尚未除息"}</span></td>
+                              </tr>
+                            ))}</tbody></table></div>
+                          ):<p className="report-empty">查無除權息資料</p>}
                         </div>
                       )}
                     </>
                   )}
-
-                  {/* 初始說明 */}
                   {!corpEventResults && !corpEventLoading && (
-                    <div className="corp-intro-grid">
-                      <div className="corp-intro-card">
-                        <div className="corp-intro-icon">📋</div>
-                        <div className="corp-intro-title">法說會報告</div>
-                        <div className="corp-intro-desc">搜尋上市公司最新法說會日期、地點與重點摘要，掌握公司最新展望與財報說明</div>
-                      </div>
-                      <div className="corp-intro-card">
-                        <div className="corp-intro-icon">💰</div>
-                        <div className="corp-intro-title">除權息行事曆</div>
-                        <div className="corp-intro-desc">查詢除息日、現金股利、股票股利及歷史填息天數，評估是否參與除息操作</div>
-                      </div>
-                      <div className="corp-intro-card">
-                        <div className="corp-intro-icon">🔍</div>
-                        <div className="corp-intro-title">一鍵搜尋</div>
-                        <div className="corp-intro-desc">輸入股票代號或名稱，即時從 TWSE / 公開資訊觀測站取得最新公告資料</div>
-                      </div>
+                    <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12,marginTop:20}}>
+                      {[{icon:"📋",t:"法說會報告",d:"搜尋上市公司最新法說會日期、地點與重點摘要"},{icon:"💰",t:"除權息行事曆",d:"查詢除息日、現金股利、填息天數評估"},{icon:"🔍",t:"一鍵搜尋",d:"輸入股票代號或名稱即時從TWSE取得公告"}].map(c=>(
+                        <div key={c.t} style={{background:"rgba(6,14,26,.60)",border:"1px solid rgba(14,165,233,.14)",borderRadius:12,padding:"20px 16px",textAlign:"center"}}>
+                          <div style={{fontSize:32,marginBottom:10}}>{c.icon}</div>
+                          <div style={{fontSize:15,fontWeight:700,color:"#f1f5f9",marginBottom:8}}>{c.t}</div>
+                          <div style={{fontSize:12,color:"#adc4d4",lineHeight:1.6}}>{c.d}</div>
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>
