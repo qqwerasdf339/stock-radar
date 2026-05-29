@@ -4769,9 +4769,10 @@ useEffect(() => {
   }
 
   const terminalStrongFlow = useMemo(() => {
-    const names = industryReport.strong.slice(0, 5).map((item) => item.name);
-    return names.length ? names : ["ASIC", "AI伺服器", "散熱", "電源管理", "CPO"];
-  }, [industryReport]);
+    // 改吃強弱勢Top50的產業排名（reportIndustryRank）
+    const names = reportIndustryRank.strong.slice(0, 5).map((item) => item.industry);
+    return names.length ? names : ["AI伺服器", "IC設計", "散熱系統", "電源管理", "先進封裝"];
+  }, [reportIndustryRank]);
 
   const terminalTopSectors = useMemo(() => {
     return industryReport.strong.slice(0, 4).map((item) => ({
@@ -6875,7 +6876,7 @@ useEffect(() => {
 
               <div className="report-tabs">
                 <button className={reportTab === "market" ? "active" : ""} onClick={() => setReportTab("market")}>📊 今日大盤方向</button>
-                <button className={reportTab === "industry" ? "active" : ""} onClick={() => setReportTab("industry")}>🏭 台股強弱產業</button>
+
                 <button className={reportTab === "us" ? "active" : ""} onClick={() => setReportTab("us")}>📣 發說會</button>
                 <button className={reportTab === "macro" ? "active" : ""} onClick={() => setReportTab("macro")}>💱 匯率 / 美債 / BTC</button>
                 <button className={reportTab === "strength" ? "active" : ""} onClick={() => setReportTab("strength")}>🔥 強弱勢Top50</button>
@@ -6944,7 +6945,7 @@ useEffect(() => {
                       <div className="mkt-themes">
                         {terminalStrongFlow.slice(0, 4).map((item) => (
                           <button key={item} className="mkt-theme-tag"
-                            onClick={() => { setReportTab("industry"); setSelectedIndustry({ side: "strong", name: item }); }}>
+                            onClick={() => setReportTab("strength")}>
                             {item}
                           </button>
                         ))}
@@ -6955,7 +6956,7 @@ useEffect(() => {
                       <div className="mkt-flow">
                         {terminalStrongFlow.slice(0, 5).map((item, i) => (
                           <span key={item} className="mkt-flow-seg">
-                            <button onClick={() => { setReportTab("industry"); setSelectedIndustry({ side: "strong", name: item }); }}>{item}</button>
+                            <button onClick={() => setReportTab("strength")}>{item}</button>
                             {i < 4 && <span className="mkt-arrow">→</span>}
                           </span>
                         ))}
@@ -6976,95 +6977,6 @@ useEffect(() => {
                     </div>
                   </div>
 
-                </div>
-              )}
-
-              {reportTab === "industry" && (
-                <div className="report-grid">
-                  <div className="report-card">
-                    <div className="section-title">
-                      <h2>🏭 台股強勢產業</h2>
-                      <span className="muted">點選產業可查看相關股票</span>
-                    </div>
-                    <div className="industry-list">
-                      {industryReport.strong.length ? industryReport.strong.map((item) => (
-                        <button
-                          type="button"
-                          className={`industry-item up ${selectedIndustry?.side === "strong" && selectedIndustry?.name === item.name ? "active" : ""}`}
-                          key={item.name}
-                          onClick={() => setSelectedIndustry({ side: "strong", name: item.name })}
-                        >
-                          <b>{item.name}</b>
-                          <span>▲ {item.avgChange.toFixed(2)}%｜領漲 {item.leader?.name || "--"}｜{item.up}漲/{item.down}跌</span>
-                        </button>
-                      )) : <p className="report-empty">強勢產業資料更新中。</p>}
-                    </div>
-                  </div>
-
-                  <div className="report-card">
-                    <div className="section-title">
-                      <h2>📉 台股弱勢產業</h2>
-                      <span className="muted">點選產業可查看相關股票</span>
-                    </div>
-                    <div className="industry-list">
-                      {industryReport.weak.length ? industryReport.weak.map((item) => (
-                        <button
-                          type="button"
-                          className={`industry-item down ${selectedIndustry?.side === "weak" && selectedIndustry?.name === item.name ? "active" : ""}`}
-                          key={item.name}
-                          onClick={() => setSelectedIndustry({ side: "weak", name: item.name })}
-                        >
-                          <b>{item.name}</b>
-                          <span>▼ {item.avgChange.toFixed(2)}%｜領跌 {item.leader?.name || "--"}｜{item.up}漲/{item.down}跌</span>
-                        </button>
-                      )) : <p className="report-empty">弱勢產業資料更新中。</p>}
-                    </div>
-                  </div>
-
-                  {selectedIndustryDetail && (
-                    <div className="report-card industry-detail-card">
-                      <div className="section-title">
-                        <h2>
-                          {selectedIndustry?.side === "weak" ? "📉" : "🔥"} {selectedIndustryDetail.name} 相關股票
-                        </h2>
-                        <span className="muted">
-                          sourceB 成分股 {selectedIndustryDetail.totalMembers} 檔｜sourceC 已更新 {selectedIndustryDetail.stocks.filter((s) => Number.isFinite(s.changePct)).length} 檔｜{selectedIndustryDetail.up}漲/{selectedIndustryDetail.down}跌｜平均漲跌 {selectedIndustryDetail.avgChange.toFixed(2)}%
-                        </span>
-                      </div>
-
-                      <div className="table-wrap">
-                        <table>
-                          <thead>
-                            <tr>
-                              <th>股票</th>
-                              <th>漲跌</th>
-                              <th>成交量</th>
-                              <th>官方產業</th>
-                              <th>主題概念</th>
-                              <th>強弱</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {selectedIndustryDetail.stocks.map((s) => (
-                              <tr key={s.symbol} onClick={() => openStockAnalysisFromList(s)}>
-                                <td>
-                                  <div className="stock-name-stack">
-                                    <span className="stock-name-main small">{getDisplayName(s.symbol, s.name)}</span>
-                                    <span className="stock-name-code">{s.symbol}</span>
-                                  </div>
-                                </td>
-                                <td className={s.changePct >= 0 ? "up" : s.changePct < 0 ? "down" : ""}>{s.changePct?.toFixed?.(2) ?? "--"}{Number.isFinite(s.changePct) ? "%" : ""}</td>
-                                <td>{Number(s.volume || s.history?.at?.(-1)?.volume || 0).toLocaleString()}</td>
-                                <td><span className="badge">{s.officialIndustry || "--"}</span></td>
-                                <td>{(s.themeTags || []).join("、") || "--"}</td>
-                                <td><span className="badge">{s.changePct > 0 ? "強" : s.changePct < 0 ? "弱" : "待更新"}</span></td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  )}
                 </div>
               )}
 
@@ -7169,16 +7081,15 @@ useEffect(() => {
               )}
 
               {reportTab === "strength" && (
-                <div className="report-card">
-                  <div className="section-title">
+                <div>
+                  <div className="section-title" style={{marginBottom:10}}>
                     <h2>🔥 今日強 / 弱勢股票 Top50</h2>
-                    <span className="muted">依 AI 分數、漲跌幅、量比綜合排序，並自動彙整產業前五名</span>
+                    <span className="muted">依 AI 分數、漲跌幅、量比綜合排序</span>
                   </div>
-
-                  <div className="report-grid" style={{ marginBottom: 12 }}>
+                  <div className="report-grid">
                     <div className="report-card">
-                      <h2>🏆 強勢產業前五名</h2>
-                      <div className="industry-list">
+                      <h2>🏆 強勢產業</h2>
+                      <div className="industry-list" style={{marginBottom:12}}>
                         {reportIndustryRank.strong.length ? reportIndustryRank.strong.map((item, index) => (
                           <div className="industry-item up" key={item.industry}
                             onClick={() => openIndustryPopup(item.industry, "strong")}
@@ -7190,44 +7101,17 @@ useEffect(() => {
                                 <span style={{fontSize:10,color:"#6b8fa8"}}>({item.count}檔)</span>
                               </div>
                               <span className="up" style={{fontSize:13,fontWeight:700}}>
-                                {item.avgChange >= 0 ? "▲" : "▼"} {Math.abs(item.avgChange).toFixed(2)}%
+                                ▲ {Math.abs(item.avgChange).toFixed(2)}%
                               </span>
                             </div>
-                            <div style={{display:"flex",gap:8,marginTop:4,flexWrap:"wrap"}}>
+                            <div style={{display:"flex",gap:8,marginTop:3,flexWrap:"wrap"}}>
                               <span style={{fontSize:10,color:"#38bdf8"}}>量比 {item.avgVolumeRatio.toFixed(1)}x</span>
                               <span style={{fontSize:10,color:"#fbbf24"}}>金流 {item.moneyFlowScore.toFixed(1)}</span>
                               <span style={{fontSize:10,color:"#adc4d4"}}>{item.topStocks.slice(0,3).map(s=>getDisplayName(s.symbol,s.name)).join("、")}</span>
                             </div>
                           </div>
                         )) : <div className="muted" style={{fontSize:12}}>暫無資料</div>}
-
-                        {reportIndustryRank.weak.length ? reportIndustryRank.weak.map((item, index) => (
-                          <div className="industry-item down" key={item.industry}
-                            onClick={() => openIndustryPopup(item.industry, "weak")}
-                            style={{cursor:"pointer"}}>
-                            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-                              <div style={{display:"flex",alignItems:"center",gap:6}}>
-                                <span style={{fontSize:11,color:"#6b8fa8",width:16,textAlign:"center",fontWeight:700}}>{index+1}</span>
-                                <span style={{fontSize:13,fontWeight:700,color:"#f1f5f9"}}>{item.industry}</span>
-                                <span style={{fontSize:10,color:"#6b8fa8"}}>({item.count}檔)</span>
-                              </div>
-                              <span className="down" style={{fontSize:13,fontWeight:700}}>
-                                {item.avgChange >= 0 ? "▲" : "▼"} {Math.abs(item.avgChange).toFixed(2)}%
-                              </span>
-                            </div>
-                            <div style={{display:"flex",gap:8,marginTop:4,flexWrap:"wrap"}}>
-                              <span style={{fontSize:10,color:"#38bdf8"}}>量比 {item.avgVolumeRatio.toFixed(1)}x</span>
-                              <span style={{fontSize:10,color:"#fb7185"}}>弱勢分 {Math.abs(item.moneyFlowScore).toFixed(1)}</span>
-                              <span style={{fontSize:10,color:"#adc4d4"}}>{item.topStocks.slice(0,3).map(s=>getDisplayName(s.symbol,s.name)).join("、")}</span>
-                            </div>
-                          </div>
-                        )) : <div className="muted" style={{fontSize:12}}>暫無資料</div>}
                       </div>
-                    </div>
-                  </div>
-
-                  <div className="report-grid">
-                    <div className="report-card">
                       <h2>🔥 今日強勢股 Top50</h2>
                       {reportStrongTop50.length === 0 ? (
                         <p className="report-empty">強勢股資料更新中。</p>
@@ -7259,6 +7143,30 @@ useEffect(() => {
                     </div>
 
                     <div className="report-card">
+                      <h2>📉 弱勢產業</h2>
+                      <div className="industry-list" style={{marginBottom:12}}>
+                        {reportIndustryRank.weak.length ? reportIndustryRank.weak.map((item, index) => (
+                          <div className="industry-item down" key={item.industry}
+                            onClick={() => openIndustryPopup(item.industry, "weak")}
+                            style={{cursor:"pointer"}}>
+                            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                              <div style={{display:"flex",alignItems:"center",gap:6}}>
+                                <span style={{fontSize:11,color:"#6b8fa8",width:16,textAlign:"center",fontWeight:700}}>{index+1}</span>
+                                <span style={{fontSize:13,fontWeight:700,color:"#f1f5f9"}}>{item.industry}</span>
+                                <span style={{fontSize:10,color:"#6b8fa8"}}>({item.count}檔)</span>
+                              </div>
+                              <span className="down" style={{fontSize:13,fontWeight:700}}>
+                                ▼ {Math.abs(item.avgChange).toFixed(2)}%
+                              </span>
+                            </div>
+                            <div style={{display:"flex",gap:8,marginTop:3,flexWrap:"wrap"}}>
+                              <span style={{fontSize:10,color:"#38bdf8"}}>量比 {item.avgVolumeRatio.toFixed(1)}x</span>
+                              <span style={{fontSize:10,color:"#fb7185"}}>弱勢分 {Math.abs(item.moneyFlowScore).toFixed(1)}</span>
+                              <span style={{fontSize:10,color:"#adc4d4"}}>{item.topStocks.slice(0,3).map(s=>getDisplayName(s.symbol,s.name)).join("、")}</span>
+                            </div>
+                          </div>
+                        )) : <div className="muted" style={{fontSize:12}}>暫無資料</div>}
+                      </div>
                       <h2>📉 今日弱勢股 Top50</h2>
                       {reportWeakTop50.length === 0 ? (
                         <p className="report-empty">弱勢股資料更新中。</p>
