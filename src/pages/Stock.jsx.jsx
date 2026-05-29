@@ -576,28 +576,134 @@ function detectBearAlignment(candles) {
 }
 
 // 強勢股分類（依產業/類型）
+// ── AI 供應鏈五層產業分類（精確代號對照表）────────────────────────────────
+// 架構：Layer1算力基礎 / Layer2AI硬體 / Layer3基礎設施 / Layer4終端應用 / Layer5傳統產業
+const INDUSTRY_MAP = {
+  // ── Layer 1：算力基礎 ─────────────────────────────────────────────────────
+  "晶圓代工": ["2330","2303","5347","6770"],                          // 台積電、聯電、世界先進、晶合
+  "IC設計":   ["2454","3711","6770","4966","3034","2388","3231",      // 聯發科、日月光(設計)、新唐、旺宏
+               "6531","2351","3105","5269","3706","6462","8046",       // 愛普、順德、精材、兆赫、翔名
+               "NVDA","AMD","QCOM","AVGO","ARM","MRVL"],
+  "先進封裝": ["2317","3711","6185","2449","6235","6488","3049",       // 日月光控、頎邦、矽格、京元電
+               "8046","6830","4952","5274"],
+  "HBM記憶體":["4256","3474","2408","5312","3741","MU","LRCX"],       // 旺宏、三星(ADR)、南亞科
+  "晶片材料": ["5483","4147","6550","3324","6239","5009","2924",       // 中砂、矽統、先豐通、日揚
+               "4977","6456","8255"],
+
+  // ── Layer 2：AI 硬體 ─────────────────────────────────────────────────────
+  "AI伺服器": ["2382","3231","6669","4938","2301","3017","6414",       // 廣達、緯創、緯穎、和碩、光寶科
+               "3060","6115","6152","5443","3518","SMCI"],
+  "散熱系統": ["3017","6230","1626","3211","6197","2395","1569",       // 奇鋐、超眾、建準、雙鴻、茂林
+               "1590","3501","6185","6593"],
+  "電源管理": ["6409","3045","1537","6491","1504","6706","6274",       // 旺詮、奇源、廣州、芯鼎、
+               "2308","3324","3490","6456","MPWR"],
+  "銅箔基板": ["8046","6690","1710","4956","6183","3003","6569"],      // 聯茂、台耀、台光電、博智
+  "PCB":      ["3037","6904","2383","6803","3711","4977","6462",       // 欣興、臻鼎-KY、台郡、嘉聯益
+               "6269","3162","6274","8299","4966"],
+
+  // ── Layer 3：AI 基礎設施 ──────────────────────────────────────────────────
+  "網通設備": ["2345","3047","6168","4906","3390","6456","2317",       // 智邦、訊舟、吉林崑山、泰金寶
+               "3005","6277","CSCO","JNPR","ANET"],
+  "CoWoS封裝":["3711","8046","6235","6488","3049","2449","6830"],      // 日月光、台星科、矽格、頎邦
+  "光纖傳輸": ["4906","2345","3026","6168","6547","3005","4958"],      // 亞光、智邦、禾昌、吉崑
+  "資料中心": ["3673","6415","2308","2382","6669","3231","EQIX","DLR"],// TPK、矽力-KY、台達電
+  "AI軟體":   ["MSFT","GOOGL","GOOG","META","AMZN","CRM","NOW","SNOW","PLTR"],
+
+  // ── Layer 4：終端應用 ─────────────────────────────────────────────────────
+  "AI PC/筆電":["2454","2382","2357","4938","3231","6414","AAPL","INTC","DELL","HPQ"],
+  "手機零組件":["2354","2317","4938","3231","2474","3673","3034",      // 鴻準、鴻海、和碩、緯創、可成
+               "2352","6278","AAPL","QCOM"],
+  "車用電子": ["2367","3703","2356","1537","8046","6669","2382",       // 燿華、欣銓、英業達、
+               "TSLA","RIVN","NIO","ON","STM"],
+  "機器人":   ["1504","2345","1590","2308","2301","ISRG","ABB","FANUC"],
+  "低軌衛星": ["4938","2345","3047","6547","3694","2345","SPCE"],
+  "AI眼鏡":   ["2345","3047","GOOG","META","AAPL"],
+  "面板顯示": ["2409","3481","8046","3034","2049","2351","6294","3070",// AUO、群創、聯鈺、晶電
+               "2393","6176","6184"],
+
+  // ── Layer 5：傳統產業 ─────────────────────────────────────────────────────
+  "銀行金融": ["2882","2881","2884","2885","2886","2887","2888",       // 國泰金、富邦金、玉山金
+               "2889","2890","2891","2892","5880","2801","2845"],
+  "壽險金控": ["2881","2882","2883","2884","2885","2886","6855"],
+  "貨櫃航運": ["2603","2615","2609","2610","2612","2616","2618"],      // 長榮、萬海、陽明、中航
+  "散裝航運": ["2002","2204","2603","5608","2601","2607"],
+  "電信":     ["2412","3045","4904","2498","3673"],                    // 中華電、台灣大、遠傳
+  "鋼鐵":     ["2002","2008","2010","2014","2015","9910"],             // 中鋼、東和鋼、中鴻
+  "石化":     ["1301","1303","1304","1305","1307","1308","6239"],
+  "食品飲料": ["1201","1203","1210","1213","1215","1216","1217","1218","1219","1220"],
+  "生技醫療": ["4532","4743","4746","4174","4108","6516","6548",       // 太醫、合一、昱厚
+               "1789","4144","6197","4952","4968","JNJ","UNH","PFE"],
+  "建設營造": ["2511","2515","2520","2534","2535","2536","2538","2545"],
+  "ETF":      ["0050","0051","0052","0053","0054","0055","0056",
+               "00878","00881","00886","00891","00893","00894",
+               "00895","00896","006205","SPY","QQQ","SOXX","SMH"],
+};
+
+// 反向查詢：代號 → 分類
+const SYMBOL_TO_INDUSTRY = {};
+Object.entries(INDUSTRY_MAP).forEach(([cat, symbols]) => {
+  symbols.forEach(sym => {
+    if (!SYMBOL_TO_INDUSTRY[sym]) SYMBOL_TO_INDUSTRY[sym] = cat;
+  });
+});
+
+// 官方 TWSE/TPEx 產業名稱 → AI供應鏈分類 對照
+const OFFICIAL_TO_AI = {
+  "半導體業":       "IC設計",
+  "其他電子業":     "AI伺服器",
+  "電子零組件業":   "PCB",
+  "電腦及週邊設備業":"AI伺服器",
+  "電機機械":       "電源管理",
+  "光電業":         "面板顯示",
+  "通信網路業":     "網通設備",
+  "資訊服務業":     "AI軟體",
+  "生技醫療業":     "生技醫療",
+  "金融保險業":     "銀行金融",
+  "航運業":         "貨櫃航運",
+  "鋼鐵業":         "鋼鐵",
+  "化學工業":       "石化",
+  "食品工業":       "食品飲料",
+  "建材營造業":     "建設營造",
+  "電器電纜":       "電源管理",
+  "橡膠業":         "其他",
+  "造紙業":         "其他",
+  "紡織纖維":       "其他",
+  "玻璃陶瓷":       "其他",
+  "汽車工業":       "車用電子",
+};
+
 function classifyStrongStock(stock) {
-  const industry = stock?.baseType || stock?.officialIndustry || stock?.industry || "";
-  const symbol = String(stock?.symbol || "");
-  if (!symbol) return "其他";
-  if (["NVDA","AMD","INTC","AVGO","QCOM","MU","TSM","UMC","ARM"].includes(symbol)) return "半導體";
-  if (["AAPL","MSFT","GOOGL","GOOG","META","AMZN","NFLX"].includes(symbol)) return "科技";
-  if (["TSLA","RIVN","NIO"].includes(symbol)) return "電動車";
-  if (industry.includes("晶圓")) return "晶圓代工";
-  if (industry.includes("IC設計")) return "IC設計";
-  if (industry.includes("IC封測")) return "IC封測";
-  if (industry.includes("記憶體")) return "記憶體";
-  if (industry.includes("PCB")) return "PCB";
-  if (industry.includes("散熱")) return "散熱";
-  if (industry.includes("伺服器")) return "伺服器";
-  if (industry.includes("面板")) return "面板";
-  if (industry.includes("航運")) return "航運";
-  if (industry.includes("金融")) return "金融";
-  if (industry.includes("生技")) return "生技";
-  if (industry.includes("ETF")) return "ETF";
-  if (industry.includes("電源")) return "電源管理";
-  if (industry.includes("光纖") || industry.includes("網通")) return "網通";
-  return industry || "其他";
+  const sym = String(stock?.symbol || "").replace(/\.(TW|TWO)$/i, "").trim();
+  if (!sym) return "其他";
+
+  // 1. 精確代號對照（最高優先）
+  if (SYMBOL_TO_INDUSTRY[sym]) return SYMBOL_TO_INDUSTRY[sym];
+
+  // 2. 官方產業名稱對照
+  const official = stock?.officialIndustry || stock?.industry || stock?.baseType || "";
+  for (const [key, cat] of Object.entries(OFFICIAL_TO_AI)) {
+    if (official.includes(key.replace("業", ""))) return cat;
+  }
+
+  // 3. 關鍵字 fallback（舊邏輯保留兜底）
+  if (official.includes("晶圓")) return "晶圓代工";
+  if (official.includes("IC設計")) return "IC設計";
+  if (official.includes("封測") || official.includes("封裝")) return "先進封裝";
+  if (official.includes("記憶體")) return "HBM記憶體";
+  if (official.includes("PCB") || official.includes("電路板")) return "PCB";
+  if (official.includes("散熱")) return "散熱系統";
+  if (official.includes("伺服器")) return "AI伺服器";
+  if (official.includes("面板") || official.includes("顯示")) return "面板顯示";
+  if (official.includes("航運") || official.includes("海運")) return "貨櫃航運";
+  if (official.includes("金融") || official.includes("銀行") || official.includes("保險")) return "銀行金融";
+  if (official.includes("生技") || official.includes("醫療") || official.includes("製藥")) return "生技醫療";
+  if (official.includes("ETF")) return "ETF";
+  if (official.includes("電源") || official.includes("電供")) return "電源管理";
+  if (official.includes("光纖") || official.includes("網通")) return "網通設備";
+  if (official.includes("車用") || official.includes("電動車")) return "車用電子";
+  if (official.includes("機器人") || official.includes("自動化")) return "機器人";
+
+  return official || "其他";
 }
 
 function buildKlineRadarSignal(stock) {
@@ -2200,18 +2306,51 @@ function buildInstitutionalFlow(stock) {
 
 
 
+// ── AI 供應鏈五層概念股對照表（與 INDUSTRY_MAP 共用代號資料）────────────────
 const conceptMap = {
-  AI: ["2382", "3231", "2356", "3017", "3324", "6669", "2376", "2377", "2454", "3443", "3661"],
-  ASIC: ["3661", "3443", "3035", "4966", "6531", "2379"],
-  IC設計: ["2454", "3034", "6415", "2379", "3443", "5274", "3227", "4966", "6531", "8016", "2401"],
-  電源管理: ["6415", "6435", "6651", "3317", "6138", "3588", "8261", "2454", "5299", "4952", "2436", "4923", "6693"],
-  高速傳輸: ["3443", "3661", "5269", "4966", "6531", "2379"],
-  手機晶片: ["2454", "3034", "3443", "6415", "2379"],
-  儲存: ["2408", "2344", "3260", "8299", "6488", "8088"],
-  面板: ["2409", "3481", "6116", "2489", "5425"],
-  PCB: ["3037", "8046", "3189", "2368", "2383", "6274", "8358"],
-  散熱: ["3017", "3324", "2421", "6230", "3653"],
-  CPO: ["3234", "3450", "3081", "4979", "3163"],
+  // Layer 1：算力基礎
+  "晶圓代工":   ["2330","2303","5347","6770","3711"],
+  "IC設計":     ["2454","3711","4966","3034","2388","3231","6531","2351","3105","5269","3706"],
+  "先進封裝":   ["2317","6185","2449","6235","6488","3049","8046","6830","4952","5274"],
+  "HBM記憶體":  ["4256","3474","2408","5312","3741"],
+  "晶片材料":   ["5483","4147","6550","3324","6239","4977","6456","8255"],
+  "ASIC":       ["3661","3443","3035","4966","6531","2379"],
+
+  // Layer 2：AI 硬體
+  "AI伺服器":   ["2382","3231","6669","4938","2301","3017","6414","3060","6115","6152","5443","3518"],
+  "散熱系統":   ["3017","6230","1626","3211","6197","2395","1569","1590","3501","6185","6593"],
+  "電源管理":   ["6409","3045","1537","6491","1504","6706","6274","2308","3324","3490","6456"],
+  "銅箔基板":   ["8046","6690","1710","4956","6183","3003","6569"],
+  "PCB":        ["3037","6904","2383","6803","4977","6462","6269","3162","8299","4966"],
+  "CPO":        ["3234","3450","3081","4979","3163"],
+
+  // Layer 3：基礎設施
+  "網通設備":   ["2345","3047","6168","4906","3390","3005","6277"],
+  "CoWoS封裝":  ["3711","8046","6235","6488","3049","2449","6830"],
+  "光纖傳輸":   ["4906","2345","3026","6168","6547","3005","4958"],
+  "資料中心":   ["3673","6415","2308","2382","6669","3231"],
+  "高速傳輸":   ["3443","3661","5269","4966","6531","2379"],
+
+  // Layer 4：終端應用
+  "AI PC/筆電": ["2454","2382","2357","4938","3231","6414"],
+  "手機零組件": ["2354","2317","4938","3231","2474","3673","3034","2352","6278"],
+  "車用電子":   ["2367","3703","2356","1537","8046","6669","2382"],
+  "機器人":     ["1504","2345","1590","2308","2301"],
+  "低軌衛星":   ["4938","2345","3047","6547","3694"],
+  "AI眼鏡":     ["2345","3047"],
+  "面板顯示":   ["2409","3481","8046","3034","2049","2351","6294","3070","2393","6176","6184","6116","2489","5425"],
+
+  // Layer 5：傳統產業（保留原有關鍵分類）
+  "銀行金融":   ["2882","2881","2884","2885","2886","2887","2888","2889","2890","2891","2892","5880"],
+  "貨櫃航運":   ["2603","2615","2609","2610","2612","2616","2618"],
+  "散裝航運":   ["2002","2204","5608","2601","2607"],
+  "生技醫療":   ["4532","4743","4746","4174","4108","6516","6548","1789","4144","6197","4952","4968"],
+  "儲存":       ["2408","2344","3260","8299","6488","8088"],
+
+  // 舊分類保留（向下相容）
+  "AI":         ["2382","3231","2356","3017","3324","6669","2376","2377","2454","3443","3661"],
+  "散熱":       ["3017","3324","2421","6230","3653"],
+  "面板":       ["2409","3481","6116","2489","5425"],
 };
 
 function normalizeGroupName(value) {
@@ -2227,27 +2366,47 @@ function normalizeGroupName(value) {
 function getIndustryKeyFromMaster(master) {
   const industry = normalizeGroupName(master?.officialIndustry || master?.industry || master?.baseType);
   const name = String(master?.stockName || master?.name || "");
-  const code = String(master?.stockCode || master?.symbol || "");
+  const code = String(master?.stockCode || master?.symbol || "").replace(/\.(TW|TWO)$/i, "");
 
-  if (conceptMap.面板.includes(code) || /友達|群創|彩晶|面板/.test(name)) return "面板";
-  if (conceptMap.PCB.includes(code)) return "PCB";
-  if (conceptMap.散熱.includes(code)) return "散熱";
-  if (conceptMap.AI.includes(code)) return "AI";
-  if (conceptMap.ASIC.includes(code)) return "ASIC";
-  if (conceptMap.IC設計.includes(code)) return "IC設計";
+  // ── 1. 精確代號對照（最高優先，與 INDUSTRY_MAP 一致）─────────────────────
+  if (SYMBOL_TO_INDUSTRY[code]) return SYMBOL_TO_INDUSTRY[code];
 
-  if (industry.includes("半導體")) return "半導體";
-  if (industry.includes("電子零組件")) return "電子零組件";
-  if (industry.includes("光電")) return "光電";
-  if (industry.includes("電腦")) return "電腦週邊";
-  if (industry.includes("通信")) return "通信網路";
-  if (industry.includes("航運")) return "航運";
-  if (industry.includes("金融")) return "金融";
-  if (industry.includes("鋼鐵")) return "鋼鐵";
-  if (industry.includes("食品")) return "食品";
-  if (industry.includes("其他電子")) return "其他電子";
+  // ── 2. conceptMap 精確對照 ───────────────────────────────────────────────
+  for (const [cat, codes] of Object.entries(conceptMap)) {
+    if (codes.includes(code)) return cat;
+  }
 
-  return industry || "未分類";
+  // ── 3. 名稱關鍵字補充 ────────────────────────────────────────────────────
+  if (/友達|群創|彩晶/.test(name)) return "面板顯示";
+  if (/奇鋐|超眾|建準|雙鴻|茂林|健策/.test(name)) return "散熱系統";
+  if (/廣達|緯穎|緯創|和碩|英業達/.test(name)) return "AI伺服器";
+  if (/聯發科/.test(name)) return "IC設計";
+  if (/台積電/.test(name)) return "晶圓代工";
+  if (/長榮|陽明|萬海|中航/.test(name)) return "貨櫃航運";
+
+  // ── 4. 官方產業名稱對照 ──────────────────────────────────────────────────
+  const OFFICIAL_TO_AI_KEY = {
+    "半導體": "IC設計",
+    "電子零組件": "PCB",
+    "光電": "面板顯示",
+    "電腦": "AI伺服器",
+    "通信": "網通設備",
+    "航運": "貨櫃航運",
+    "金融": "銀行金融",
+    "鋼鐵": "鋼鐵",
+    "食品": "食品飲料",
+    "生技": "生技醫療",
+    "醫療": "生技醫療",
+    "電機": "電源管理",
+    "車輛": "車用電子",
+    "建材": "建設營造",
+    "電信": "電信",
+  };
+  for (const [key, cat] of Object.entries(OFFICIAL_TO_AI_KEY)) {
+    if (industry.includes(key)) return cat;
+  }
+
+  return industry || "其他";
 }
 
 
@@ -4257,18 +4416,38 @@ useEffect(() => {
     const filtered =
       strongCategory === "全部"
         ? list
-        : list.filter((item) => item.strongType === strongCategory || item.baseType === strongCategory);
+        : list.filter((item) => {
+            const st = item.strongType || item.baseType || "";
+            return st === strongCategory;
+          });
 
-    return filtered.sort((a, b) => b.score - a.score);
+    // 排序：先按近3日強度，再按AI分數
+    return filtered.sort((a, b) => {
+      const aScore = (a.recent3DayScore || 0) * 0.65 + (a.score || 0) * 0.35;
+      const bScore = (b.recent3DayScore || 0) * 0.65 + (b.score || 0) * 0.35;
+      return bScore - aScore;
+    });
   }, [systemStrongList, strongCategory]);
 
   const strongCategoryOptions = useMemo(() => {
-    const options = new Set(["全部"]);
-    systemStrongList.forEach((item) => {
-      if (item.strongType) options.add(item.strongType);
-      if (item.baseType) options.add(item.baseType);
+    const LAYER_ORDER = [
+      "全部",
+      "晶圓代工","IC設計","先進封裝","HBM記憶體","晶片材料",
+      "AI伺服器","散熱系統","電源管理","銅箔基板","PCB",
+      "網通設備","CoWoS封裝","光纖傳輸","資料中心","AI軟體",
+      "AI PC/筆電","手機零組件","車用電子","機器人","低軌衛星","AI眼鏡","面板顯示",
+      "銀行金融","壽險金控","貨櫃航運","散裝航運","電信","鋼鐵","石化","食品飲料","生技醫療","建設營造","ETF",
+      "其他",
+    ];
+    const activeCats = new Set();
+    systemStrongList.forEach(item => {
+      if (item.strongType) activeCats.add(item.strongType);
     });
-    return [...options];
+    // 依固定順序回傳有資料的分類
+    const ordered = LAYER_ORDER.filter(c => c === "全部" || activeCats.has(c));
+    // 把沒在固定清單的分類加到最後
+    activeCats.forEach(c => { if (!LAYER_ORDER.includes(c)) ordered.push(c); });
+    return ordered;
   }, [systemStrongList]);
 
   const marketStats = useMemo(() => {
@@ -4396,46 +4575,62 @@ useEffect(() => {
 
 
   const reportIndustryRank = useMemo(() => {
+    function getStockIndustry(s) {
+      // 優先用 SYMBOL_TO_INDUSTRY 精確對照
+      const sym = String(s.symbol || "").replace(/\.(TW|TWO)$/i, "");
+      if (SYMBOL_TO_INDUSTRY[sym]) return SYMBOL_TO_INDUSTRY[sym];
+      // fallback 到舊欄位
+      if (s.strongType) return s.strongType;
+      if (s.baseType) return s.baseType;
+      return s.currency === "USD" ? "美股 / ETF" : "其他";
+    }
+
     function buildIndustryRows(list, direction = "strong") {
       const map = new Map();
 
       list.forEach((s) => {
-        const industry =
-          s.baseType ||
-          s.strongType ||
-          (s.currency === "USD" ? "美股 / ETF" : "其他");
-
+        const industry = getStockIndustry(s);
         const old = map.get(industry) || {
           industry,
           count: 0,
-          avgChange: 0,
-          avgScore: 0,
-          avgVolumeRatio: 0,
+          totalChange: 0,
+          totalScore: 0,
+          totalVolumeRatio: 0,
+          totalBuyVol: 0,
           stocks: [],
         };
-
         old.count += 1;
-        old.avgChange += s.changePct || 0;
-        old.avgScore += s.score || 0;
-        old.avgVolumeRatio += s.volumeRatio || 0;
+        old.totalChange += s.changePct || 0;
+        old.totalScore += s.score || 0;
+        old.totalVolumeRatio += s.volumeRatio || 0;
+        old.totalBuyVol += s.buyVolume || 0;
         old.stocks.push(s);
         map.set(industry, old);
       });
 
       return [...map.values()]
         .map((item) => ({
-          ...item,
-          avgChange: item.count ? item.avgChange / item.count : 0,
-          avgScore: item.count ? item.avgScore / item.count : 0,
-          avgVolumeRatio: item.count ? item.avgVolumeRatio / item.count : 0,
-          topStocks: item.stocks.slice(0, 5),
+          industry: item.industry,
+          count: item.count,
+          avgChange: item.count ? item.totalChange / item.count : 0,
+          avgScore: item.count ? item.totalScore / item.count : 0,
+          avgVolumeRatio: item.count ? item.totalVolumeRatio / item.count : 0,
+          totalBuyVol: item.totalBuyVol,
+          // 金流強度：漲跌幅 * 量比 * 成分股數量 → 綜合衡量資金流入強度
+          moneyFlowScore: item.count
+            ? (item.totalChange / item.count) * (item.totalVolumeRatio / item.count) * Math.log(item.count + 1)
+            : 0,
+          topStocks: item.stocks
+            .sort((a, b) => (b.changePct || 0) - (a.changePct || 0))
+            .slice(0, 5),
         }))
         .sort((a, b) => {
-          const aRank = a.avgScore * 0.4 + a.avgChange * 10 + a.avgVolumeRatio * 6;
-          const bRank = b.avgScore * 0.4 + b.avgChange * 10 + b.avgVolumeRatio * 6;
+          // 強勢：金流分數 + AI分數 + 量比加權
+          const aRank = a.avgScore * 0.3 + a.avgChange * 8 + a.avgVolumeRatio * 5 + a.moneyFlowScore * 4;
+          const bRank = b.avgScore * 0.3 + b.avgChange * 8 + b.avgVolumeRatio * 5 + b.moneyFlowScore * 4;
           return direction === "strong" ? bRank - aRank : aRank - bRank;
         })
-        .slice(0, 5);
+        .slice(0, 8); // 顯示前8個（原本5個太少）
     }
 
     return {
@@ -4475,12 +4670,15 @@ useEffect(() => {
       const master = getMasterByCode(quote.symbol);
       if (!master) return;
 
+      const sym = String(master.stockCode || "").replace(/\.(TW|TWO)$/i, "");
+      const primaryCat = SYMBOL_TO_INDUSTRY[sym] || getIndustryKeyFromMaster(master);
+
       const keys = new Set([
-        normalizeGroupName(master.officialIndustry),
-        getIndustryKeyFromMaster(master),
+        primaryCat,
         ...(master.themeTags || []),
       ]);
 
+      // 保留舊的 conceptMap 標籤（向下相容）
       Object.keys(conceptMap).forEach((conceptName) => {
         if (master.themeTags?.includes(conceptName) || conceptMap[conceptName]?.includes(master.stockCode)) {
           keys.add(conceptName);
@@ -6092,8 +6290,26 @@ useEffect(() => {
                 </div>
                 <div>
                   <div style={{fontSize:10,fontWeight:700,color:"#6b8fa8",letterSpacing:".06em",marginBottom:5}}>產業篩選</div>
-                  <select value={strongCategory} onChange={(e)=>setStrongCategory(e.target.value)} className="scan-select" style={{width:"100%",fontSize:12}}>
-                    {strongCategoryOptions.map((item)=>(<option key={item} value={item}>{item}</option>))}
+                  <select value={strongCategory} onChange={(e) => {
+                    if (!e.target.value.startsWith("──")) setStrongCategory(e.target.value);
+                  }} className="scan-select" style={{width:"100%",fontSize:12}}>
+                    {[
+                      "全部",
+                      {label:"── Layer 1 算力基礎 ──", disabled:true},
+                      "晶圓代工","IC設計","先進封裝","HBM記憶體","晶片材料",
+                      {label:"── Layer 2 AI 硬體 ──", disabled:true},
+                      "AI伺服器","散熱系統","電源管理","銅箔基板","PCB",
+                      {label:"── Layer 3 基礎設施 ──", disabled:true},
+                      "網通設備","CoWoS封裝","光纖傳輸","資料中心","AI軟體",
+                      {label:"── Layer 4 終端應用 ──", disabled:true},
+                      "AI PC/筆電","手機零組件","車用電子","機器人","低軌衛星","AI眼鏡","面板顯示",
+                      {label:"── Layer 5 傳統產業 ──", disabled:true},
+                      "銀行金融","壽險金控","貨櫃航運","散裝航運","電信","鋼鐵","石化","食品飲料","生技醫療","建設營造","ETF","其他",
+                    ].map((item, idx) =>
+                      typeof item === "string"
+                        ? <option key={item} value={item}>{item}</option>
+                        : <option key={idx} value={item.label} disabled style={{color:"#6b8fa8",fontSize:10}}>{item.label}</option>
+                    )}
                   </select>
                 </div>
                 <details>
@@ -6967,40 +7183,45 @@ useEffect(() => {
                           <div className="industry-item up" key={item.industry}
                             onClick={() => openIndustryPopup(item.industry, "strong")}
                             style={{cursor:"pointer"}}>
-                            <div>
-                              <b>{index + 1}. {item.industry}</b>
-                              <div className="muted">
-                                平均漲幅 {item.avgChange.toFixed(2)}%｜平均AI {Math.round(item.avgScore)}｜平均量比 {item.avgVolumeRatio.toFixed(2)}
+                            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                              <div style={{display:"flex",alignItems:"center",gap:6}}>
+                                <span style={{fontSize:11,color:"#6b8fa8",width:16,textAlign:"center",fontWeight:700}}>{index+1}</span>
+                                <span style={{fontSize:13,fontWeight:700,color:"#f1f5f9"}}>{item.industry}</span>
+                                <span style={{fontSize:10,color:"#6b8fa8"}}>({item.count}檔)</span>
                               </div>
-                              <div className="muted">
-                                代表股：{item.topStocks.map((s) => `${getDisplayName(s.symbol, s.name)}(${s.symbol})`).join("、")}
-                              </div>
+                              <span className="up" style={{fontSize:13,fontWeight:700}}>
+                                {item.avgChange >= 0 ? "▲" : "▼"} {Math.abs(item.avgChange).toFixed(2)}%
+                              </span>
                             </div>
-                            <span>▲ 強勢</span>
+                            <div style={{display:"flex",gap:8,marginTop:4,flexWrap:"wrap"}}>
+                              <span style={{fontSize:10,color:"#38bdf8"}}>量比 {item.avgVolumeRatio.toFixed(1)}x</span>
+                              <span style={{fontSize:10,color:"#fbbf24"}}>金流 {item.moneyFlowScore.toFixed(1)}</span>
+                              <span style={{fontSize:10,color:"#adc4d4"}}>{item.topStocks.slice(0,3).map(s=>getDisplayName(s.symbol,s.name)).join("、")}</span>
+                            </div>
                           </div>
-                        )) : <p className="report-empty">強勢產業資料更新中。</p>}
-                      </div>
-                    </div>
+                        )) : <div className="muted" style={{fontSize:12}}>暫無資料</div>}
 
-                    <div className="report-card">
-                      <h2>📉 弱勢產業前五名</h2>
-                      <div className="industry-list">
                         {reportIndustryRank.weak.length ? reportIndustryRank.weak.map((item, index) => (
                           <div className="industry-item down" key={item.industry}
                             onClick={() => openIndustryPopup(item.industry, "weak")}
                             style={{cursor:"pointer"}}>
-                            <div>
-                              <b>{index + 1}. {item.industry}</b>
-                              <div className="muted">
-                                平均漲幅 {item.avgChange.toFixed(2)}%｜平均AI {Math.round(item.avgScore)}｜平均量比 {item.avgVolumeRatio.toFixed(2)}
+                            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                              <div style={{display:"flex",alignItems:"center",gap:6}}>
+                                <span style={{fontSize:11,color:"#6b8fa8",width:16,textAlign:"center",fontWeight:700}}>{index+1}</span>
+                                <span style={{fontSize:13,fontWeight:700,color:"#f1f5f9"}}>{item.industry}</span>
+                                <span style={{fontSize:10,color:"#6b8fa8"}}>({item.count}檔)</span>
                               </div>
-                              <div className="muted">
-                                代表股：{item.topStocks.map((s) => `${getDisplayName(s.symbol, s.name)}(${s.symbol})`).join("、")}
-                              </div>
+                              <span className="down" style={{fontSize:13,fontWeight:700}}>
+                                {item.avgChange >= 0 ? "▲" : "▼"} {Math.abs(item.avgChange).toFixed(2)}%
+                              </span>
                             </div>
-                            <span>▼ 弱勢</span>
+                            <div style={{display:"flex",gap:8,marginTop:4,flexWrap:"wrap"}}>
+                              <span style={{fontSize:10,color:"#38bdf8"}}>量比 {item.avgVolumeRatio.toFixed(1)}x</span>
+                              <span style={{fontSize:10,color:"#fb7185"}}>弱勢分 {Math.abs(item.moneyFlowScore).toFixed(1)}</span>
+                              <span style={{fontSize:10,color:"#adc4d4"}}>{item.topStocks.slice(0,3).map(s=>getDisplayName(s.symbol,s.name)).join("、")}</span>
+                            </div>
                           </div>
-                        )) : <p className="report-empty">弱勢產業資料更新中。</p>}
+                        )) : <div className="muted" style={{fontSize:12}}>暫無資料</div>}
                       </div>
                     </div>
                   </div>
