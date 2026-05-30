@@ -3727,9 +3727,13 @@ useEffect(() => {
     try {
       const items = getWatchSymbols(watchText).slice(0, 30);
 
-      const result = (
-        await Promise.all(
-          items.map((item) =>
+      // 分批請求（每批3個），避免同時打太多 API 導致 ERR_INSUFFICIENT_RESOURCES
+      const BATCH = 3;
+      const allResults = [];
+      for (let i = 0; i < items.length; i += BATCH) {
+        const batch = items.slice(i, i + BATCH);
+        const batchResult = await Promise.all(
+          batch.map((item) =>
             fetchYahooHistory(item, range, "1d")
               .then((data) => {
                 const analyzed = analyzeStock(data);
@@ -3741,8 +3745,21 @@ useEffect(() => {
                 return null;
               })
           )
-        )
-      ).filter(Boolean);
+        );
+        allResults.push(...batchResult);
+        // 批次間稍作間隔
+        if (i + BATCH < items.length) await new Promise(r => setTimeout(r, 300));
+      }
+      const result = allResults.filter(Boolean)
+       .filter(s => s.symbol && s.close != null) // 確保基本欄位存在
+       .map(s => ({
+         ...s,
+         changePct: s.changePct ?? 0,
+         score: s.score ?? 0,
+         winRatePredict: s.winRatePredict ?? 0,
+         volumeRatio: s.volumeRatio ?? 0,
+         tradeSignal: s.tradeSignal ?? { action: "—", tone: "hold", reasons: [], risk: [], stopLoss: null, takeProfit: null, label: "" },
+       }));
 
       setWatchList(result);
       // 檢查價格提醒
@@ -6422,9 +6439,10 @@ useEffect(() => {
                         </td>
                       </tr>
                     )}
-                    {displayedWatchList.map((s) => (
-                      <React.Fragment key={s.symbol}>
-                      <tr onClick={() => openStockAnalysisFromList(s)}>
+                    {displayedWatchList.flatMap((s) => {
+                      const rows = [];
+                      rows.push(
+                      <tr key={s.symbol} onClick={() => openStockAnalysisFromList(s)}>
                         <td>
                             <div className="stock-name-stack">
                               <span className="stock-name-main">
@@ -6442,11 +6460,11 @@ useEffect(() => {
                           </td>
                         <td><span className="badge">{s.currency === "USD" ? "美股" : "台股"}</span></td>
                         <td>{s.currency} {s.close?.toFixed?.(2)}</td>
-                        <td className={s.changePct >= 0 ? "up" : "down"}>{s.changePct.toFixed(2)}%</td>
-                        <td>{s.score}</td>
-                        <td>{s.winRatePredict}%</td>
+                        <td className={(s.changePct ?? 0) >= 0 ? "up" : "down"}>{(s.changePct ?? 0).toFixed(2)}%</td>
+                        <td>{s.score ?? "--"}</td>
+                        <td>{s.winRatePredict ?? "--"}%</td>
                         <td>{s.volumeRatio?.toFixed(2) ?? "--"}</td>
-                        <td><span className="badge">{s.tradeSignal.action}</span></td>
+                        <td><span className="badge">{s.tradeSignal?.action ?? "—"}</span></td>
                         <td>
                           <span style={{ position: "relative", display: "inline-block" }}>
                             <button className="ghost small" onClick={(e) => {
@@ -6490,16 +6508,19 @@ useEffect(() => {
                             )}
                         </td>
                       </tr>
-                      {stockNotes[s.symbol] && editingNote !== s.symbol && (
-                        <tr onClick={e=>e.stopPropagation()}>
-                          <td colSpan={9} style={{padding:"4px 16px 8px",background:"rgba(251,191,36,.05)",borderLeft:"2px solid #fbbf24"}}>
-                            <span style={{fontSize:11,color:"#fbbf24"}}>📝 </span>
-                            <span style={{fontSize:12,color:"#cddae2"}}>{stockNotes[s.symbol]}</span>
-                          </td>
-                        </tr>
-                      )}
-                      </React.Fragment>
-                    ))}
+                      );
+                      if (stockNotes[s.symbol] && editingNote !== s.symbol) {
+                        rows.push(
+                          <tr key={`note-${s.symbol}`} onClick={e=>e.stopPropagation()}>
+                            <td colSpan={9} style={{padding:"4px 16px 8px",background:"rgba(251,191,36,.05)",borderLeft:"2px solid #fbbf24"}}>
+                              <span style={{fontSize:11,color:"#fbbf24"}}>📝 </span>
+                              <span style={{fontSize:12,color:"#cddae2"}}>{stockNotes[s.symbol]}</span>
+                            </td>
+                          </tr>
+                        );
+                      }
+                      return rows;
+                    })}
                   </tbody>
                 </table>
               </div>
