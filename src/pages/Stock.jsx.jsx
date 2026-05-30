@@ -1029,7 +1029,27 @@ async function fetchYahooChartResult(symbol, range = "6mo", interval = "1d") {
   return result ? { result, symbol } : null;
 }
 
+// ── 全域資料快取（5分鐘有效）─────────────────────────────────────────────
+const _dataCache = new Map();
+const CACHE_TTL = 5 * 60 * 1000;
+function _getCacheKey(sym, rng, itv) { return `${sym}:${rng}:${itv}`; }
+function _getCache(sym, rng, itv) {
+  const e = _dataCache.get(_getCacheKey(sym, rng, itv));
+  if (!e) return null;
+  if (Date.now() - e.ts > CACHE_TTL) { _dataCache.delete(_getCacheKey(sym, rng, itv)); return null; }
+  return e.data;
+}
+function _setCache(sym, rng, itv, data) {
+  _dataCache.set(_getCacheKey(sym, rng, itv), { data, ts: Date.now() });
+  if (_dataCache.size > 200) _dataCache.delete(_dataCache.keys().next().value);
+}
+
 async function fetchYahooHistory(input, range = "6mo", interval = "1d") {
+  // 先查快取
+  const cacheKey = _getCacheKey(String(input), range, interval);
+  const cached = _getCache(String(input), range, interval);
+  if (cached) return cached;
+
   const candidates = buildYahooSymbolCandidates(input);
   if (!candidates.length) throw new Error("請輸入股票代碼或名稱");
 
@@ -1086,15 +1106,17 @@ async function fetchYahooHistory(input, range = "6mo", interval = "1d") {
   const cleanSymbol = String(symbol || "").replace(/\.(TW|TWO)$/i, "");
   if (metaChineseName) saveName(cleanSymbol, metaChineseName);
 
-  return {
+  const result2 = {
     symbol: cleanSymbol,
     yahooSymbol: symbol,
-    yahooName: metaRawName,   // 原始名稱，供後續判斷
+    yahooName: metaRawName,
     name: metaChineseName || getDisplayName(cleanSymbol) || cleanSymbol,
     currency: meta.currency || "TWD",
     regularMarketPrice: meta.regularMarketPrice || history.at(-1)?.close || null,
     history,
   };
+  _setCache(String(input), range, interval, result2);
+  return result2;
 }
 
 function sma(values, period) {
@@ -2537,6 +2559,10 @@ function getStockProfile(stock) {
 // 自選股分組設定
 // 若你的舊版 Stock.jsx 有使用 FAVORITE_GROUPS，但新拆檔時沒有帶到，就會造成頁面黑屏。
 const FAVORITE_GROUPS = ["選單1", "選單2", "選單3", "選單4", "選單5"];
+const FAVORITE_GROUP_COLORS = {
+  "選單1": "#38bdf8", "選單2": "#4ade80", "選單3": "#fbbf24",
+  "選單4": "#fb7185", "選單5": "#a78bfa",
+};
 
 const DEFAULT_FAVORITE_GROUP = FAVORITE_GROUPS[0];
 
@@ -2789,6 +2815,15 @@ useEffect(() => {
   const [watchList, setWatchList] = useState([]);
   const [loading, setLoading] = useState(false);
   const [scanning, setScanning] = useState(false);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+
+  useEffect(() => {
+    const onOnline = () => setIsOnline(true);
+    const onOffline = () => setIsOnline(false);
+    window.addEventListener("online", onOnline);
+    window.addEventListener("offline", onOffline);
+    return () => { window.removeEventListener("online", onOnline); window.removeEventListener("offline", onOffline); };
+  }, []);
   const [autoScan, setAutoScan] = useState(false);
   const [error, setError] = useState("");
   const [rightView, setRightView] = useState("ai");
@@ -2831,6 +2866,39 @@ useEffect(() => {
   const [taiwanMarketIndex, setTaiwanMarketIndex] = useState(null);
   const [taiwanMarketUpdatedAt, setTaiwanMarketUpdatedAt] = useState(null);
   const [strongCategory, setStrongCategory] = useState("全部");
+  // ── 價格提醒（純前端，存 localStorage）──────────────────────────────────
+  const [priceAlerts, setPriceAlerts] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("stockRadarAlerts") || "[]"); }
+    catch { return []; }
+  });
+  const [alertTriggered, setAlertTriggered] = useState([]); // 已觸發的提醒
+
+  function addPriceAlert(symbol, name, condition, price) {
+    const alert = { id: Date.now(), symbol, name, condition, price: Number(price), createdAt: new Date().toLocaleDateString("zh-TW") };
+    const next = [...priceAlerts, alert];
+    setPriceAlerts(next);
+    localStorage.setItem("stockRadarAlerts", JSON.stringify(next));
+  }
+  function removePriceAlert(id) {
+    const next = priceAlerts.filter(a => a.id !== id);
+    setPriceAlerts(next);
+    localStorage.setItem("stockRadarAlerts", JSON.stringify(next));
+  }
+
+  // ── 個人化筆記（存 localStorage）────────────────────────────────────────
+  const [stockNotes, setStockNotes] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("stockRadarNotes") || "{}"); }
+    catch { return {}; }
+  });
+  const [editingNote, setEditingNote] = useState(null); // symbol
+
+  function saveStockNote(symbol, text) {
+    const next = { ...stockNotes, [symbol]: text };
+    if (!text.trim()) delete next[symbol];
+    setStockNotes(next);
+    localStorage.setItem("stockRadarNotes", JSON.stringify(next));
+  }
+
   const [favoritePickerStock, setFavoritePickerStock] = useState(null);
   const [favoritePickerPos, setFavoritePickerPos] = useState(null);
   const [favoriteGroupFilter, setFavoriteGroupFilter] = useState("全部");
@@ -2949,6 +3017,8 @@ useEffect(() => {
     if (lastMenuRef.current !== activeMenu) {
       menuHistoryRef.current.push(lastMenuRef.current);
       lastMenuRef.current = activeMenu;
+      // 離開分析看板時恢復預設標題
+      if (activeMenu !== "analysis") document.title = "股市雷達 | 台股美股 AI 分析";
     }
   }, [activeMenu]);
 
@@ -3596,6 +3666,8 @@ useEffect(() => {
       setStock({ ...analyzed, name: cleanStockName(displayName), officialIndustry: stockIndustry });
       setQuery(analyzed.symbol || target || rawInput);
       setActiveMenu("analysis");
+      // 動態更新頁面標題
+      document.title = `${cleanStockName(displayName) || analyzed.symbol} ${analyzed.symbol} | 股市雷達`;
     } catch (err) {
       console.error(err);
       setError(err.message || "查詢失敗");
@@ -3629,12 +3701,14 @@ useEffect(() => {
       const displayName = nameIsCode2 ? (item.name || await fetchAndCacheName(analyzed.symbol)) : analyzed.name;
 
       const stockIndustry2 = getIndustry(analyzed.symbol);
-      setStock({
+      const finalStock = {
         ...analyzed,
         name: displayName,
         baseType: item.baseType || stockIndustry2 || analyzed.baseType,
         officialIndustry: item.officialIndustry || stockIndustry2 || analyzed.officialIndustry,
-      });
+      };
+      setStock(finalStock);
+      document.title = `${displayName || analyzed.symbol} ${analyzed.symbol} | 股市雷達`;
     } catch (err) {
       console.warn("openStockAnalysisFromList failed", target, err);
       setStock(item);
@@ -3671,6 +3745,20 @@ useEffect(() => {
       ).filter(Boolean);
 
       setWatchList(result);
+      // 檢查價格提醒
+      const triggered = [];
+      result.forEach(s => {
+        priceAlerts.forEach(alert => {
+          if (alert.symbol !== s.symbol) return;
+          const price = s.close || 0;
+          const hit = alert.condition === "above" ? price >= alert.price : price <= alert.price;
+          if (hit) triggered.push({ ...alert, currentPrice: price });
+        });
+      });
+      if (triggered.length > 0) setAlertTriggered(prev => {
+        const ids = new Set(prev.map(a => a.id));
+        return [...prev, ...triggered.filter(a => !ids.has(a.id))];
+      });
       // 移除強制跳頁：不再自動切換 activeMenu，避免在其他頁面被強制跳回
       if (!silent && !stock && result[0]) setStock(result[0]);
     } catch (err) {
@@ -5740,6 +5828,30 @@ useEffect(() => {
 {/* 右上角三格已移除 */}
           </header>
 
+          {/* 離線提示 */}
+          {!isOnline && (
+            <div style={{background:"rgba(248,113,113,.12)",border:"1px solid rgba(248,113,113,.35)",borderRadius:8,padding:"8px 14px",marginBottom:8,display:"flex",alignItems:"center",gap:8}}>
+              <span style={{fontSize:14}}>📡</span>
+              <span style={{fontSize:12,color:"#fb7185",fontWeight:600}}>網路連線中斷，目前顯示的資料可能不是最新版本</span>
+            </div>
+          )}
+
+          {/* 價格提醒觸發通知 */}
+          {alertTriggered.length > 0 && (
+            <div style={{background:"rgba(251,191,36,.12)",border:"1px solid rgba(251,191,36,.35)",borderRadius:8,padding:"8px 14px",marginBottom:8,display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:8}}>
+              <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                <span style={{fontSize:14}}>🔔</span>
+                {alertTriggered.slice(0,3).map(a => (
+                  <span key={a.id} style={{fontSize:12,color:"#fbbf24",fontWeight:600}}>
+                    {getDisplayName(a.symbol, a.name)} {a.condition==="above"?"漲破":"跌破"} {a.price}（現價 {a.currentPrice?.toFixed(2)}）
+                  </span>
+                ))}
+                {alertTriggered.length > 3 && <span style={{fontSize:11,color:"#6b8fa8"}}>等 {alertTriggered.length} 個提醒觸發</span>}
+              </div>
+              <button onClick={()=>setAlertTriggered([])} style={{fontSize:11,color:"#6b8fa8",background:"none",border:"none",cursor:"pointer"}}>✕ 清除</button>
+            </div>
+          )}
+
           {activeMenu === "analysis" && (
             <div className="analysis-layout">
               <div className="card search-combo-card">
@@ -5814,6 +5926,21 @@ useEffect(() => {
                         {item.symbol} {item.name}
                       </button>
                     ))}
+                  </div>
+                )}
+
+                {/* 最近瀏覽 */}
+                {searchHistory.length > 0 && (
+                  <div style={{marginTop:8}}>
+                    <div style={{fontSize:10,color:"#6b8fa8",letterSpacing:".06em",marginBottom:5,fontWeight:700}}>最近瀏覽</div>
+                    <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+                      {searchHistory.slice(0,6).map(sym => (
+                        <button key={sym} onClick={() => searchOne(sym)}
+                          style={{fontSize:11,padding:"3px 8px",borderRadius:5,background:"rgba(14,165,233,.07)",border:"1px solid rgba(14,165,233,.18)",color:"#7dd3fc",cursor:"pointer"}}>
+                          {sym}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 )}
 
@@ -6192,6 +6319,48 @@ useEffect(() => {
                 })()}
 
                 {!stock && <p className="empty">尚無分析資料。</p>}
+
+                {/* ── 價格提醒設定 ── */}
+                {stock && (
+                  <div style={{marginTop:10,padding:"10px 0",borderTop:"1px solid rgba(14,165,233,.12)"}}>
+                    <div style={{fontSize:11,fontWeight:700,color:"#38bdf8",marginBottom:8,letterSpacing:".06em"}}>🔔 價格提醒</div>
+                    {/* 設定新提醒：用 uncontrolled input 避免 IIFE 無法用 useState */}
+                    <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:8}}>
+                      <select id={`alert-cond-${stock.symbol}`} defaultValue="above"
+                        style={{fontSize:11,padding:"4px 6px",background:"rgba(6,14,26,.8)",border:"1px solid rgba(14,165,233,.2)",borderRadius:5,color:"#cddae2"}}>
+                        <option value="above">漲破</option>
+                        <option value="below">跌破</option>
+                      </select>
+                      <input type="number" id={`alert-price-${stock.symbol}`}
+                        placeholder={stock.close?.toFixed(2) ?? "目標價"}
+                        style={{width:80,fontSize:11,padding:"4px 7px",background:"rgba(6,14,26,.8)",border:"1px solid rgba(14,165,233,.2)",borderRadius:5,color:"#f1f5f9"}}/>
+                      <button onClick={() => {
+                        const cond = document.getElementById(`alert-cond-${stock.symbol}`)?.value || "above";
+                        const priceEl = document.getElementById(`alert-price-${stock.symbol}`);
+                        const price = priceEl?.value;
+                        if (price && Number(price) > 0) {
+                          addPriceAlert(stock.symbol, stock.name, cond, price);
+                          if (priceEl) priceEl.value = "";
+                        }
+                      }} style={{fontSize:11,padding:"4px 10px",background:"rgba(14,165,233,.15)",border:"1px solid rgba(14,165,233,.3)",borderRadius:5,color:"#38bdf8",cursor:"pointer"}}>
+                        + 設定
+                      </button>
+                    </div>
+                    {/* 目前提醒清單 */}
+                    {priceAlerts.filter(a => a.symbol === stock.symbol).map(a => (
+                      <div key={a.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"4px 6px",background:"rgba(14,165,233,.06)",borderRadius:5,marginBottom:3,fontSize:11}}>
+                        <span style={{color: a.condition==="above"?"#4ade80":"#fb7185"}}>
+                          {a.condition==="above"?"▲ 漲破":"▼ 跌破"} <b>{a.price}</b>
+                        </span>
+                        <button onClick={()=>removePriceAlert(a.id)}
+                          style={{fontSize:10,color:"#fb7185",background:"none",border:"none",cursor:"pointer"}}>✕</button>
+                      </div>
+                    ))}
+                    {priceAlerts.filter(a=>a.symbol===stock.symbol).length===0 && (
+                      <div style={{fontSize:11,color:"#6b8fa8"}}>尚未設定提醒</div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -6254,10 +6423,20 @@ useEffect(() => {
                       </tr>
                     )}
                     {displayedWatchList.map((s) => (
-                      <tr key={s.symbol} onClick={() => openStockAnalysisFromList(s)}>
+                      <React.Fragment key={s.symbol}>
+                      <tr onClick={() => openStockAnalysisFromList(s)}>
                         <td>
                             <div className="stock-name-stack">
-                              <span className="stock-name-main">{cleanStockName(getDisplayName(s.symbol, s.name))}</span>
+                              <span className="stock-name-main">
+                                {(() => {
+                                  const grp = favorites.find(f => f.symbol === s.symbol)?.group;
+                                  const grpColor = grp ? FAVORITE_GROUP_COLORS[grp] : null;
+                                  return grpColor ? (
+                                    <span style={{display:"inline-block",width:7,height:7,borderRadius:"50%",background:grpColor,marginRight:5,flexShrink:0,verticalAlign:"middle"}}/>
+                                  ) : null;
+                                })()}
+                                {cleanStockName(getDisplayName(s.symbol, s.name))}
+                              </span>
                               <span className="stock-name-code">{s.symbol}</span>
                             </div>
                           </td>
@@ -6291,8 +6470,35 @@ useEffect(() => {
                             )}
                           </span>{" "}
                           <button className="danger small" onClick={(e) => { e.stopPropagation(); removeWatchSymbol(s.symbol); }}>刪除</button>
+                            <button className="ghost small" title={stockNotes[s.symbol] ? "已有筆記" : "新增筆記"}
+                              style={{marginLeft:4,color:stockNotes[s.symbol]?"#fbbf24":"#6b8fa8"}}
+                              onClick={(e) => { e.stopPropagation(); setEditingNote(editingNote === s.symbol ? null : s.symbol); }}>
+                              {stockNotes[s.symbol] ? "📝" : "✏️"}
+                            </button>
+                            {editingNote === s.symbol && (
+                              <div style={{marginTop:6,display:"flex",gap:6,alignItems:"center"}} onClick={e=>e.stopPropagation()}>
+                                <input defaultValue={stockNotes[s.symbol] || ""} id={`note-${s.symbol}`}
+                                  placeholder="輸入備忘錄..."
+                                  style={{flex:1,fontSize:12,padding:"4px 8px",background:"rgba(6,14,26,.90)",border:"1px solid rgba(14,165,233,.25)",borderRadius:5,color:"#f1f5f9"}}
+                                  onKeyDown={e => { if(e.key==="Enter"){ saveStockNote(s.symbol, e.target.value); setEditingNote(null); } if(e.key==="Escape") setEditingNote(null); }}
+                                />
+                                <button onClick={() => { const el = document.getElementById(`note-${s.symbol}`); saveStockNote(s.symbol, el?.value||""); setEditingNote(null); }}
+                                  style={{fontSize:11,padding:"3px 8px",background:"rgba(14,165,233,.15)",border:"1px solid rgba(14,165,233,.3)",borderRadius:5,color:"#38bdf8",cursor:"pointer"}}>
+                                  儲存
+                                </button>
+                              </div>
+                            )}
                         </td>
                       </tr>
+                      {stockNotes[s.symbol] && editingNote !== s.symbol && (
+                        <tr onClick={e=>e.stopPropagation()}>
+                          <td colSpan={9} style={{padding:"4px 16px 8px",background:"rgba(251,191,36,.05)",borderLeft:"2px solid #fbbf24"}}>
+                            <span style={{fontSize:11,color:"#fbbf24"}}>📝 </span>
+                            <span style={{fontSize:12,color:"#cddae2"}}>{stockNotes[s.symbol]}</span>
+                          </td>
+                        </tr>
+                      )}
+                      </React.Fragment>
                     ))}
                   </tbody>
                 </table>
