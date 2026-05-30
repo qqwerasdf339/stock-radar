@@ -2952,6 +2952,18 @@ useEffect(() => {
     }
   }, [activeMenu]);
 
+  // ── 進入自選股頁面時自動載入資料 ────────────────────────────────────────
+  useEffect(() => {
+    if (activeMenu !== "watchlist") return;
+    const items = getWatchSymbols(watchText);
+    if (!items.length) return;
+    // 若清單是空的（剛進頁面）才自動觸發，避免重複刷新
+    if (watchList.length === 0) {
+      scanWatchList();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeMenu]);
+
   function goBackToPreviousView() {
     const previousMenu = menuHistoryRef.current.pop();
 
@@ -3659,8 +3671,8 @@ useEffect(() => {
       ).filter(Boolean);
 
       setWatchList(result);
+      // 移除強制跳頁：不再自動切換 activeMenu，避免在其他頁面被強制跳回
       if (!silent && !stock && result[0]) setStock(result[0]);
-      if (!silent) setActiveMenu("watchlist");
     } catch (err) {
       setError(err.message || "自選清單掃描失敗");
     } finally {
@@ -4042,9 +4054,10 @@ useEffect(() => {
 
     loadWatchListInBackground();
 
+    // 背景每 3 分鐘刷新一次（原 60 秒太頻繁，可能觸發 Yahoo API 限制）
     const timer = setInterval(() => {
       loadWatchListInBackground();
-    }, 60000);
+    }, 180000);
 
     return () => {
       cancelled = true;
@@ -6221,10 +6234,25 @@ useEffect(() => {
                   <option value="win">勝率預測排序</option>
                 </select>
               </div>
+              {scanning && (
+                <div style={{padding:"16px 0",textAlign:"center",color:"#38bdf8",fontSize:13,display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
+                  <span style={{display:"inline-block",width:14,height:14,border:"2px solid #38bdf8",borderTopColor:"transparent",borderRadius:"50%",animation:"spin 0.8s linear infinite"}}/>
+                  資料載入中，請稍候…
+                </div>
+              )}
               <div className="table-wrap">
                 <table>
                   <thead><tr><th>代號</th><th>市場</th><th>價格</th><th>漲跌</th><th>AI</th><th>勝率</th><th>量比</th><th>訊號</th><th>操作</th></tr></thead>
                   <tbody>
+                    {!scanning && displayedWatchList.length === 0 && (
+                      <tr>
+                        <td colSpan={9} style={{textAlign:"center",padding:"40px 0",color:"#6b8fa8",fontSize:13}}>
+                          {getWatchSymbols(watchText).length === 0
+                            ? "尚未加入任何自選股，請點選右上角「管理標的」新增"
+                            : "資料載入中，請稍候…"}
+                        </td>
+                      </tr>
+                    )}
                     {displayedWatchList.map((s) => (
                       <tr key={s.symbol} onClick={() => openStockAnalysisFromList(s)}>
                         <td>
