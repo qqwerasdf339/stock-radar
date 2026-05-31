@@ -5176,8 +5176,8 @@ useEffect(() => {
         .search-form-zone { padding-bottom: 12px; border-bottom: 1px solid rgba(14,165,233,.10); margin-bottom: 2px; }
         .search-current-zone { display: flex; flex-direction: column; gap: 10px; }
         .search-current-zone .quick-selected-card { margin-top: 0; border-top: 0; padding-top: 0; }
-        .profile-mini-card { background: rgba(6,14,26,.60); border: 1px solid rgba(14,165,233,.10); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 0; }
-        .profile-mini-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 7px 0; border-bottom: .5px solid rgba(14,165,233,.08); }
+        .profile-mini-card { background: rgba(6,14,26,.60); border: 1px solid rgba(14,165,233,.10); border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 0; }
+        .profile-mini-row { display: flex; flex-direction: column; gap: 4px; padding: 10px 0; border-bottom: .5px solid rgba(14,165,233,.08); }
         .profile-mini-row:last-child { border-bottom: 0; }
 
         /* 중앙：K 線圖 */
@@ -5209,8 +5209,8 @@ useEffect(() => {
         .profile-hero h3 { font-size: 22px; margin-bottom: 8px; color: #f8fafc; }
         .profile-row { display: grid; grid-template-columns: 120px 1fr; gap: 10px; padding: 10px 0; border-top: 1px solid rgba(56,189,248,.10); }
         .profile-row:first-child { border-top: 0; }
-        .profile-label { color: #cddae2; font-size: 13px; }
-        .profile-value { color: #e5e7eb; font-weight: 800; }
+        .profile-label { color: #8ab4cc; font-size: 11px; letter-spacing: .04em; font-weight: 600; }
+        .profile-value { color: #f1f5f9; font-weight: 600; font-size: 13px; line-height: 1.5; }
         /* ── 法人圖表 ─────────────────────────────────────────── */
         .inst-chart-card { background: rgba(6,14,26,.70); border: 1px solid rgba(14,165,233,.12); border-radius: 10px; padding: 12px; margin-bottom: 8px; }
         .inst-chart-title { font-size: 11px; font-weight: 700; color: #adc4d4; letter-spacing: .05em; margin-bottom: 10px; }
@@ -5519,7 +5519,56 @@ useEffect(() => {
         }
 
         /* 表格 */
-        .scan-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+        /* ── 自選股表格新設計 ─────────────────────────────────────────────── */
+        .wl-table { width: 100%; border-collapse: collapse; }
+        .wl-table thead tr { background: #060e1a; border-bottom: 1px solid rgba(14,165,233,.18); }
+        .wl-table th { padding: 9px 14px; text-align: left; font-size: 10px; font-weight: 700; color: #6b8fa8; letter-spacing: .07em; text-transform: uppercase; white-space: nowrap; }
+        .wl-table th.right { text-align: right; }
+        .wl-table th.center { text-align: center; }
+        .wl-table td { padding: 0; border-bottom: 1px solid rgba(14,165,233,.06); }
+        .wl-row { cursor: pointer; transition: background .12s; }
+        .wl-row:hover td { background: rgba(14,165,233,.05); }
+        .wl-row:last-child td { border-bottom: none; }
+        .wl-cell { padding: 11px 14px; vertical-align: middle; }
+        .wl-cell.right { text-align: right; }
+        .wl-cell.center { text-align: center; }
+
+        /* 股票名稱欄 */
+        .wl-stock { display: flex; align-items: center; gap: 10px; }
+        .wl-avatar { width: 38px; height: 38px; border-radius: 9px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 900; letter-spacing: .01em; flex-shrink: 0; }
+        .wl-avatar.tw { background: rgba(14,165,233,.12); border: 1px solid rgba(14,165,233,.22); color: #38bdf8; }
+        .wl-avatar.us { background: rgba(139,92,246,.12); border: 1px solid rgba(139,92,246,.22); color: #a78bfa; }
+        .wl-name { font-size: 14px; font-weight: 700; color: #f1f5f9; line-height: 1.2; }
+        .wl-code { font-size: 11px; color: #6b8fa8; margin-top: 2px; display: flex; align-items: center; gap: 5px; }
+        .wl-grp-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+
+        /* 價格欄 */
+        .wl-price { font-size: 15px; font-weight: 700; color: #f1f5f9; }
+        .wl-currency { font-size: 10px; color: #6b8fa8; margin-top: 2px; }
+
+        /* 漲跌欄 */
+        .wl-change-pct { font-size: 14px; font-weight: 700; }
+        .wl-change-abs { font-size: 11px; color: #6b8fa8; margin-top: 1px; }
+
+        /* AI分數欄 */
+        .wl-score-num { font-size: 16px; font-weight: 800; line-height: 1; }
+        .wl-score-bar { width: 44px; height: 4px; background: rgba(14,165,233,.10); border-radius: 2px; margin-top: 4px; overflow: hidden; }
+        .wl-score-fill { height: 100%; border-radius: 2px; }
+
+        /* 訊號燈號（仿 twetf 情緒燈號） */
+        .wl-signal { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; white-space: nowrap; }
+        .wl-signal.buy  { background: rgba(34,197,94,.14); color: #4ade80; border: 1px solid rgba(34,197,94,.25); }
+        .wl-signal.hold { background: rgba(251,191,36,.12); color: #fbbf24; border: 1px solid rgba(251,191,36,.22); }
+        .wl-signal.sell { background: rgba(248,113,113,.12); color: #fb7185; border: 1px solid rgba(248,113,113,.22); }
+        .wl-signal.neutral { background: rgba(107,143,168,.12); color: #8ab4cc; border: 1px solid rgba(107,143,168,.22); }
+
+        /* 趨勢箭頭（仿 twetf 折溢趨勢）*/
+        .wl-trend { font-size: 13px; letter-spacing: -1px; }
+
+        /* 操作欄 */
+        .wl-actions { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+
+                .scan-table { width: 100%; border-collapse: collapse; font-size: 14px; }
         .scan-table thead { position: sticky; top: 0; z-index: 10; }
         .scan-table thead tr { background: #0d1e32; border-bottom: 2px solid rgba(14,165,233,.30); }
         .scan-table th { padding: 10px 10px; text-align: left; font-size: 11px; font-weight: 700; color: #b8ccd8; letter-spacing: .04em; white-space: nowrap; }
@@ -5992,14 +6041,70 @@ useEffect(() => {
                 </div>
               
                   <div className="profile-mini-card">
+                    {/* 所屬產業 */}
                     <div className="profile-mini-row">
                       <span className="profile-label">所屬產業</span>
                       <span className="profile-value">{stockProfile.industry || "未分類產業"}</span>
                     </div>
+
+                    {/* AI供應鏈分類 */}
+                    {stock && (
+                      <div className="profile-mini-row">
+                        <span className="profile-label">供應鏈分類</span>
+                        <span className="profile-value" style={{color:"#38bdf8"}}>
+                          {SYMBOL_TO_INDUSTRY[String(stock.symbol||"").replace(/\.(TW|TWO)$/i,"")] || stockProfile.industry || "--"}
+                        </span>
+                      </div>
+                    )}
+
+                    {/* 主要業務 */}
                     <div className="profile-mini-row">
-                      <span className="profile-label">主要產品 / 業務</span>
-                      <span className="profile-value">{stockProfile.business}</span>
+                      <span className="profile-label">主要業務</span>
+                      <span className="profile-value">{stockProfile.business || "--"}</span>
                     </div>
+
+                    {/* 市場別 */}
+                    {stock && (
+                      <div className="profile-mini-row">
+                        <span className="profile-label">市場 / 幣別</span>
+                        <span className="profile-value">
+                          {stock.currency === "USD" ? "🇺🇸 美股 / USD" : isTaiwanStock(stock.symbol) ? "🇹🇼 台股 / TWD" : stock.currency || "TWD"}
+                        </span>
+                      </div>
+                    )}
+
+                    {/* AI 評級 */}
+                    {stock && (
+                      <div className="profile-mini-row">
+                        <span className="profile-label">AI 評級</span>
+                        <div style={{display:"flex",alignItems:"center",gap:6}}>
+                          <span className="profile-value" style={{
+                            color: stock.score >= 75 ? "#4ade80" : stock.score >= 50 ? "#fbbf24" : "#fb7185"
+                          }}>
+                            {stock.score ?? "--"} / 100
+                          </span>
+                          <span style={{fontSize:11,color:"#6b8fa8"}}>{stock.level || ""}</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 勝率 */}
+                    {stock && (
+                      <div className="profile-mini-row" style={{borderBottom:0}}>
+                        <span className="profile-label">勝率預測</span>
+                        <div style={{display:"flex",alignItems:"center",gap:6}}>
+                          <span className="profile-value" style={{
+                            color: (stock.winRatePredict||0) >= 65 ? "#4ade80" : (stock.winRatePredict||0) >= 50 ? "#fbbf24" : "#fb7185"
+                          }}>
+                            {stock.winRatePredict ?? "--"}%
+                          </span>
+                          {/* 勝率小進度條 */}
+                          <div style={{width:50,height:5,background:"rgba(14,165,233,.12)",borderRadius:3,overflow:"hidden"}}>
+                            <div style={{width:`${stock.winRatePredict||0}%`,height:"100%",background:(stock.winRatePredict||0)>=65?"#4ade80":(stock.winRatePredict||0)>=50?"#fbbf24":"#fb7185",borderRadius:3}}/>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* 個股相關新聞（左欄） */}
@@ -6427,8 +6532,20 @@ useEffect(() => {
                 </div>
               )}
               <div className="table-wrap">
-                <table>
-                  <thead><tr><th>代號</th><th>市場</th><th>價格</th><th>漲跌</th><th>AI</th><th>勝率</th><th>量比</th><th>訊號</th><th>操作</th></tr></thead>
+                <table className="wl-table">
+                  <thead>
+                    <tr>
+                      <th style={{minWidth:170}}>股票</th>
+                      <th className="right" style={{width:110}}>價格</th>
+                      <th className="right" style={{width:90}}>漲跌</th>
+                      <th className="center" style={{width:80}}>AI 分數</th>
+                      <th className="center" style={{width:70}}>勝率</th>
+                      <th className="center" style={{width:65}}>量比</th>
+                      <th className="center" style={{width:90}}>訊號</th>
+                      <th className="center" style={{width:80}}>趨勢</th>
+                      <th style={{minWidth:130}}>操作</th>
+                    </tr>
+                  </thead>
                   <tbody>
                     {!scanning && displayedWatchList.length === 0 && (
                       <tr>
@@ -6441,31 +6558,78 @@ useEffect(() => {
                     )}
                     {displayedWatchList.flatMap((s) => {
                       const rows = [];
+                      const grp = favorites.find(f => f.symbol === s.symbol)?.group;
+                      const grpColor = grp ? FAVORITE_GROUP_COLORS[grp] : null;
+                      const isTW = s.currency !== "USD";
+                      const cleanSym = String(s.symbol||"").replace(/\.(TW|TWO)$/i,"");
+                      const chg = s.changePct ?? 0;
+                      const sc = s.score ?? 0;
+                      const scoreColor = sc >= 75 ? "#4ade80" : sc >= 50 ? "#fbbf24" : "#fb7185";
+                      const action = (s.tradeSignal?.action ?? "").toUpperCase();
+                      const sigClass = action === "BUY" ? "buy" : action === "SELL" ? "sell" : action === "HOLD" ? "hold" : "neutral";
+                      const sigLabel = action === "BUY" ? "● BUY" : action === "SELL" ? "● SELL" : action === "HOLD" ? "● HOLD" : "○ 觀察";
+                      // 趨勢箭頭（仿 twetf）
+                      const trend = chg >= 3 ? "▲▲▲" : chg >= 1 ? "▲▲" : chg > 0 ? "▲" : chg <= -3 ? "▼▼▼" : chg <= -1 ? "▼▼" : chg < 0 ? "▼" : "—";
+                      const trendColor = chg > 0 ? "#4ade80" : chg < 0 ? "#fb7185" : "#6b8fa8";
                       rows.push(
-                      <tr key={s.symbol} onClick={() => openStockAnalysisFromList(s)}>
-                        <td>
-                            <div className="stock-name-stack">
-                              <span className="stock-name-main">
-                                {(() => {
-                                  const grp = favorites.find(f => f.symbol === s.symbol)?.group;
-                                  const grpColor = grp ? FAVORITE_GROUP_COLORS[grp] : null;
-                                  return grpColor ? (
-                                    <span style={{display:"inline-block",width:7,height:7,borderRadius:"50%",background:grpColor,marginRight:5,flexShrink:0,verticalAlign:"middle"}}/>
-                                  ) : null;
-                                })()}
-                                {cleanStockName(getDisplayName(s.symbol, s.name))}
-                              </span>
-                              <span className="stock-name-code">{s.symbol}</span>
+                      <tr key={s.symbol} className="wl-row" onClick={() => openStockAnalysisFromList(s)}>
+                        {/* 股票欄 */}
+                        <td className="wl-cell">
+                          <div className="wl-stock">
+                            <div className={`wl-avatar ${isTW ? "tw" : "us"}`}>
+                              {cleanSym.slice(0,4)}
                             </div>
-                          </td>
-                        <td><span className="badge">{s.currency === "USD" ? "美股" : "台股"}</span></td>
-                        <td>{s.currency} {s.close?.toFixed?.(2)}</td>
-                        <td className={(s.changePct ?? 0) >= 0 ? "up" : "down"}>{(s.changePct ?? 0).toFixed(2)}%</td>
-                        <td>{s.score ?? "--"}</td>
-                        <td>{s.winRatePredict ?? "--"}%</td>
-                        <td>{s.volumeRatio?.toFixed(2) ?? "--"}</td>
-                        <td><span className="badge">{s.tradeSignal?.action ?? "—"}</span></td>
-                        <td>
+                            <div>
+                              <div className="wl-name">{cleanStockName(getDisplayName(s.symbol, s.name))}</div>
+                              <div className="wl-code">
+                                {grpColor && <span className="wl-grp-dot" style={{background:grpColor}}/>}
+                                <span>{cleanSym}</span>
+                                <span style={{color:"#4b6278",fontSize:10}}>{isTW ? "台股" : "美股"}</span>
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                        {/* 價格欄 */}
+                        <td className="wl-cell right">
+                          <div className="wl-price">{s.close?.toFixed?.(2) ?? "--"}</div>
+                          <div className="wl-currency">{s.currency || "TWD"}</div>
+                        </td>
+                        {/* 漲跌欄 */}
+                        <td className="wl-cell right">
+                          <div className={`wl-change-pct ${chg >= 0 ? "up" : "down"}`}>
+                            {chg >= 0 ? "▲" : "▼"} {Math.abs(chg).toFixed(2)}%
+                          </div>
+                        </td>
+                        {/* AI 分數欄 */}
+                        <td className="wl-cell center">
+                          <div className="wl-score-num" style={{color:scoreColor}}>{sc || "--"}</div>
+                          <div className="wl-score-bar">
+                            <div className="wl-score-fill" style={{width:`${sc}%`,background:scoreColor}}/>
+                          </div>
+                        </td>
+                        {/* 勝率欄 */}
+                        <td className="wl-cell center">
+                          <span style={{fontSize:13,fontWeight:600,color:(s.winRatePredict||0)>=65?"#4ade80":(s.winRatePredict||0)>=50?"#fbbf24":"#fb7185"}}>
+                            {s.winRatePredict ?? "--"}%
+                          </span>
+                        </td>
+                        {/* 量比欄 */}
+                        <td className="wl-cell center">
+                          <span style={{fontSize:13,fontWeight:600,color:(s.volumeRatio||0)>=2?"#4ade80":(s.volumeRatio||0)>=1.5?"#fbbf24":"#cddae2"}}>
+                            {s.volumeRatio?.toFixed(2) ?? "--"}x
+                          </span>
+                        </td>
+                        {/* 訊號燈號（仿 twetf 情緒燈號） */}
+                        <td className="wl-cell center">
+                          <span className={`wl-signal ${sigClass}`}>{sigLabel}</span>
+                        </td>
+                        {/* 趨勢箭頭（仿 twetf 折溢趨勢）*/}
+                        <td className="wl-cell center">
+                          <span className="wl-trend" style={{color:trendColor}}>{trend}</span>
+                        </td>
+                        {/* 操作欄 */}
+                        <td className="wl-cell">
+                          <div className="wl-actions">
                           <span style={{ position: "relative", display: "inline-block" }}>
                             <button className="ghost small" onClick={(e) => {
                               e.stopPropagation();
@@ -6506,6 +6670,7 @@ useEffect(() => {
                                 </button>
                               </div>
                             )}
+                          </div>
                         </td>
                       </tr>
                       );
