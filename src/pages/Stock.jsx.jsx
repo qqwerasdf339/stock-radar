@@ -2736,6 +2736,7 @@ function NewsTab({ API_BASE }) {
         })}
       </div>
     </div>
+
   );
 }
 
@@ -4873,17 +4874,31 @@ useEffect(() => {
 
   // 點擊產業時開啟小視窗
   function openIndustryPopup(industryName, side) {
-    const allStocks = MARKET_STRONG_POOL.filter(p => p.industry === industryName);
-    // 排序：有漲跌資料的優先，按漲幅排
-    const withData = [...systemStrongList, ...marketBreadthList]
+    // 用 INDUSTRY_MAP + SYMBOL_TO_INDUSTRY 精確抓取相關股票
+    const mapSymbols = new Set(INDUSTRY_MAP[industryName] || []);
+
+    // 從已載入的市場資料中找有即時數據的
+    const allLoaded = [...systemStrongList, ...marketBreadthList, ...watchList];
+    const seen = new Set();
+    const withData = allLoaded
       .filter(s => {
-        const pool = MARKET_STRONG_POOL.find(p => p.symbol === s.symbol);
-        return pool?.industry === industryName;
+        const sym = String(s.symbol || "").replace(/\.(TW|TWO)$/i, "");
+        if (seen.has(sym)) return false;
+        const match = mapSymbols.has(sym) || SYMBOL_TO_INDUSTRY[sym] === industryName;
+        if (match) seen.add(sym);
+        return match;
       })
       .sort((a, b) => (b.changePct || 0) - (a.changePct || 0));
-    const withDataSymbols = new Set(withData.map(s => s.symbol));
-    const noData = allStocks.filter(s => !withDataSymbols.has(s.symbol));
-    setIndustryPopup({ name: industryName, side, stocks: [...withData, ...noData] });
+
+    // 補上 INDUSTRY_MAP 裡有但尚未載入資料的代號
+    const noDataSymbols = [...mapSymbols].filter(sym => !seen.has(sym));
+
+    setIndustryPopup({
+      name: industryName,
+      side,
+      stocks: withData,
+      noDataSymbols,  // 還沒載入的代號清單
+    });
   }
 
   const terminalStrongFlow = useMemo(() => {
@@ -5018,6 +5033,7 @@ useEffect(() => {
   }, [query]);
 
   return (
+    <>
     <div className="terminal-shell">
       <style>{`
         button {border: 0;border-radius: 10px;padding: 8px 11px;background: #0ea5e9;color: #03111f;font-weight: 900;cursor: pointer;font-size: 13px;
@@ -5519,6 +5535,60 @@ useEffect(() => {
         }
 
         /* 表格 */
+        /* ── 產業彈窗 Modal ──────────────────────────────────────────────── */
+        .industry-modal-overlay {
+          position: fixed; inset: 0; z-index: 10000;
+          background: rgba(0,0,0,.65);
+          backdrop-filter: blur(4px);
+          display: flex; align-items: center; justify-content: center;
+          padding: 20px;
+          animation: fadeIn .18s ease;
+        }
+        @keyframes fadeIn { from { opacity:0; } to { opacity:1; } }
+        .industry-modal {
+          background: #0b1929;
+          border: 1px solid rgba(14,165,233,.22);
+          border-radius: 16px;
+          width: min(820px, 100%);
+          max-height: 80vh;
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
+          box-shadow: 0 24px 60px rgba(0,0,0,.55);
+          animation: slideUp .2s ease;
+        }
+        @keyframes slideUp { from { transform: translateY(20px); opacity:0; } to { transform: translateY(0); opacity:1; } }
+        .industry-modal-header {
+          display: flex; align-items: center; justify-content: space-between;
+          padding: 16px 20px 14px;
+          border-bottom: 1px solid rgba(14,165,233,.14);
+          flex-shrink: 0;
+        }
+        .industry-modal-title { font-size: 18px; font-weight: 800; color: #f1f5f9; display: flex; align-items: center; gap: 8px; }
+        .industry-modal-close { background: none; border: none; color: #6b8fa8; font-size: 20px; cursor: pointer; padding: 2px 6px; border-radius: 5px; line-height: 1; }
+        .industry-modal-close:hover { background: rgba(248,113,113,.14); color: #fb7185; }
+        .industry-modal-body { overflow-y: auto; padding: 14px 20px 20px; flex: 1; scrollbar-width: thin; }
+        .industry-modal-table { width: 100%; border-collapse: collapse; }
+        .industry-modal-table th { padding: 8px 10px; text-align: left; font-size: 10px; font-weight: 700; color: #6b8fa8; letter-spacing: .07em; text-transform: uppercase; border-bottom: 1px solid rgba(14,165,233,.16); white-space: nowrap; }
+        .industry-modal-table th.right { text-align: right; }
+        .industry-modal-table th.center { text-align: center; }
+        .industry-modal-table td { padding: 10px 10px; border-bottom: 1px solid rgba(14,165,233,.06); vertical-align: middle; }
+        .industry-modal-table tr:last-child td { border-bottom: none; }
+        .industry-modal-table tr { cursor: pointer; transition: background .1s; }
+        .industry-modal-table tr:hover td { background: rgba(14,165,233,.05); }
+        .imt-name { font-size: 14px; font-weight: 700; color: #f1f5f9; }
+        .imt-code { font-size: 11px; color: #6b8fa8; margin-top: 2px; }
+        .imt-no-data { font-size: 12px; color: #6b8fa8; font-style: italic; }
+        .industry-modal-nodata { margin-top: 12px; padding: 10px 14px; background: rgba(14,165,233,.05); border-radius: 8px; border: 1px solid rgba(14,165,233,.10); }
+        .industry-modal-nodata-title { font-size: 10px; font-weight: 700; color: #6b8fa8; letter-spacing: .06em; margin-bottom: 8px; }
+        .industry-modal-nodata-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+        .industry-modal-nodata-chip { font-size: 11px; padding: 3px 9px; background: rgba(14,165,233,.08); border: 1px solid rgba(14,165,233,.16); border-radius: 5px; color: #7dd3fc; cursor: pointer; }
+        .industry-modal-nodata-chip:hover { background: rgba(14,165,233,.18); }
+        .industry-modal-summary { display: flex; gap: 16px; padding: 0 0 12px; flex-wrap: wrap; }
+        .imt-stat { background: rgba(14,165,233,.07); border: 1px solid rgba(14,165,233,.14); border-radius: 8px; padding: 8px 14px; }
+        .imt-stat-val { font-size: 18px; font-weight: 800; color: #f1f5f9; line-height: 1; }
+        .imt-stat-label { font-size: 10px; color: #6b8fa8; margin-top: 3px; }
+
         /* ── 自選股表格新設計 ─────────────────────────────────────────────── */
         .wl-table { width: 100%; border-collapse: collapse; }
         .wl-table thead tr { background: #060e1a; border-bottom: 1px solid rgba(14,165,233,.18); }
@@ -7691,5 +7761,129 @@ useEffect(() => {
         </section>
       </div>
     </div>
+
+    {/* ── 產業彈窗 Modal ── */}
+    {industryPopup && (
+      <div className="industry-modal-overlay" onClick={() => setIndustryPopup(null)}>
+        <div className="industry-modal" onClick={e => e.stopPropagation()}>
+          <div className="industry-modal-header">
+            <div className="industry-modal-title">
+              {industryPopup.side === "strong"
+                ? <span style={{color:"#4ade80"}}>🏆</span>
+                : <span style={{color:"#fb7185"}}>📉</span>}
+              {industryPopup.name}
+              <span style={{fontSize:12,fontWeight:400,color:"#6b8fa8",marginLeft:6}}>
+                {industryPopup.stocks.length} 檔有資料
+                {industryPopup.noDataSymbols?.length > 0 && `，另 ${industryPopup.noDataSymbols.length} 檔待載入`}
+              </span>
+            </div>
+            <button className="industry-modal-close" onClick={() => setIndustryPopup(null)}>✕</button>
+          </div>
+
+          {industryPopup.stocks.length > 0 && (() => {
+            const avgChg = industryPopup.stocks.reduce((s,x)=>s+(x.changePct||0),0)/industryPopup.stocks.length;
+            const avgScore = industryPopup.stocks.reduce((s,x)=>s+(x.score||0),0)/industryPopup.stocks.length;
+            const avgVol = industryPopup.stocks.reduce((s,x)=>s+(x.volumeRatio||0),0)/industryPopup.stocks.length;
+            const upCount = industryPopup.stocks.filter(s=>(s.changePct||0)>0).length;
+            return (
+              <div style={{padding:"10px 20px 0",display:"flex",gap:12,flexWrap:"wrap"}}>
+                {[
+                  {val:`${avgChg>=0?"▲":"▼"} ${Math.abs(avgChg).toFixed(2)}%`, label:"平均漲跌", color:avgChg>=0?"#4ade80":"#fb7185"},
+                  {val:avgScore.toFixed(0), label:"平均AI分", color:"#38bdf8"},
+                  {val:`${avgVol.toFixed(2)}x`, label:"平均量比", color:"#fbbf24"},
+                  {val:`${upCount}/${industryPopup.stocks.length}`, label:"上漲/合計", color:"#4ade80"},
+                ].map(({val,label,color})=>(
+                  <div key={label} className="imt-stat">
+                    <div className="imt-stat-val" style={{color}}>{val}</div>
+                    <div className="imt-stat-label">{label}</div>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
+
+          <div className="industry-modal-body">
+            {industryPopup.stocks.length > 0 ? (
+              <table className="industry-modal-table">
+                <thead>
+                  <tr>
+                    <th style={{minWidth:150}}>股票</th>
+                    <th className="right" style={{width:90}}>現價</th>
+                    <th className="right" style={{width:85}}>漲跌</th>
+                    <th className="center" style={{width:70}}>AI分</th>
+                    <th className="center" style={{width:70}}>勝率</th>
+                    <th className="center" style={{width:70}}>量比</th>
+                    <th className="center" style={{width:80}}>訊號</th>
+                    <th className="right" style={{width:70}}>RSI</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {industryPopup.stocks.map(s => {
+                    const chg = s.changePct ?? 0;
+                    const action = (s.tradeSignal?.action ?? "").toUpperCase();
+                    const sigColor = action==="BUY"?"#4ade80":action==="SELL"?"#fb7185":"#fbbf24";
+                    return (
+                      <tr key={s.symbol} onClick={() => { openStockAnalysisFromList(s); setIndustryPopup(null); }}>
+                        <td>
+                          <div className="imt-name">{getDisplayName(s.symbol, s.name)}</div>
+                          <div className="imt-code">{String(s.symbol||"").replace(/\.(TW|TWO)$/i,"")}</div>
+                        </td>
+                        <td style={{textAlign:"right",fontSize:14,fontWeight:700,color:"#f1f5f9"}}>{s.close?.toFixed(2)??"--"}</td>
+                        <td style={{textAlign:"right"}}>
+                          <span className={chg>=0?"up":"down"} style={{fontSize:13,fontWeight:700}}>
+                            {chg>=0?"▲":"▼"} {Math.abs(chg).toFixed(2)}%
+                          </span>
+                        </td>
+                        <td style={{textAlign:"center",fontSize:14,fontWeight:700,
+                          color:(s.score||0)>=75?"#4ade80":(s.score||0)>=50?"#fbbf24":"#fb7185"}}>
+                          {s.score??"--"}
+                        </td>
+                        <td style={{textAlign:"center",fontSize:12,
+                          color:(s.winRatePredict||0)>=65?"#4ade80":"#fbbf24"}}>
+                          {s.winRatePredict??"--"}%
+                        </td>
+                        <td style={{textAlign:"center",fontSize:12,
+                          color:(s.volumeRatio||0)>=1.5?"#4ade80":"#cddae2"}}>
+                          {s.volumeRatio?.toFixed(2)??"--"}x
+                        </td>
+                        <td style={{textAlign:"center"}}>
+                          <span style={{fontSize:11,fontWeight:700,color:sigColor,
+                            background:`${sigColor}18`,border:`1px solid ${sigColor}40`,
+                            padding:"2px 8px",borderRadius:12}}>
+                            {action||"—"}
+                          </span>
+                        </td>
+                        <td style={{textAlign:"right",fontSize:12,
+                          color:(s.rsi||0)>70?"#fb7185":(s.rsi||0)<30?"#4ade80":"#cddae2"}}>
+                          {s.rsi?.toFixed(1)??"--"}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            ) : (
+              <div style={{padding:"30px 0",textAlign:"center",color:"#6b8fa8",fontSize:13}}>
+                目前尚無 {industryPopup.name} 的即時資料，請先執行強勢掃描
+              </div>
+            )}
+            {industryPopup.noDataSymbols?.length > 0 && (
+              <div className="industry-modal-nodata">
+                <div className="industry-modal-nodata-title">📋 {industryPopup.name} 完整成分股（點擊查看分析）</div>
+                <div className="industry-modal-nodata-chips">
+                  {industryPopup.noDataSymbols.map(sym => (
+                    <button key={sym} className="industry-modal-nodata-chip"
+                      onClick={() => { searchOne(sym); setIndustryPopup(null); }}>
+                      {sym}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   );
 }
