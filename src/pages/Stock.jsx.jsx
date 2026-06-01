@@ -2818,6 +2818,30 @@ useEffect(() => {
   const [scanning, setScanning] = useState(false);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
 
+  // ── Header 即時大盤狀態 ──────────────────────────────────────────────────
+  const [headerClock, setHeaderClock] = useState(() => new Date());
+  const [headerIndex, setHeaderIndex] = useState(null); // { price, change, changePct }
+
+  useEffect(() => {
+    // 每秒更新時鐘
+    const clockTimer = setInterval(() => setHeaderClock(new Date()), 1000);
+    return () => clearInterval(clockTimer);
+  }, []);
+
+  // headerIndex 同步邏輯（已移到 marketStats 定義後）
+
+  // 判斷台股開盤狀態
+  const marketStatus = (() => {
+    const h = headerClock.getHours();
+    const m = headerClock.getMinutes();
+    const day = headerClock.getDay(); // 0=週日,6=週六
+    if (day === 0 || day === 6) return { label: "休市", color: "#6b8fa8", dot: "#6b8fa8" };
+    const mins = h * 60 + m;
+    if (mins >= 9 * 60 && mins < 13 * 60 + 30) return { label: "交易中", color: "#4ade80", dot: "#4ade80" };
+    if (mins >= 8 * 60 + 30 && mins < 9 * 60) return { label: "盤前", color: "#fbbf24", dot: "#fbbf24" };
+    return { label: "已收盤", color: "#6b8fa8", dot: "#6b8fa8" };
+  })();
+
   useEffect(() => {
     const onOnline = () => setIsOnline(true);
     const onOffline = () => setIsOnline(false);
@@ -4599,6 +4623,18 @@ useEffect(() => {
     };
   }, [marketBreadthList, systemStrongList, taiwanMarketIndex]);
 
+  // ── headerIndex 同步（在 marketStats 定義後才能用）────────────────────────
+  useEffect(() => {
+    if (marketStats?.indexPrice) {
+      setHeaderIndex({
+        price: marketStats.indexPrice,
+        change: marketStats.indexChange ?? 0,
+        changePct: marketStats.indexChangePct ?? 0,
+      });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [marketStats?.indexPrice]);
+
   const stockProfile = useMemo(() => getStockProfile(stock), [stock]);
 
   const institutionalFlow = useMemo(() => buildInstitutionalFlow(stock), [stock]);
@@ -5113,7 +5149,77 @@ useEffect(() => {
         @media (max-width: 1100px) { .kline-radar-hero { grid-template-columns: repeat(2, minmax(0,1fr)); } }
         @media (max-width: 720px) { .kline-radar-hero { grid-template-columns: 1fr; } }
         .content { padding: 12px 16px; margin-left: clamp(130px, 12vw, 170px); min-width: 0; box-sizing: border-box; }
-        .top-bar { position: relative; display: flex; align-items: center; gap: 16px; margin-bottom: 14px; min-height: 64px; }
+        .top-bar { position: relative; display: flex; align-items: center; gap: 16px; margin-bottom: 14px; min-height: 58px; }
+
+        /* Header 右側大盤狀態列 */
+        .header-market-bar {
+          margin-left: auto;
+          display: flex;
+          align-items: center;
+          gap: 16px;
+          flex-shrink: 0;
+        }
+        .header-index-card {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          background: rgba(14,165,233,.07);
+          border: 1px solid rgba(14,165,233,.14);
+          border-radius: 10px;
+          padding: 6px 13px;
+          cursor: pointer;
+          transition: background .15s;
+        }
+        .header-index-card:hover { background: rgba(14,165,233,.14); }
+        .header-index-label { font-size: 10px; color: #6b8fa8; font-weight: 700; letter-spacing: .04em; white-space: nowrap; }
+        .header-index-price { font-size: 16px; font-weight: 800; color: #f1f5f9; line-height: 1; }
+        .header-index-change { font-size: 11px; font-weight: 700; line-height: 1; margin-top: 2px; }
+        .header-status-badge {
+          display: flex;
+          align-items: center;
+          gap: 5px;
+          padding: 4px 10px;
+          border-radius: 20px;
+          border: 1px solid rgba(255,255,255,.08);
+          background: rgba(6,14,26,.60);
+          font-size: 11px;
+          font-weight: 700;
+          white-space: nowrap;
+        }
+        .header-status-dot {
+          width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0;
+        }
+        .header-status-dot.trading {
+          animation: header-pulse 1.4s ease infinite;
+        }
+        @keyframes header-pulse {
+          0%,100% { opacity: 1; transform: scale(1); }
+          50% { opacity: .45; transform: scale(.75); }
+        }
+        .header-clock {
+          font-size: 13px;
+          font-weight: 700;
+          color: #8ab4cc;
+          font-variant-numeric: tabular-nums;
+          letter-spacing: .03em;
+          white-space: nowrap;
+        }
+        .header-search-btn {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          background: rgba(14,165,233,.10);
+          border: 1px solid rgba(14,165,233,.22) !important;
+          border-radius: 8px !important;
+          padding: 6px 12px !important;
+          color: #7dd3fc !important;
+          font-size: 12px !important;
+          font-weight: 600 !important;
+          cursor: pointer;
+          transition: background .15s;
+          white-space: nowrap;
+        }
+        .header-search-btn:hover { background: rgba(14,165,233,.20) !important; }
         .floating-header { /* no shadow */
           position: sticky;
           top: 0;
@@ -5144,6 +5250,11 @@ useEffect(() => {
         .top-title p { color: #cddae2; font-size: 13px; margin: 8px 0 0; white-space: nowrap; }
         @media (max-width: 1280px) {
           .top-title p { white-space: normal; }
+          .header-clock { display: none; }
+        }
+        @media (max-width: 900px) {
+          .header-search-btn { display: none; }
+          .header-index-label { display: none; }
         }
         @media (max-width: 600px) {
           /* mobile tweaks */
@@ -5953,7 +6064,7 @@ useEffect(() => {
         <section className="content">
           <header className="top-bar floating-header">
             <button className="top-back-btn" onClick={goBackToPreviousView}>
-              ← 返回上一個畫面
+              ← 返回
             </button>
 
             <div className="top-title">
@@ -5961,7 +6072,43 @@ useEffect(() => {
               <p>追蹤台股、美股與 ETF，整合 AI 分數、K線、量價與進出場提示。</p>
             </div>
 
-{/* 右上角三格已移除 */}
+            {/* ── Header 右側：大盤狀態 + 時鐘 + 快速搜尋 ── */}
+            <div className="header-market-bar">
+
+              {/* 開盤狀態燈號 */}
+              <div className="header-status-badge" style={{borderColor:`${marketStatus.dot}30`,color:marketStatus.color}}>
+                <div className={`header-status-dot${marketStatus.label==="交易中"?" trading":""}`}
+                  style={{background:marketStatus.dot}}/>
+                {marketStatus.label}
+              </div>
+
+              {/* 台股加權指數卡片 */}
+              {headerIndex && (
+                <div className="header-index-card" onClick={() => setActiveMenu("report")}
+                  title="點擊查看每日報告">
+                  <div>
+                    <div className="header-index-label">台股加權</div>
+                    <div className="header-index-price">
+                      {headerIndex.price.toLocaleString("zh-TW", {minimumFractionDigits:2,maximumFractionDigits:2})}
+                    </div>
+                    <div className={`header-index-change ${headerIndex.changePct>=0?"up":"down"}`}>
+                      {headerIndex.changePct>=0?"▲":"▼"} {Math.abs(headerIndex.changePct).toFixed(2)}%
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* 即時時鐘 */}
+              <div className="header-clock">
+                {headerClock.toLocaleTimeString("zh-TW",{hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:false})}
+              </div>
+
+              {/* 快速搜尋按鈕 */}
+              <button className="header-search-btn" onClick={() => { setActiveMenu("analysis"); setTimeout(() => document.querySelector(".search-input")?.focus(), 100); }}>
+                🔍 搜尋股票
+              </button>
+
+            </div>
           </header>
 
           {/* 離線提示 */}
@@ -5994,6 +6141,7 @@ useEffect(() => {
                 <div className="search-form-zone">
                 <label style={{fontSize:11,color:"#b4cfe0",letterSpacing:".04em",marginBottom:4,display:"block"}}>股票代碼或名稱</label>
                 <input
+                  className="search-input"
                   list="stock-search-history"
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
