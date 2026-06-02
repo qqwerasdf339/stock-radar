@@ -5322,6 +5322,24 @@ useEffect(() => {
         .profile-mini-card { background: rgba(6,14,26,.60); border: 1px solid rgba(14,165,233,.10); border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 0; }
         .profile-mini-row { display: flex; flex-direction: column; gap: 4px; padding: 10px 0; border-bottom: .5px solid rgba(14,165,233,.08); }
         .profile-mini-row:last-child { border-bottom: 0; }
+        .profile-industry-btn {
+          display: inline-flex; align-items: center; gap: 4px;
+          background: rgba(14,165,233,.08);
+          border: 1px solid rgba(14,165,233,.20);
+          border-radius: 6px;
+          color: #7dd3fc;
+          font-size: 13px; font-weight: 600;
+          padding: 3px 8px;
+          cursor: pointer;
+          transition: background .15s, border-color .15s, transform .1s;
+          text-align: left;
+        }
+        .profile-industry-btn:hover {
+          background: rgba(14,165,233,.18);
+          border-color: rgba(14,165,233,.45);
+          transform: translateX(2px);
+        }
+        .profile-industry-arrow { font-size: 12px; opacity: .7; }
 
         /* 중앙：K 線圖 */
         .combined-market-card { grid-column: 2; grid-row: 1; min-height: 210px; display: block; }
@@ -5365,8 +5383,8 @@ useEffect(() => {
         .inst-row-nums span { display: block; font-size: 10px; color: #adc4d4; margin-bottom: 2px; }
         .inst-row-nums b { font-size: 13px; font-weight: 700; color: #f1f5f9; }
         .inst-bar-wrap { display: flex; height: 6px; border-radius: 3px; overflow: hidden; margin-bottom: 4px; gap: 1px; }
-        .inst-bar-buy { background: #22c55e; border-radius: 3px 0 0 3px; transition: width .4s; }
-        .inst-bar-sell { background: #fb7185; border-radius: 0 3px 3px 0; transition: width .4s; }
+        .inst-bar-buy  { background: #fb7185; border-radius: 3px 0 0 3px; transition: width .4s; }
+        .inst-bar-sell { background: #22c55e; border-radius: 0 3px 3px 0; transition: width .4s; }
         .inst-bar-label { display: flex; justify-content: space-between; font-size: 10px; }
         .institution-summary { background: rgba(6,14,26,.78); border: 1px solid rgba(14,165,233,.16); border-radius: 14px; padding: 12px; margin-bottom: 10px; }
         .institution-summary b { display: block; font-size: 18px; margin-bottom: 4px; }
@@ -6478,16 +6496,34 @@ useEffect(() => {
                     {/* 所屬產業 */}
                     <div className="profile-mini-row">
                       <span className="profile-label">所屬產業</span>
-                      <span className="profile-value">{stockProfile.industry || "未分類產業"}</span>
+                      {(() => {
+                        const ind = stockProfile.industry || "未分類產業";
+                        const hasData = ind !== "未分類產業";
+                        return hasData ? (
+                          <button className="profile-industry-btn" onClick={() => openIndustryPopup(ind, "neutral")}>
+                            {ind} <span className="profile-industry-arrow">→</span>
+                          </button>
+                        ) : (
+                          <span className="profile-value">{ind}</span>
+                        );
+                      })()}
                     </div>
 
                     {/* AI供應鏈分類 */}
                     {stock && (
                       <div className="profile-mini-row">
                         <span className="profile-label">供應鏈分類</span>
-                        <span className="profile-value" style={{color:"#38bdf8"}}>
-                          {SYMBOL_TO_INDUSTRY[String(stock.symbol||"").replace(/\.(TW|TWO)$/i,"")] || stockProfile.industry || "--"}
-                        </span>
+                        {(() => {
+                          const chain = SYMBOL_TO_INDUSTRY[String(stock.symbol||"").replace(/\.(TW|TWO)$/i,"")] || stockProfile.industry || "--";
+                          return chain !== "--" ? (
+                            <button className="profile-industry-btn" style={{color:"#38bdf8",borderColor:"rgba(56,189,248,.25)"}}
+                              onClick={() => openIndustryPopup(chain, "neutral")}>
+                              {chain} <span className="profile-industry-arrow">→</span>
+                            </button>
+                          ) : (
+                            <span className="profile-value" style={{color:"#38bdf8"}}>--</span>
+                          );
+                        })()}
                       </div>
                     )}
 
@@ -6860,7 +6896,7 @@ useEffect(() => {
                           const x = BAR_GAP + i * (BAR_W + BAR_GAP);
                           const barH = Math.abs(r.net) * scale;
                           const y = r.net >= 0 ? zeroY - barH : zeroY;
-                          const fill = r.net >= 0 ? "#22c55e" : "#fb7185";
+                          const fill = r.net >= 0 ? "#fb7185" : "#22c55e"; // 台股慣例：買超紅、賣超綠
                           const label = r.net >= 0 ? `+${(r.net/1000).toFixed(1)}k` : `${(r.net/1000).toFixed(1)}k`;
                           return (
                             <g key={r.name}>
@@ -6887,8 +6923,8 @@ useEffect(() => {
                           <div className="inst-bar-sell" style={{width:`${Math.round(row.sell/(row.buy+row.sell)*100)}%`}} />
                         </div>
                         <div className="inst-bar-label">
-                          <span className="up">買 {Math.round(row.buy/(row.buy+row.sell)*100)}%</span>
-                          <span className="down">賣 {Math.round(row.sell/(row.buy+row.sell)*100)}%</span>
+                          <span className="down">買 {Math.round(row.buy/(row.buy+row.sell)*100)}%</span>
+                          <span className="up">賣 {Math.round(row.sell/(row.buy+row.sell)*100)}%</span>
                         </div>
                       </div>
                     ))}
@@ -6917,7 +6953,7 @@ useEffect(() => {
                             return (
                               <g key={d.date}>
                                 <rect x={x - BAR_HW + 2} y={by} width={BAR_HW*2-4} height={Math.max(bh, 2)}
-                                  fill={tot >= 0 ? "rgba(56,189,248,.55)" : "rgba(251,113,133,.55)"} rx={2} />
+                                  fill={tot >= 0 ? "rgba(251,113,133,.55)" : "rgba(34,197,94,.55)"} rx={2} />
                                 <text x={x} y={HIST_H - 4} textAnchor="middle" fontSize={9} fill="#8ab4cc">{d.date}</text>
                               </g>
                             );
@@ -6929,12 +6965,12 @@ useEffect(() => {
                           />
                           {hist.map((d, i) => (
                             <circle key={i} cx={histX(i)} cy={histY(d["合計"] || 0)} r={3}
-                              fill={(d["合計"]||0) >= 0 ? "#22c55e" : "#fb7185"} stroke="#0b1929" strokeWidth="1.5" />
+                              fill={(d["合計"]||0) >= 0 ? "#fb7185" : "#22c55e"} stroke="#0b1929" strokeWidth="1.5" />
                           ))}
                         </svg>
                         <div className="inst-legend">
-                          <span style={{color:"rgba(56,189,248,.9)"}}>■ 買超（藍）</span>
-                          <span style={{color:"rgba(251,113,133,.9)"}}>■ 賣超（紅）</span>
+                          <span style={{color:"rgba(251,113,133,.9)"}}>■ 買超（紅）</span>
+                          <span style={{color:"rgba(34,197,94,.9)"}}>■ 賣超（綠）</span>
                           <span style={{color:"#38bdf8"}}>— 合計折線</span>
                         </div>
                       </div>
