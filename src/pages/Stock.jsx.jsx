@@ -2877,6 +2877,8 @@ useEffect(() => {
       return [];
     }
   });
+  const [searchDropdownOpen, setSearchDropdownOpen] = useState(false);
+  const searchInputRef = useRef(null);
   const [realtimeDayTrade, setRealtimeDayTrade] = useState(false);
   const [systemStrongList, setSystemStrongList] = useState([]);
   const [systemStrongLoading, setSystemStrongLoading] = useState(false);
@@ -5714,6 +5716,90 @@ useEffect(() => {
         .imt-stat-val { font-size: 18px; font-weight: 800; color: #f1f5f9; line-height: 1; }
         .imt-stat-label { font-size: 10px; color: #6b8fa8; margin-top: 3px; }
 
+        /* ── 自訂股票搜尋 Autocomplete ───────────────────────────────────────── */
+        .stock-search-wrap { position: relative; margin-bottom: 8px; }
+        .stock-search-box {
+          width: 100%; box-sizing: border-box;
+          background: rgba(6,14,26,.85);
+          border: 1px solid rgba(14,165,233,.25);
+          border-radius: 9px;
+          padding: 9px 36px 9px 12px;
+          font-size: 14px;
+          color: #e2e8f0;
+          outline: none;
+          transition: border-color .15s, box-shadow .15s;
+        }
+        .stock-search-box:focus {
+          border-color: rgba(14,165,233,.6);
+          box-shadow: 0 0 0 3px rgba(14,165,233,.10);
+        }
+        .stock-search-box::placeholder { color: #4b6880; }
+
+        .stock-search-icon {
+          position: absolute; right: 11px; top: 50%; transform: translateY(-50%);
+          font-size: 15px; color: #4b6880; pointer-events: none;
+          transition: color .15s;
+        }
+        .stock-search-box:focus ~ .stock-search-icon { color: #38bdf8; }
+
+        /* 下拉選單 */
+        .stock-search-dropdown {
+          position: absolute; top: calc(100% + 5px); left: 0; right: 0; z-index: 200;
+          background: #0d1e33;
+          border: 1px solid rgba(14,165,233,.28);
+          border-radius: 11px;
+          box-shadow: 0 12px 36px rgba(0,0,0,.55);
+          overflow: hidden;
+          animation: dd-in .12s ease;
+        }
+        @keyframes dd-in { from { opacity:0; transform:translateY(-4px); } to { opacity:1; transform:translateY(0); } }
+
+        .ssd-section-label {
+          font-size: 10px; font-weight: 700; color: #4b6880;
+          letter-spacing: .07em; text-transform: uppercase;
+          padding: 9px 12px 5px;
+          border-bottom: 1px solid rgba(14,165,233,.07);
+        }
+
+        .ssd-item {
+          display: flex; align-items: center; justify-content: space-between;
+          padding: 8px 12px; cursor: pointer; gap: 8px;
+          transition: background .1s;
+          border-bottom: .5px solid rgba(14,165,233,.05);
+        }
+        .ssd-item:last-child { border-bottom: none; }
+        .ssd-item:hover { background: rgba(14,165,233,.09); }
+
+        .ssd-item-left { display: flex; align-items: center; gap: 9px; min-width: 0; }
+        .ssd-avatar {
+          width: 30px; height: 30px; border-radius: 7px; flex-shrink: 0;
+          display: flex; align-items: center; justify-content: center;
+          font-size: 10px; font-weight: 800; letter-spacing: -.5px;
+        }
+        .ssd-avatar-tw { background: rgba(14,165,233,.14); color: #38bdf8; }
+        .ssd-avatar-us { background: rgba(168,85,247,.14); color: #c084fc; }
+        .ssd-avatar-hist { background: rgba(251,191,36,.10); color: #fbbf24; }
+
+        .ssd-symbol { font-size: 13px; font-weight: 700; color: #f1f5f9; }
+        .ssd-name { font-size: 11px; color: #6b8fa8; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 120px; }
+        .ssd-industry { font-size: 10px; color: #38bdf8; background: rgba(14,165,233,.10); border-radius: 4px; padding: 1px 6px; flex-shrink: 0; }
+
+        .ssd-del {
+          background: none; border: none; color: #4b6880; font-size: 14px;
+          cursor: pointer; padding: 2px 4px; border-radius: 4px; line-height: 1;
+          flex-shrink: 0;
+        }
+        .ssd-del:hover { background: rgba(251,113,133,.15); color: #fb7185; }
+
+        .ssd-search-btn {
+          width: 100%; padding: 9px 12px; text-align: left;
+          background: rgba(14,165,233,.06); border: none; border-top: 1px solid rgba(14,165,233,.10);
+          color: #38bdf8; font-size: 12px; font-weight: 600; cursor: pointer;
+          display: flex; align-items: center; gap: 6px;
+        }
+        .ssd-search-btn:hover { background: rgba(14,165,233,.14); }
+        .ssd-empty { padding: 16px 12px; font-size: 12px; color: #4b6880; text-align: center; }
+
         /* ── 掃描進度條 + Skeleton ─────────────────────────────────────────── */
         .scan-progress-wrap {
           padding: 32px 28px 24px;
@@ -6236,24 +6322,24 @@ useEffect(() => {
               <div className="card search-combo-card">
                 <div className="search-form-zone">
                 <label style={{fontSize:11,color:"#b4cfe0",letterSpacing:".04em",marginBottom:4,display:"block"}}>股票代碼或名稱</label>
-                <input
-                  className="search-input"
-                  list="stock-search-history"
+
+                {/* ── 自訂 Autocomplete 搜尋框 ── */}
+                <StockSearchInput
                   value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  placeholder="2330、台積電、雷科、矽力-KY、AAPL"
-                  onKeyDown={(e) => e.key === "Enter" && searchOne()}
+                  onChange={setQuery}
+                  onSelect={(sym) => { setQuery(sym); searchOne(sym); setSearchDropdownOpen(false); }}
+                  onSearch={() => searchOne()}
+                  loading={loading}
+                  searchHistory={searchHistory}
+                  onRemoveHistory={(sym) =>
+                    setSearchHistory(prev => {
+                      const next = prev.filter(s => s !== sym);
+                      localStorage.setItem("stockRadarSearchHistory", JSON.stringify(next));
+                      return next;
+                    })
+                  }
+                  pool={MARKET_STRONG_POOL}
                 />
-                <datalist id="stock-search-history">
-                  {searchHistory.map((item) => (
-                    <option key={item} value={item} />
-                  ))}
-                  {[].map((item) => (
-                    <option key={`${item.code}-${item.name}`} value={item.name}>
-                      {item.code}｜{item.market}｜{item.industry}
-                    </option>
-                  ))}
-                </datalist>
 
                 <label>資料區間</label>
                 <select value={range} onChange={(e) => setRange(e.target.value)}>
@@ -6267,10 +6353,6 @@ useEffect(() => {
                 </select>
 
                 <div className="btn-row">
-                  <button onClick={() => searchOne()} disabled={loading}>
-                    {loading ? "查詢中..." : "查詢股票"}
-                  </button>
-
                   <div style={{ position: "relative" }}>
                     <button
                       className={`favorite-action ${
@@ -6309,25 +6391,10 @@ useEffect(() => {
                   </div>
                 )}
 
-                {/* 最近瀏覽 */}
-                {searchHistory.length > 0 && (
-                  <div style={{marginTop:8}}>
-                    <div style={{fontSize:10,color:"#6b8fa8",letterSpacing:".06em",marginBottom:5,fontWeight:700}}>最近瀏覽</div>
-                    <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
-                      {searchHistory.slice(0,6).map(sym => (
-                        <button key={sym} onClick={() => searchOne(sym)}
-                          style={{fontSize:11,padding:"3px 8px",borderRadius:5,background:"rgba(14,165,233,.07)",border:"1px solid rgba(14,165,233,.18)",color:"#7dd3fc",cursor:"pointer"}}>
-                          {sym}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
                 {favoriteNotice && <p className="favorite-notice">{favoriteNotice}</p>}
                 {error && <p className="error">{error}</p>}
 
-                                </div>
+                </div>
 
                 <div className="quick-selected-card">
                   <div className="muted" style={{fontSize:11,letterSpacing:".04em"}}>目前選股</div>
@@ -8148,6 +8215,125 @@ useEffect(() => {
       </div>
     )}
     </>
+  );
+}
+
+// ── 自訂股票搜尋 Autocomplete 元件 ──────────────────────────────────────────
+function StockSearchInput({ value, onChange, onSelect, onSearch, loading, searchHistory, onRemoveHistory, pool }) {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef(null);
+
+  // 點擊外部關閉
+  useEffect(() => {
+    function handleClick(e) {
+      if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  // 模糊比對：代碼 or 名稱
+  const trimmed = String(value || "").trim().toUpperCase();
+  const suggestions = trimmed.length >= 1
+    ? (pool || [])
+        .filter(item => {
+          const sym = String(item.symbol || "").toUpperCase();
+          const name = String(item.name || "").toUpperCase();
+          return sym.startsWith(trimmed) || name.includes(trimmed) || sym.includes(trimmed);
+        })
+        .slice(0, 8)
+    : [];
+
+  const showHistory = !trimmed && searchHistory.length > 0;
+  const showSuggestions = trimmed.length >= 1 && suggestions.length > 0;
+  const showEmpty = trimmed.length >= 1 && suggestions.length === 0;
+  const isDropdownVisible = open && (showHistory || showSuggestions || showEmpty);
+
+  function handleKeyDown(e) {
+    if (e.key === "Enter") { onSearch(); setOpen(false); }
+    if (e.key === "Escape") setOpen(false);
+  }
+
+  function pickItem(sym) {
+    onSelect(sym);
+    setOpen(false);
+  }
+
+  const isTW = (sym) => /^\d{4,6}(\.TW|\.TWO)?$/i.test(String(sym || ""));
+
+  return (
+    <div className="stock-search-wrap" ref={wrapRef}>
+      <input
+        className="stock-search-box"
+        value={value}
+        onChange={(e) => { onChange(e.target.value); setOpen(true); }}
+        onFocus={() => setOpen(true)}
+        onKeyDown={handleKeyDown}
+        placeholder="2330、台積電、AAPL..."
+        autoComplete="off"
+        spellCheck="false"
+      />
+      <span className="stock-search-icon">🔍</span>
+
+      {isDropdownVisible && (
+        <div className="stock-search-dropdown">
+
+          {/* 最近搜尋 */}
+          {showHistory && (
+            <>
+              <div className="ssd-section-label">🕐 最近搜尋</div>
+              {searchHistory.slice(0, 6).map(sym => (
+                <div key={sym} className="ssd-item" onClick={() => pickItem(sym)}>
+                  <div className="ssd-item-left">
+                    <div className={`ssd-avatar ${isTW(sym) ? "ssd-avatar-hist" : "ssd-avatar-us"}`}>
+                      {String(sym).replace(/\.(TW|TWO)$/i, "").slice(0, 4)}
+                    </div>
+                    <div>
+                      <div className="ssd-symbol">{String(sym).replace(/\.(TW|TWO)$/i, "")}</div>
+                    </div>
+                  </div>
+                  <button className="ssd-del" title="移除"
+                    onClick={(e) => { e.stopPropagation(); onRemoveHistory(sym); }}>
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </>
+          )}
+
+          {/* 比對結果 */}
+          {showSuggestions && (
+            <>
+              <div className="ssd-section-label">🔎 比對結果</div>
+              {suggestions.map(item => (
+                <div key={item.symbol} className="ssd-item" onClick={() => pickItem(item.symbol)}>
+                  <div className="ssd-item-left">
+                    <div className={`ssd-avatar ${isTW(item.symbol) ? "ssd-avatar-tw" : "ssd-avatar-us"}`}>
+                      {String(item.symbol).replace(/\.(TW|TWO)$/i, "").slice(0, 4)}
+                    </div>
+                    <div style={{minWidth:0}}>
+                      <div className="ssd-symbol">{String(item.symbol).replace(/\.(TW|TWO)$/i, "")}</div>
+                      <div className="ssd-name">{item.name}</div>
+                    </div>
+                  </div>
+                  {item.industry && <span className="ssd-industry">{item.industry}</span>}
+                </div>
+              ))}
+            </>
+          )}
+
+          {/* 找不到但仍可搜尋 */}
+          {showEmpty && (
+            <div className="ssd-empty">找不到「{value}」，可直接查詢</div>
+          )}
+
+          {/* 查詢按鈕 */}
+          <button className="ssd-search-btn" onClick={() => { onSearch(); setOpen(false); }} disabled={loading}>
+            {loading ? "⟳ 查詢中..." : `🔍 搜尋「${value || "..."}」`}
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
 
