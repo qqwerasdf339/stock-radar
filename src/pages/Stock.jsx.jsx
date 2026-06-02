@@ -2880,8 +2880,10 @@ useEffect(() => {
   const [realtimeDayTrade, setRealtimeDayTrade] = useState(false);
   const [systemStrongList, setSystemStrongList] = useState([]);
   const [systemStrongLoading, setSystemStrongLoading] = useState(false);
+  const [systemStrongProgress, setSystemStrongProgress] = useState({ done: 0, total: 0 });
   const [klineRadarList, setKlineRadarList] = useState([]);
   const [klineRadarLoading, setKlineRadarLoading] = useState(false);
+  const [klineRadarProgress, setKlineRadarProgress] = useState({ done: 0, total: 0 });
   const [klineRadarSort, setKlineRadarSort] = useState("score");
   const [klineAiQuery, setKlineAiQuery] = useState("");         // AI 搜尋輸入
   const [klineAiFilter, setKlineAiFilter] = useState([]);       // 解析後的訊號條件
@@ -2929,6 +2931,7 @@ useEffect(() => {
   const [favoriteGroupFilter, setFavoriteGroupFilter] = useState("全部");
   const [nextDayList, setNextDayList] = useState([]);
   const [nextDayLoading, setNextDayLoading] = useState(false);
+  const [nextDayProgress, setNextDayProgress] = useState({ done: 0, total: 0 });
   const [nextDaySortMode, setNextDaySortMode] = useState("score");
   const [reportTab, setReportTab] = useState("market");
   const [selectedIndustry, setSelectedIndustry] = useState(null);
@@ -3893,6 +3896,8 @@ useEffect(() => {
         });
 
       const universe = [...universeMap.values()].slice(0, 180);
+      if (!silent) setKlineRadarProgress({ done: 0, total: universe.length });
+      let doneCount = 0;
 
       const result = (
         await Promise.all(
@@ -3901,7 +3906,7 @@ useEffect(() => {
               .then((data) => {
                 const analyzed = analyzeStock(data);
                 const radar = buildKlineRadarSignal(analyzed);
-
+                if (!silent) setKlineRadarProgress(p => ({ ...p, done: ++doneCount }));
                 return {
                   ...analyzed,
                   baseType: item.industry || item.baseType,
@@ -3911,6 +3916,7 @@ useEffect(() => {
               })
               .catch((err) => {
                 console.warn("kline radar scan failed", item.symbol, err);
+                if (!silent) setKlineRadarProgress(p => ({ ...p, done: ++doneCount }));
                 return null;
               })
           )
@@ -3938,6 +3944,9 @@ useEffect(() => {
     if (!silent) setError("");
 
     try {
+      if (!silent) setSystemStrongProgress({ done: 0, total: MARKET_STRONG_POOL.length });
+      let doneCount = 0;
+
       const result = (
         await Promise.all(
           MARKET_STRONG_POOL.map((item) =>
@@ -3945,7 +3954,7 @@ useEffect(() => {
               .then((data) => {
                 const analyzed = analyzeStock(data);
                 const recent = calcRecent3DayStrength(analyzed);
-
+                if (!silent) setSystemStrongProgress(p => ({ ...p, done: ++doneCount }));
                 return {
                   ...analyzed,
                   name: cleanStockName(item.name || analyzed.name || ""),  // 清理公司名後綴
@@ -3959,6 +3968,7 @@ useEffect(() => {
               })
               .catch((err) => {
                 console.warn("system strong scan failed", item.symbol, err);
+                if (!silent) setSystemStrongProgress(p => ({ ...p, done: ++doneCount }));
                 return null;
               })
           )
@@ -4040,6 +4050,8 @@ useEffect(() => {
 
     try {
       const items = MARKET_STRONG_POOL.map((item) => item.symbol).slice(0, 80);
+      if (!silent) setNextDayProgress({ done: 0, total: items.length });
+      let doneCount = 0;
 
       const result = (
         await Promise.all(
@@ -4048,10 +4060,12 @@ useEffect(() => {
               .then((data) => {
                 const analyzed = analyzeStock(data);
                 const poolItem = MARKET_STRONG_POOL.find(p => p.symbol === item);
+                if (!silent) setNextDayProgress(p => ({ ...p, done: ++doneCount }));
                 return { ...analyzed, name: cleanStockName(poolItem?.name || analyzed.name || "") };
               })
               .catch((err) => {
                 console.warn("next day scan failed", item, err);
+                if (!silent) setNextDayProgress(p => ({ ...p, done: ++doneCount }));
                 return null;
               })
           )
@@ -5700,6 +5714,88 @@ useEffect(() => {
         .imt-stat-val { font-size: 18px; font-weight: 800; color: #f1f5f9; line-height: 1; }
         .imt-stat-label { font-size: 10px; color: #6b8fa8; margin-top: 3px; }
 
+        /* ── 掃描進度條 + Skeleton ─────────────────────────────────────────── */
+        .scan-progress-wrap {
+          padding: 32px 28px 24px;
+          display: flex;
+          flex-direction: column;
+          gap: 14px;
+        }
+        .scan-progress-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+        }
+        .scan-progress-label {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          font-size: 13px;
+          font-weight: 600;
+          color: #b4cfe0;
+        }
+        .scan-progress-spinner {
+          width: 14px; height: 14px;
+          border: 2px solid rgba(14,165,233,.3);
+          border-top-color: #38bdf8;
+          border-radius: 50%;
+          animation: spin 0.7s linear infinite;
+          flex-shrink: 0;
+        }
+        .scan-progress-count {
+          font-size: 12px;
+          color: #38bdf8;
+          font-weight: 700;
+          font-variant-numeric: tabular-nums;
+        }
+        .scan-progress-bar-bg {
+          height: 5px;
+          background: rgba(14,165,233,.12);
+          border-radius: 999px;
+          overflow: hidden;
+        }
+        .scan-progress-bar-fill {
+          height: 100%;
+          background: linear-gradient(90deg, #0ea5e9, #38bdf8);
+          border-radius: 999px;
+          transition: width 0.25s ease;
+          box-shadow: 0 0 8px rgba(56,189,248,.5);
+        }
+        .scan-progress-tip {
+          font-size: 11px;
+          color: #4b6880;
+        }
+
+        /* Skeleton 骨架行 */
+        .skeleton-rows { display: flex; flex-direction: column; gap: 0; }
+        .skeleton-row {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          padding: 12px 16px;
+          border-bottom: 1px solid rgba(14,165,233,.06);
+        }
+        .skeleton-row:last-child { border-bottom: none; }
+        .sk {
+          background: linear-gradient(90deg, rgba(14,165,233,.06) 25%, rgba(14,165,233,.12) 50%, rgba(14,165,233,.06) 75%);
+          background-size: 200% 100%;
+          animation: sk-shimmer 1.6s ease infinite;
+          border-radius: 5px;
+          flex-shrink: 0;
+        }
+        @keyframes sk-shimmer {
+          0%   { background-position: 200% 0; }
+          100% { background-position: -200% 0; }
+        }
+        .sk-avatar { width: 36px; height: 36px; border-radius: 9px; }
+        .sk-text-wrap { flex: 1; display: flex; flex-direction: column; gap: 5px; }
+        .sk-line { height: 11px; }
+        .sk-w60  { width: 60%; }
+        .sk-w40  { width: 40%; }
+        .sk-w25  { width: 25%; }
+        .sk-badge { width: 52px; height: 22px; border-radius: 6px; }
+        .sk-num  { width: 42px; height: 14px; }
+
         /* ── 自選股表格新設計 ─────────────────────────────────────────────── */
         .wl-table { width: 100%; border-collapse: collapse; }
         .wl-table thead tr { background: #060e1a; border-bottom: 1px solid rgba(14,165,233,.18); }
@@ -6969,9 +7065,15 @@ useEffect(() => {
               {/* 右側結果 */}
               <div className="scan-result">
                 {filteredSystemStrongList.length === 0 ? (
-                  <div className="scan-empty">
-                    {systemStrongLoading ? "正在掃描台股強勢股..." : "頁面切換後會自動掃描，或按左側「重新掃描」。"}
-                  </div>
+                  systemStrongLoading ? (
+                    <ScanProgress
+                      done={systemStrongProgress.done}
+                      total={systemStrongProgress.total}
+                      label="正在掃描台股強勢股"
+                    />
+                  ) : (
+                    <div className="scan-empty">頁面切換後會自動掃描，或按左側「重新掃描」。</div>
+                  )
                 ) : (
                   <div className="scan-table-wrap">
                     <table className="scan-table">
@@ -7151,12 +7253,19 @@ useEffect(() => {
               {/* 右側結果區 */}
               <div className="scan-result">
                 {filteredKlineRadarList.length === 0 && !klineAiFilter.length ? (
-                  <div className="scan-empty">
-                    {klineRadarLoading ? "正在掃描台股K線與成交量訊號..." :
-                      klineAiFilter.length && sortedKlineRadarList.length > 0 ?
-                        `目前訊號條件「${klineAiFilter[0]}」在今日結果中找不到符合的股票，試試其他關鍵字。` :
-                        "按左側「掃描今日K線訊號」後，會列出符合K線型態與量能條件的股票。"}
-                  </div>
+                  klineRadarLoading ? (
+                    <ScanProgress
+                      done={klineRadarProgress.done}
+                      total={klineRadarProgress.total}
+                      label="正在掃描台股K線與成交量訊號"
+                    />
+                  ) : (
+                    <div className="scan-empty">
+                      {klineAiFilter.length && sortedKlineRadarList.length > 0
+                        ? `目前訊號條件「${klineAiFilter[0]}」在今日結果中找不到符合的股票，試試其他關鍵字。`
+                        : "按左側「掃描今日K線訊號」後，會列出符合K線型態與量能條件的股票。"}
+                    </div>
+                  )
                 ) : (
                   <div className="scan-table-wrap">
                     <table className="scan-table">
@@ -7278,9 +7387,15 @@ useEffect(() => {
               {/* 右側結果區 */}
               <div className="scan-result">
                 {sortedNextDayList.length === 0 ? (
-                  <div className="scan-empty">
-                    {nextDayLoading ? "隔日沖名單更新中..." : "目前暫無隔日沖候選，系統會持續背景更新。"}
-                  </div>
+                  nextDayLoading ? (
+                    <ScanProgress
+                      done={nextDayProgress.done}
+                      total={nextDayProgress.total}
+                      label="隔日沖名單分析中"
+                    />
+                  ) : (
+                    <div className="scan-empty">目前暫無隔日沖候選，系統會持續背景更新。</div>
+                  )
                 ) : (
                   <div className="scan-table-wrap">
                     <table className="scan-table">
@@ -8033,5 +8148,53 @@ useEffect(() => {
       </div>
     )}
     </>
+  );
+}
+
+// ── 掃描進度條元件 ──────────────────────────────────────────────────────────
+function ScanProgress({ done, total, label }) {
+  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+
+  const skeletonCount = 7;
+
+  return (
+    <div className="scan-progress-wrap">
+      <div className="scan-progress-header">
+        <div className="scan-progress-label">
+          <span className="scan-progress-spinner" />
+          {label}
+        </div>
+        <div className="scan-progress-count">
+          {total > 0 ? `${done} / ${total}` : "準備中..."}
+        </div>
+      </div>
+
+      <div className="scan-progress-bar-bg">
+        <div
+          className="scan-progress-bar-fill"
+          style={{ width: `${total > 0 ? pct : 8}%` }}
+        />
+      </div>
+
+      <div className="scan-progress-tip">
+        {total > 0 ? `已完成 ${pct}%，請稍候...` : "正在初始化掃描清單..."}
+      </div>
+
+      {/* Skeleton 骨架行 */}
+      <div className="skeleton-rows">
+        {Array.from({ length: skeletonCount }).map((_, i) => (
+          <div className="skeleton-row" key={i} style={{ opacity: 1 - i * 0.1 }}>
+            <div className="sk sk-avatar" />
+            <div className="sk-text-wrap">
+              <div className={`sk sk-line ${i % 2 === 0 ? "sk-w60" : "sk-w40"}`} />
+              <div className="sk sk-line sk-w25" />
+            </div>
+            <div className="sk sk-num" />
+            <div className="sk sk-num" />
+            <div className="sk sk-badge" />
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
