@@ -6082,9 +6082,62 @@ useEffect(() => {
         @media (max-width: 700px) {
           .metric-grid { grid-template-columns: repeat(4, 1fr); }
         }
-        .metric-card { background: rgba(6,14,26,.70); border: 1px solid rgba(14,165,233,.12); border-radius: 8px; padding: 8px 10px; }
-        .metric-card b { display: block; font-size: clamp(13px, 1.2vw, 16px); font-weight: 700; margin-bottom: 2px; color: #f1f5f9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .metric-card {
+          background: rgba(6,14,26,.70);
+          border: 1px solid rgba(14,165,233,.12);
+          border-radius: 8px;
+          padding: 8px 10px;
+          position: relative;
+          cursor: default;
+          transition: border-color .15s, background .15s;
+        }
+        .metric-card:hover { border-color: rgba(14,165,233,.35); background: rgba(14,165,233,.04); }
+        .metric-card b { display: block; font-size: clamp(13px, 1.2vw, 16px); font-weight: 700; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .metric-card span { color: #a0b8cc; font-size: 10px; letter-spacing: .03em; }
+        /* 指標狀態 badge */
+        .metric-badge {
+          display: inline-block;
+          font-size: 9px; font-weight: 700;
+          padding: 1px 5px; border-radius: 4px;
+          margin-left: 4px; vertical-align: middle;
+          letter-spacing: .03em;
+        }
+        /* 顏色主題 */
+        .mc-green b { color: #4ade80; }
+        .mc-green { border-left: 2px solid #4ade80; }
+        .mc-red b   { color: #fb7185; }
+        .mc-red   { border-left: 2px solid #fb7185; }
+        .mc-yellow b { color: #fbbf24; }
+        .mc-yellow { border-left: 2px solid #fbbf24; }
+        .mc-blue b  { color: #38bdf8; }
+        .mc-blue  { border-left: 2px solid #38bdf8; }
+        .mc-default b { color: #f1f5f9; }
+        /* Tooltip */
+        .mc-tooltip {
+          visibility: hidden; opacity: 0;
+          position: absolute; bottom: calc(100% + 7px); left: 50%; transform: translateX(-50%);
+          width: 190px;
+          background: #0d1e33;
+          border: 1px solid rgba(14,165,233,.28);
+          border-radius: 9px;
+          padding: 9px 11px;
+          font-size: 11px; line-height: 1.55; color: #cddae2;
+          box-shadow: 0 8px 24px rgba(0,0,0,.55);
+          z-index: 500;
+          pointer-events: none;
+          transition: opacity .15s;
+          text-align: left;
+          white-space: normal;
+        }
+        .mc-tooltip::after {
+          content: "";
+          position: absolute; top: 100%; left: 50%; transform: translateX(-50%);
+          border: 5px solid transparent;
+          border-top-color: rgba(14,165,233,.28);
+        }
+        .metric-card:hover .mc-tooltip { visibility: visible; opacity: 1; }
+        .mc-tooltip-title { font-weight: 700; color: #f1f5f9; margin-bottom: 4px; font-size: 12px; }
+        .mc-tooltip-signal { margin-top: 5px; font-weight: 700; padding: 3px 6px; border-radius: 5px; display: inline-block; font-size: 11px; }
         .trade-signal { border-radius: 12px; padding: 14px; margin-bottom: 10px; border: 1px solid rgba(14,165,233,.14); background: rgba(6,14,26,.80); }
         .trade-signal.buy { border-color: rgba(34,197,94,.35); border-top: 2px solid #22c55e; background: rgba(20,83,45,.15); }
         .trade-signal.hold { border-color: rgba(250,204,21,.30); border-top: 2px solid #fbbf24; background: rgba(113,63,18,.12); }
@@ -6672,14 +6725,87 @@ useEffect(() => {
                     <div className="divider" />
                     <div className="score-main"><b>{stock.score}</b><span>{stock.level}</span></div>
                     <div className="metric-grid">
-                      <div className="metric-card"><b>{stock.rsi?.toFixed(1) ?? "--"}</b><span>RSI｜{stock.rsiLabel}</span></div>
-                      <div className="metric-card"><b>{stock.k?.toFixed(1) ?? "--"}</b><span>K 值</span></div>
-                      <div className="metric-card"><b>{stock.d?.toFixed(1) ?? "--"}</b><span>D 值</span></div>
-                      <div className="metric-card"><b>{stock.macdHist?.toFixed(2) ?? "--"}</b><span>MACD</span></div>
-                      <div className="metric-card"><b>{stock.ma5?.toFixed(2) ?? "--"}</b><span>MA5</span></div>
-                      <div className="metric-card"><b>{stock.ma20?.toFixed(2) ?? "--"}</b><span>MA20</span></div>
-                      <div className="metric-card"><b>{stock.volumeRatio?.toFixed(2) ?? "--"}</b><span>量比</span></div>
-                      <div className="metric-card"><b>{stock.backtest.trades}</b><span>交易次數</span></div>
+                      <MetricCard
+                        value={stock.rsi?.toFixed(1)}
+                        label="RSI 相對強弱"
+                        thresholds={[
+                          { min: 70, color: "red",    badge: "過熱", tip: "短線追高風險高，留意拉回" },
+                          { min: 60, color: "yellow", badge: "偏強", tip: "動能充足，多頭偏多操作" },
+                          { min: 40, color: "blue",   badge: "中性", tip: "無明顯偏向，觀望為主" },
+                          { min: 30, color: "yellow", badge: "偏弱", tip: "買盤不足，尚未具備進場條件" },
+                          { min: 0,  color: "green",  badge: "超賣", tip: "超賣區，可留意反彈訊號" },
+                        ]}
+                        tooltip="RSI（相對強弱指數）衡量漲跌動能強弱。通常 > 70 視為過熱，< 30 視為超賣。"
+                      />
+                      <MetricCard
+                        value={stock.k?.toFixed(1)}
+                        label="KD — K 值"
+                        thresholds={[
+                          { min: 80, color: "red",    badge: "超買", tip: "KD 超買區，留意死叉訊號" },
+                          { min: 50, color: "blue",   badge: "多方", tip: "K > 50，偏多格局" },
+                          { min: 20, color: "yellow", badge: "弱勢", tip: "K < 50，偏空格局" },
+                          { min: 0,  color: "green",  badge: "超賣", tip: "KD 超賣區，留意黃金交叉" },
+                        ]}
+                        tooltip="KD 隨機指標，K 值為快線。K > D 稱為黃金交叉（多訊號），K < D 為死亡交叉（空訊號）。"
+                      />
+                      <MetricCard
+                        value={stock.d?.toFixed(1)}
+                        label="KD — D 值"
+                        thresholds={[
+                          { min: 80, color: "red",    badge: "超買", tip: "D 值偏高，趨勢鈍化風險" },
+                          { min: 50, color: "blue",   badge: "多方", tip: "D > 50，多方趨勢" },
+                          { min: 20, color: "yellow", badge: "弱勢", tip: "D < 50，空方趨勢" },
+                          { min: 0,  color: "green",  badge: "超賣", tip: "D 值低檔，觀察反彈" },
+                        ]}
+                        tooltip="D 值為 K 值的三日平均，是慢線。走勢比 K 更平滑，可過濾假突破。"
+                      />
+                      <MetricCard
+                        value={stock.macdHist?.toFixed(2)}
+                        label="MACD 柱狀值"
+                        thresholds={[
+                          { min: 0.01, color: "green",  badge: "多頭", tip: "MACD 柱翻紅，短線動能轉正" },
+                          { min: -99,  color: "red",    badge: "空頭", tip: "MACD 柱翻黑，短線動能偏弱" },
+                        ]}
+                        tooltip="MACD 柱狀值（Histogram）= MACD 線 − 訊號線。正值代表多頭動能，負值代表空頭動能，由負轉正是做多參考訊號。"
+                      />
+                      <MetricCard
+                        value={stock.ma5?.toFixed(2)}
+                        label="MA5 五日均線"
+                        colorFn={() => stock.close >= (stock.ma5 ?? 0) ? "green" : "red"}
+                        badgeFn={() => stock.close >= (stock.ma5 ?? 0) ? "站上" : "跌破"}
+                        tipFn={() => stock.close >= (stock.ma5 ?? 0)
+                          ? "收盤站上 MA5，短線偏多"
+                          : "收盤跌破 MA5，短線轉弱"}
+                        tooltip="MA5 為 5 日移動平均線（周線），是短線多空分水嶺。收盤站上為短多訊號。"
+                      />
+                      <MetricCard
+                        value={stock.ma20?.toFixed(2)}
+                        label="MA20 月均線"
+                        colorFn={() => stock.close >= (stock.ma20 ?? 0) ? "green" : "red"}
+                        badgeFn={() => stock.close >= (stock.ma20 ?? 0) ? "站上" : "跌破"}
+                        tipFn={() => stock.close >= (stock.ma20 ?? 0)
+                          ? "收盤站上 MA20，中線偏多"
+                          : "收盤跌破 MA20，中線轉弱，需留意"}
+                        tooltip="MA20 為 20 日移動平均線（月線），是中線趨勢參考。跌破月線通常視為空方訊號。"
+                      />
+                      <MetricCard
+                        value={stock.volumeRatio?.toFixed(2) !== undefined ? `${stock.volumeRatio?.toFixed(2)}x` : undefined}
+                        label="量比（相對成交量）"
+                        thresholds={[
+                          { min: 2.0, color: "green",  badge: "爆量", tip: "成交量爆發，資金積極介入" },
+                          { min: 1.3, color: "blue",   badge: "放量", tip: "量能放大，動能轉強" },
+                          { min: 0.7, color: "yellow", badge: "正常", tip: "量能正常，觀察方向" },
+                          { min: 0,   color: "red",    badge: "縮量", tip: "成交量萎縮，動能不足" },
+                        ]}
+                        rawValue={stock.volumeRatio}
+                        tooltip="量比 = 今日成交量 ÷ 近 20 日平均量。> 2 為爆量，1.3~2 為放量，< 0.7 為縮量。"
+                      />
+                      <MetricCard
+                        value={stock.backtest.trades}
+                        label="回測交易次數"
+                        color="blue"
+                        tooltip="在選定的時間區間內，系統模擬策略產生的交易次數。次數越多代表策略觸發頻繁，次數過少可能樣本不足。"
+                      />
                     </div>
 
                   </>
@@ -8215,6 +8341,65 @@ useEffect(() => {
       </div>
     )}
     </>
+  );
+}
+
+// ── 技術指標卡元件（顏色 + Tooltip）──────────────────────────────────────────
+function MetricCard({ value, label, tooltip, thresholds, color, colorFn, badgeFn, tipFn, rawValue }) {
+  // 決定顏色、badge、tip
+  let resolvedColor = color || "default";
+  let resolvedBadge = null;
+  let resolvedTip = null;
+
+  const numVal = rawValue !== undefined ? rawValue : parseFloat(value);
+
+  if (colorFn) {
+    resolvedColor = colorFn();
+    resolvedBadge = badgeFn?.();
+    resolvedTip = tipFn?.();
+  } else if (thresholds && Number.isFinite(numVal)) {
+    for (const t of thresholds) {
+      if (numVal >= t.min) {
+        resolvedColor = t.color;
+        resolvedBadge = t.badge;
+        resolvedTip = t.tip;
+        break;
+      }
+    }
+  }
+
+  const badgeStyle = {
+    green:   { background: "rgba(74,222,128,.15)", color: "#4ade80", border: "1px solid rgba(74,222,128,.3)" },
+    red:     { background: "rgba(251,113,133,.15)", color: "#fb7185", border: "1px solid rgba(251,113,133,.3)" },
+    yellow:  { background: "rgba(251,191,36,.12)",  color: "#fbbf24", border: "1px solid rgba(251,191,36,.3)" },
+    blue:    { background: "rgba(56,189,248,.12)",  color: "#38bdf8", border: "1px solid rgba(56,189,248,.3)" },
+    default: { background: "rgba(160,184,204,.10)", color: "#a0b8cc", border: "1px solid rgba(160,184,204,.2)" },
+  }[resolvedColor] || {};
+
+  const tipBg = { green: "rgba(74,222,128,.15)", red: "rgba(251,113,133,.15)", yellow: "rgba(251,191,36,.12)", blue: "rgba(56,189,248,.12)", default: "transparent" }[resolvedColor];
+  const tipColor = { green: "#4ade80", red: "#fb7185", yellow: "#fbbf24", blue: "#38bdf8", default: "#a0b8cc" }[resolvedColor];
+
+  return (
+    <div className={`metric-card mc-${resolvedColor}`}>
+      <b>{value ?? "--"}</b>
+      <span>
+        {label}
+        {resolvedBadge && (
+          <span className="metric-badge" style={badgeStyle}>{resolvedBadge}</span>
+        )}
+      </span>
+      {tooltip && (
+        <div className="mc-tooltip">
+          <div className="mc-tooltip-title">{label}</div>
+          {tooltip}
+          {resolvedTip && (
+            <div className="mc-tooltip-signal" style={{ background: tipBg, color: tipColor }}>
+              ▸ {resolvedTip}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
