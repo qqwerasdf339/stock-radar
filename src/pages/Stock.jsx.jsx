@@ -2854,7 +2854,7 @@ useEffect(() => {
   useEffect(() => {
     const MENU_KEYS = {
       "1": "report", "2": "analysis", "3": "watchlist",
-      "4": "signals", "5": "klineRadar", "6": "nextday", "7": "daytrade", "8": "heatmap",
+      "4": "signals", "5": "klineRadar", "6": "nextday", "7": "daytrade", "8": "heatmap", "9": "portfolio",
     };
     function handleKeyDown(e) {
       const tag = document.activeElement?.tagName?.toLowerCase();
@@ -5915,6 +5915,63 @@ useEffect(() => {
         .imt-stat-val { font-size: 18px; font-weight: 800; color: #f1f5f9; line-height: 1; }
         .imt-stat-label { font-size: 10px; color: #6b8fa8; margin-top: 3px; }
 
+        /* ── 投資組合 ─────────────────────────────────────────────────────────── */
+        .pf-page { padding: 4px 0 60px; max-width: 1100px; }
+        .pf-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; flex-wrap:wrap; gap:10px; }
+        .pf-title { font-size:22px; font-weight:800; color:#f1f5f9; display:flex; align-items:center; gap:10px; }
+        .pf-subtitle { font-size:12px; color:#6b8fa8; margin-top:3px; }
+
+        /* 頂部摘要卡 */
+        .pf-summary { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:10px; margin-bottom:20px; }
+        .pf-sum-card { background:#0b1929; border:1px solid rgba(14,165,233,.14); border-radius:12px; padding:14px 16px; }
+        .pf-sum-label { font-size:11px; color:#6b8fa8; letter-spacing:.05em; margin-bottom:6px; }
+        .pf-sum-val { font-size:22px; font-weight:800; color:#f1f5f9; line-height:1; }
+        .pf-sum-sub { font-size:11px; color:#6b8fa8; margin-top:4px; }
+
+        /* 主佈局：表格 + 圓餅圖 */
+        .pf-main { display:grid; grid-template-columns:1fr 260px; gap:14px; align-items:start; }
+        @media(max-width:900px){ .pf-main { grid-template-columns:1fr; } }
+
+        /* 持倉表格 */
+        .pf-table-card { background:#0b1929; border:1px solid rgba(14,165,233,.14); border-radius:14px; overflow:hidden; }
+        .pf-table-header { display:flex; align-items:center; justify-content:space-between; padding:14px 16px 12px; border-bottom:1px solid rgba(14,165,233,.10); }
+        .pf-table-title { font-size:14px; font-weight:700; color:#f1f5f9; }
+        .pf-table { width:100%; border-collapse:collapse; }
+        .pf-table th { padding:9px 12px; text-align:left; font-size:10px; font-weight:700; color:#6b8fa8; letter-spacing:.07em; text-transform:uppercase; border-bottom:1px solid rgba(14,165,233,.10); white-space:nowrap; }
+        .pf-table th.right { text-align:right; }
+        .pf-table td { padding:11px 12px; border-bottom:.5px solid rgba(14,165,233,.06); vertical-align:middle; }
+        .pf-table tr:last-child td { border-bottom:none; }
+        .pf-table tr { transition:background .1s; cursor:pointer; }
+        .pf-table tr:hover td { background:rgba(14,165,233,.05); }
+        .pf-sym { font-size:14px; font-weight:800; color:#f1f5f9; }
+        .pf-name { font-size:11px; color:#6b8fa8; margin-top:2px; }
+        .pf-num { font-size:13px; font-weight:700; text-align:right; font-variant-numeric:tabular-nums; }
+        .pf-loading { font-size:11px; color:#6b8fa8; animation:pf-blink 1.2s ease infinite; }
+        @keyframes pf-blink { 0%,100%{opacity:.4} 50%{opacity:1} }
+        .pf-del-btn { background:none; border:none; color:#4b6880; cursor:pointer; font-size:14px; padding:4px; border-radius:4px; }
+        .pf-del-btn:hover { color:#fb7185; background:rgba(251,113,133,.12); }
+
+        /* 新增持倉表單 */
+        .pf-add-form { display:flex; gap:7px; align-items:flex-end; padding:12px 16px; border-top:1px solid rgba(14,165,233,.10); flex-wrap:wrap; }
+        .pf-input-group { display:flex; flex-direction:column; gap:3px; }
+        .pf-input-label { font-size:10px; color:#6b8fa8; letter-spacing:.05em; }
+        .pf-input { background:rgba(6,14,26,.8); border:1px solid rgba(14,165,233,.22); border-radius:7px; color:#e2e8f0; font-size:12px; padding:7px 10px; outline:none; width:100%; }
+        .pf-input:focus { border-color:rgba(14,165,233,.55); }
+        .pf-add-btn { padding:8px 16px; background:rgba(14,165,233,.14); border:1px solid rgba(14,165,233,.28); border-radius:7px; color:#38bdf8; font-size:12px; font-weight:700; cursor:pointer; white-space:nowrap; }
+        .pf-add-btn:hover { background:rgba(14,165,233,.25); }
+
+        /* 圓餅圖卡 */
+        .pf-pie-card { background:#0b1929; border:1px solid rgba(14,165,233,.14); border-radius:14px; padding:16px; position:sticky; top:10px; }
+        .pf-pie-title { font-size:13px; font-weight:700; color:#f1f5f9; margin-bottom:14px; }
+        .pf-legend { margin-top:12px; display:flex; flex-direction:column; gap:6px; }
+        .pf-legend-item { display:flex; align-items:center; gap:8px; font-size:11px; color:#cddae2; }
+        .pf-legend-dot { width:10px; height:10px; border-radius:3px; flex-shrink:0; }
+        .pf-legend-pct { margin-left:auto; font-weight:700; font-variant-numeric:tabular-nums; }
+
+        /* 空狀態 */
+        .pf-empty { text-align:center; padding:50px 24px; color:#6b8fa8; }
+        .pf-empty-icon { font-size:48px; margin-bottom:12px; opacity:.4; }
+
         /* ── 市場熱圖 ─────────────────────────────────────────────────────────── */
         .heatmap-page { padding: 4px 0 40px; }
         .heatmap-header {
@@ -6649,6 +6706,7 @@ useEffect(() => {
           <button className={`nav-btn ${activeMenu === "nextday" ? "active" : ""}`} onClick={() => setActiveMenu("nextday")}>🌙 隔日沖選股<span className="nav-key">6</span></button>
           <button className={`nav-btn ${activeMenu === "daytrade" ? "active" : ""}`} onClick={() => setActiveMenu("daytrade")}>⚡ 當沖模式<span className="nav-key">7</span></button>
           <button className={`nav-btn ${activeMenu === "heatmap" ? "active" : ""}`} onClick={() => setActiveMenu("heatmap")}>🗺️ 市場熱圖<span className="nav-key">8</span></button>
+          <button className={`nav-btn ${activeMenu === "portfolio" ? "active" : ""}`} onClick={() => setActiveMenu("portfolio")}>💼 投資組合<span className="nav-key">9</span></button>
           <button className="nav-btn nav-exit" onClick={() => navigate("/")}>← 返回首頁</button>
           <button className="nav-btn nav-shortcut-btn" onClick={() => setShowShortcutHelp(v => !v)}>
             ⌨️ 快捷鍵<span className="nav-key">?</span>
@@ -8194,6 +8252,14 @@ useEffect(() => {
             </div>
           )}
 
+          {activeMenu === "portfolio" && (
+            <PortfolioPage
+              dataList={[...systemStrongList, ...marketBreadthList, ...watchList]}
+              onSelectStock={(item) => { openStockAnalysisFromList(item); setActiveMenu("analysis"); }}
+              showToast={showToast}
+            />
+          )}
+
           {activeMenu === "heatmap" && (
             <HeatmapPage
               pool={MARKET_STRONG_POOL}
@@ -8763,7 +8829,7 @@ useEffect(() => {
             <div className="shortcut-section-label">頁面切換</div>
             {[
               ["1","首頁 / 每日報告"],["2","分析看板"],["3","自選股票"],
-              ["4","強勢掃描"],["5","K線訊號雷達"],["6","隔日沖選股"],["7","當沖模式"],["8","市場熱圖"],
+              ["4","強勢掃描"],["5","K線訊號雷達"],["6","隔日沖選股"],["7","當沖模式"],["8","市場熱圖"],["9","投資組合"],
             ].map(([k, label]) => (
               <div className="shortcut-row" key={k}>
                 <span>{label}</span>
@@ -8791,6 +8857,316 @@ useEffect(() => {
       </div>
     )}
     </>
+  );
+}
+
+// ── 投資組合追蹤頁面元件 ─────────────────────────────────────────────────────
+const PF_KEY = "stockRadarPortfolio_v1";
+const PIE_COLORS = ["#38bdf8","#818cf8","#34d399","#fbbf24","#f472b6","#fb7185","#a78bfa","#4ade80","#60a5fa","#f59e0b"];
+
+function PortfolioPage({ dataList, onSelectStock, showToast }) {
+  const [holdings, setHoldings] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(PF_KEY) || "[]"); } catch { return []; }
+  });
+  const [form, setForm] = useState({ symbol:"", qty:"", avgCost:"" });
+  const [loadingPrices, setLoadingPrices] = useState(false);
+  const [prices, setPrices] = useState({});   // symbol → { price, changePct }
+
+  // 把 dataList 建成快速查找 map
+  const dataMap = useMemo(() => {
+    const m = {};
+    dataList.forEach(s => {
+      const sym = String(s.symbol||"").replace(/\.(TW|TWO)$/i,"").toUpperCase();
+      if (!m[sym]) m[sym] = s;
+    });
+    return m;
+  }, [dataList]);
+
+  // 存檔
+  function save(next) {
+    setHoldings(next);
+    localStorage.setItem(PF_KEY, JSON.stringify(next));
+  }
+
+  // 新增持倉
+  function addHolding() {
+    const sym = form.symbol.trim().toUpperCase();
+    const qty = parseFloat(form.qty);
+    const cost = parseFloat(form.avgCost);
+    if (!sym || !qty || qty <= 0 || !cost || cost <= 0) {
+      showToast("請填寫完整的股票代號、股數、成本", "warning"); return;
+    }
+    const existing = holdings.find(h => h.symbol === sym);
+    if (existing) { showToast(`${sym} 已在組合中，請先刪除再新增`, "info"); return; }
+    const poolItem = MARKET_STRONG_POOL.find(p => p.symbol === sym || p.symbol === `${sym}.TW` || p.symbol === `${sym}.TWO`);
+    const next = [...holdings, { id: Date.now(), symbol: sym, name: poolItem?.name || sym, qty, avgCost: cost }];
+    save(next);
+    setForm({ symbol:"", qty:"", avgCost:"" });
+    showToast(`✅ 已加入 ${sym}`, "success");
+  }
+
+  function removeHolding(id) {
+    save(holdings.filter(h => h.id !== id));
+  }
+
+  // 取得目前價格（先查 dataMap，沒有再查 prices state）
+  function getPrice(sym) {
+    const d = dataMap[sym];
+    if (d?.close) return { price: d.close, changePct: d.changePct || 0, source: "cached" };
+    if (prices[sym]) return { ...prices[sym], source: "fetched" };
+    return null;
+  }
+
+  // 手動載入所有價格
+  async function fetchAllPrices() {
+    setLoadingPrices(true);
+    const missing = holdings.filter(h => !dataMap[h.symbol]);
+    const results = {};
+    await Promise.all(missing.map(async h => {
+      try {
+        const data = await fetchYahooHistory(h.symbol, "5d", "1d");
+        if (data?.history?.length) {
+          const last = data.history.at(-1);
+          const prev = data.history.at(-2);
+          const changePct = prev ? ((last.close - prev.close) / prev.close) * 100 : 0;
+          results[h.symbol] = { price: last.close, changePct };
+        }
+      } catch {}
+    }));
+    setPrices(prev => ({ ...prev, ...results }));
+    setLoadingPrices(false);
+    showToast("💹 價格更新完成", "success");
+  }
+
+  // 計算所有持倉的數字
+  const positions = useMemo(() => holdings.map(h => {
+    const p = getPrice(h.symbol);
+    const marketVal = p ? p.price * h.qty : null;
+    const cost = h.avgCost * h.qty;
+    const pnl = marketVal !== null ? marketVal - cost : null;
+    const pnlPct = pnl !== null ? (pnl / cost) * 100 : null;
+    return { ...h, currentPrice: p?.price, changePct: p?.changePct, marketVal, cost, pnl, pnlPct };
+  }), [holdings, dataMap, prices]);
+
+  // 總計
+  const summary = useMemo(() => {
+    const withData = positions.filter(p => p.marketVal !== null);
+    const totalVal  = withData.reduce((s,p) => s + p.marketVal, 0);
+    const totalCost = positions.reduce((s,p) => s + p.cost, 0);
+    const totalPnl  = withData.reduce((s,p) => s + p.pnl, 0);
+    const totalPnlPct = totalCost > 0 ? (totalPnl / totalCost) * 100 : 0;
+    return { totalVal, totalCost, totalPnl, totalPnlPct, loaded: withData.length, total: positions.length };
+  }, [positions]);
+
+  // 圓餅圖資料
+  const pieData = useMemo(() => {
+    const withVal = positions.filter(p => p.marketVal > 0);
+    const total = withVal.reduce((s,p) => s + p.marketVal, 0);
+    if (!total) return [];
+    return withVal
+      .sort((a,b) => b.marketVal - a.marketVal)
+      .slice(0, 9)
+      .map((p, i) => ({ symbol: p.symbol, name: p.name, pct: p.marketVal / total, color: PIE_COLORS[i] }));
+  }, [positions]);
+
+  // SVG 圓餅圖繪製
+  const PIE_R = 70; const PIE_CX = 90; const PIE_CY = 90;
+  function pieSlices() {
+    let angle = -Math.PI / 2;
+    return pieData.map((d, i) => {
+      const sweep = d.pct * 2 * Math.PI;
+      const x1 = PIE_CX + PIE_R * Math.cos(angle);
+      const y1 = PIE_CY + PIE_R * Math.sin(angle);
+      angle += sweep;
+      const x2 = PIE_CX + PIE_R * Math.cos(angle);
+      const y2 = PIE_CY + PIE_R * Math.sin(angle);
+      const large = sweep > Math.PI ? 1 : 0;
+      return (
+        <path key={d.symbol}
+          d={`M${PIE_CX},${PIE_CY} L${x1.toFixed(2)},${y1.toFixed(2)} A${PIE_R},${PIE_R} 0 ${large} 1 ${x2.toFixed(2)},${y2.toFixed(2)} Z`}
+          fill={d.color} stroke="#0b1929" strokeWidth="2"
+          style={{cursor:"default",transition:"opacity .15s"}}
+          onMouseEnter={e => e.target.style.opacity=".75"}
+          onMouseLeave={e => e.target.style.opacity="1"}
+        >
+          <title>{d.symbol} {d.name} — {(d.pct*100).toFixed(1)}%</title>
+        </path>
+      );
+    });
+  }
+
+  const fmt = (n, d=2) => n !== null && n !== undefined ? n.toLocaleString("zh-TW", {minimumFractionDigits:d, maximumFractionDigits:d}) : "--";
+
+  return (
+    <div className="pf-page">
+      {/* Header */}
+      <div className="pf-header">
+        <div>
+          <div className="pf-title">💼 投資組合</div>
+          <div className="pf-subtitle">追蹤持倉損益 · 資料儲存在本機 · 不上傳伺服器</div>
+        </div>
+        <button className="hm-filter-btn" onClick={fetchAllPrices} disabled={loadingPrices}>
+          {loadingPrices ? "⟳ 更新中..." : "💹 更新價格"}
+        </button>
+      </div>
+
+      {/* 總覽摘要 */}
+      {holdings.length > 0 && (
+        <div className="pf-summary">
+          <div className="pf-sum-card" style={{borderTopColor:"#38bdf8",borderTopWidth:2}}>
+            <div className="pf-sum-label">總成本</div>
+            <div className="pf-sum-val">NT$ {fmt(summary.totalCost, 0)}</div>
+            <div className="pf-sum-sub">{summary.total} 檔持倉</div>
+          </div>
+          <div className="pf-sum-card" style={{borderTopColor:"#818cf8",borderTopWidth:2}}>
+            <div className="pf-sum-label">總市值（已取得 {summary.loaded}/{summary.total}）</div>
+            <div className="pf-sum-val">{summary.loaded ? `NT$ ${fmt(summary.totalVal, 0)}` : "--"}</div>
+          </div>
+          <div className="pf-sum-card" style={{borderTopColor: summary.totalPnl >= 0 ? "#fb7185":"#4ade80", borderTopWidth:2}}>
+            <div className="pf-sum-label">未實現損益</div>
+            <div className="pf-sum-val" style={{color: summary.totalPnl >= 0 ? "#fb7185":"#4ade80"}}>
+              {summary.loaded ? `${summary.totalPnl >= 0 ? "+" : ""}NT$ ${fmt(summary.totalPnl, 0)}` : "--"}
+            </div>
+            <div className="pf-sum-sub" style={{color: summary.totalPnl >= 0 ? "#fb7185":"#4ade80"}}>
+              {summary.loaded ? `${summary.totalPnlPct >= 0 ? "+" : ""}${fmt(summary.totalPnlPct)}%` : ""}
+            </div>
+          </div>
+          <div className="pf-sum-card">
+            <div className="pf-sum-label">今日損益</div>
+            <div className="pf-sum-val" style={{color:"#f1f5f9", fontSize:16}}>
+              {positions.some(p=>p.changePct!=null)
+                ? (() => {
+                    const todayPnl = positions.filter(p=>p.marketVal&&p.changePct!=null)
+                      .reduce((s,p) => s + p.marketVal * (p.changePct/100) / (1 + p.changePct/100), 0);
+                    return <span style={{color: todayPnl>=0?"#fb7185":"#4ade80"}}>{todayPnl>=0?"+":""}NT$ {fmt(todayPnl,0)}</span>;
+                  })()
+                : "--"}
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="pf-main">
+        {/* 左：持倉表格 */}
+        <div className="pf-table-card">
+          <div className="pf-table-header">
+            <span className="pf-table-title">持倉明細</span>
+            {holdings.length === 0 && <span style={{fontSize:11,color:"#6b8fa8"}}>尚未加入任何持倉</span>}
+          </div>
+
+          {holdings.length === 0 ? (
+            <div className="pf-empty">
+              <div className="pf-empty-icon">💼</div>
+              <div>使用下方表單新增您的第一筆持倉</div>
+            </div>
+          ) : (
+            <div style={{overflowX:"auto"}}>
+              <table className="pf-table">
+                <thead>
+                  <tr>
+                    <th>股票</th>
+                    <th className="right">股數</th>
+                    <th className="right">成本價</th>
+                    <th className="right">現價</th>
+                    <th className="right">市值</th>
+                    <th className="right">損益</th>
+                    <th className="right">報酬率</th>
+                    <th className="right">今漲跌</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {positions.map(p => {
+                    const pnlColor = p.pnl === null ? "#6b8fa8" : p.pnl >= 0 ? "#fb7185" : "#4ade80";
+                    return (
+                      <tr key={p.id} onClick={() => onSelectStock({ symbol: p.symbol, name: p.name, close: p.currentPrice, changePct: p.changePct || 0 })}>
+                        <td>
+                          <div className="pf-sym">{p.symbol}</div>
+                          <div className="pf-name">{p.name}</div>
+                        </td>
+                        <td className="pf-num" style={{color:"#cddae2"}}>{p.qty.toLocaleString()}</td>
+                        <td className="pf-num" style={{color:"#cddae2"}}>{fmt(p.avgCost)}</td>
+                        <td className="pf-num">
+                          {p.currentPrice ? (
+                            <span style={{color:"#f1f5f9"}}>{fmt(p.currentPrice)}</span>
+                          ) : (
+                            <span className="pf-loading">載入中…</span>
+                          )}
+                        </td>
+                        <td className="pf-num" style={{color:"#b4cfe0"}}>{p.marketVal ? `NT$ ${fmt(p.marketVal, 0)}` : "--"}</td>
+                        <td className="pf-num" style={{color: pnlColor}}>
+                          {p.pnl !== null ? `${p.pnl >= 0 ? "+" : ""}${fmt(p.pnl, 0)}` : "--"}
+                        </td>
+                        <td className="pf-num" style={{color: pnlColor, fontWeight:800}}>
+                          {p.pnlPct !== null ? `${p.pnlPct >= 0 ? "+" : ""}${fmt(p.pnlPct)}%` : "--"}
+                        </td>
+                        <td className="pf-num" style={{color: (p.changePct||0)>=0?"#fb7185":"#4ade80"}}>
+                          {p.changePct != null ? `${p.changePct>=0?"+":""}${fmt(p.changePct)}%` : "--"}
+                        </td>
+                        <td onClick={e => { e.stopPropagation(); removeHolding(p.id); }}>
+                          <button className="pf-del-btn" title="移除">✕</button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* 新增表單 */}
+          <div className="pf-add-form">
+            <div className="pf-input-group" style={{width:90}}>
+              <label className="pf-input-label">股票代碼</label>
+              <input className="pf-input" placeholder="2330" value={form.symbol}
+                onChange={e => setForm(f => ({...f, symbol: e.target.value.toUpperCase()}))}
+                onKeyDown={e => e.key === "Enter" && addHolding()} />
+            </div>
+            <div className="pf-input-group" style={{width:80}}>
+              <label className="pf-input-label">股數（張×1000）</label>
+              <input className="pf-input" placeholder="1000" type="number" value={form.qty}
+                onChange={e => setForm(f => ({...f, qty: e.target.value}))}
+                onKeyDown={e => e.key === "Enter" && addHolding()} />
+            </div>
+            <div className="pf-input-group" style={{width:90}}>
+              <label className="pf-input-label">成本均價</label>
+              <input className="pf-input" placeholder="900.00" type="number" value={form.avgCost}
+                onChange={e => setForm(f => ({...f, avgCost: e.target.value}))}
+                onKeyDown={e => e.key === "Enter" && addHolding()} />
+            </div>
+            <button className="pf-add-btn" onClick={addHolding}>＋ 新增</button>
+          </div>
+        </div>
+
+        {/* 右：圓餅圖 */}
+        <div className="pf-pie-card">
+          <div className="pf-pie-title">持倉分配</div>
+          {pieData.length === 0 ? (
+            <div style={{textAlign:"center",padding:"30px 0",color:"#4b6880",fontSize:12}}>
+              取得市值後顯示分配圖
+            </div>
+          ) : (
+            <>
+              <svg viewBox="0 0 180 180" style={{width:"100%",maxWidth:180,display:"block",margin:"0 auto"}}>
+                {pieSlices()}
+                {/* 中間文字 */}
+                <text x={PIE_CX} y={PIE_CY-6} textAnchor="middle" fontSize={11} fill="#b4cfe0">{summary.total} 檔</text>
+                <text x={PIE_CX} y={PIE_CY+10} textAnchor="middle" fontSize={10} fill="#6b8fa8">持倉</text>
+              </svg>
+              <div className="pf-legend">
+                {pieData.map(d => (
+                  <div key={d.symbol} className="pf-legend-item">
+                    <div className="pf-legend-dot" style={{background:d.color}} />
+                    <span>{d.symbol} {d.name.slice(0,4)}</span>
+                    <span className="pf-legend-pct" style={{color:d.color}}>{(d.pct*100).toFixed(1)}%</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 
