@@ -1888,12 +1888,76 @@ function analyzeNextDayStrategy(stock) {
   };
 }
 
+// ── EMA 計算 ──────────────────────────────────────────────────────────────
+function calcEMASeries(values, period) {
+  if (values.length < period) return [];
+  const k = 2 / (period + 1);
+  let ema = values.slice(0, period).reduce((a, b) => a + b, 0) / period;
+  const result = new Array(period - 1).fill(null);
+  result.push(ema);
+  for (let i = period; i < values.length; i++) {
+    ema = values[i] * k + ema * (1 - k);
+    result.push(ema);
+  }
+  return result;
+}
+
+function calcRSISeries(closes, period = 14) {
+  if (closes.length < period + 1) return [];
+  const result = new Array(period).fill(null);
+  let avgGain = 0, avgLoss = 0;
+  for (let i = 1; i <= period; i++) {
+    const diff = closes[i] - closes[i - 1];
+    if (diff > 0) avgGain += diff; else avgLoss -= diff;
+  }
+  avgGain /= period; avgLoss /= period;
+  const rsi0 = avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss);
+  result.push(rsi0);
+  for (let i = period + 1; i < closes.length; i++) {
+    const diff = closes[i] - closes[i - 1];
+    const gain = diff > 0 ? diff : 0;
+    const loss = diff < 0 ? -diff : 0;
+    avgGain = (avgGain * (period - 1) + gain) / period;
+    avgLoss = (avgLoss * (period - 1) + loss) / period;
+    const rsiVal = avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss);
+    result.push(rsiVal);
+  }
+  return result;
+}
+
+function calcMACDSeries(closes, fast = 12, slow = 26, signal = 9) {
+  if (closes.length < slow + signal) return { macd: [], signal: [], hist: [] };
+  const emaFast = calcEMASeries(closes, fast);
+  const emaSlow = calcEMASeries(closes, slow);
+  const macdLine = closes.map((_, i) =>
+    emaFast[i] != null && emaSlow[i] != null ? emaFast[i] - emaSlow[i] : null
+  );
+  const validMacd = macdLine.filter(v => v != null);
+  const signalEma = calcEMASeries(validMacd, signal);
+  let sigIdx = 0;
+  const signalFull = macdLine.map(v => {
+    if (v == null) return null;
+    const s = signalEma[sigIdx] ?? null;
+    sigIdx++;
+    return s;
+  });
+  const histFull = macdLine.map((v, i) =>
+    v != null && signalFull[i] != null ? v - signalFull[i] : null
+  );
+  return { macd: macdLine, signal: signalFull, hist: histFull };
+}
+
 function TradingChart({
   stock,
   showMA5,
   showMA20,
   showMA60,
   showBollinger,
+  showEMA9 = false,
+  showEMA21 = false,
+  showVolMA = true,
+  showRSI = false,
+  showMACD = false,
   chartKey = "default",
   drawingLines = [],
   freeDrawings = [],
@@ -1944,15 +2008,53 @@ function TradingChart({
 
     candleSeriesRef.current = candleSeries;
 
-    const ma5Series = chart.addSeries(LineSeries, { color: "#fb923c", lineWidth: 2, priceLineVisible: false });
-    const ma20Series = chart.addSeries(LineSeries, { color: "#38bdf8", lineWidth: 2, priceLineVisible: false });
-    const ma60Series = chart.addSeries(LineSeries, { color: "#a78bfa", lineWidth: 2, priceLineVisible: false });
-    const bollUpperSeries = chart.addSeries(LineSeries, { color: "rgba(45,212,191,.9)", lineWidth: 1, priceLineVisible: false });
-    const bollMidSeries = chart.addSeries(LineSeries, { color: "rgba(45,212,191,.55)", lineWidth: 1, priceLineVisible: false });
-    const bollLowerSeries = chart.addSeries(LineSeries, { color: "rgba(45,212,191,.9)", lineWidth: 1, priceLineVisible: false });
-    const volumeSeries = chart.addSeries(HistogramSeries, { priceFormat: { type: "volume" }, priceScaleId: "volume" });
+    // ── 動態副圖空間分配 ───────────────────────────────────────────────────
+    const subPanelCount = (showRSI ? 1 : 0) + (showMACD ? 1 : 0);
+    const volTop = subPanelCount === 0 ? 0.82 : subPanelCount === 1 ? 0.75 : 0.70;
+    const rsiBottom = 1 - volTop;                                   // = 0.18/0.25/0.30
+    const rsiTop = showMACD ? (volTop - 0.15) : (volTop - 0.17);   // RSI 佔 15-17%
+    const macdTop = rsiTop - 0.17;                                  // MACD 佔 17%
 
-    chart.priceScale("volume").applyOptions({ scaleMargins: { top: 0.82, bottom: 0 } });
+    // ── 主圖均線系列 ────────────────────────────────────────────────────────
+    const ma5Series  = chart.addSeries(LineSeries, { color: "#fb923c", lineWidth: 2, priceLineVisible: false, lastValueVisible: false });
+    const ma20Series = chart.addSeries(LineSeries, { color: "#38bdf8", lineWidth: 2, priceLineVisible: false, lastValueVisible: false });
+    const ma60Series = chart.addSeries(LineSeries, { color: "#a78bfa", lineWidth: 2, priceLineVisible: false, lastValueVisible: false });
+    const bollUpperSeries = chart.addSeries(LineSeries, { color: "rgba(45,212,191,.9)", lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
+    const bollMidSeries   = chart.addSeries(LineSeries, { color: "rgba(45,212,191,.55)", lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
+    const bollLowerSeries = chart.addSeries(LineSeries, { color: "rgba(45,212,191,.9)", lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
+
+    // EMA
+    const ema9Series  = chart.addSeries(LineSeries, { color: "#fde047", lineWidth: 1.5, lineStyle: 1, priceLineVisible: false, lastValueVisible: false });
+    const ema21Series = chart.addSeries(LineSeries, { color: "#f97316", lineWidth: 1.5, lineStyle: 1, priceLineVisible: false, lastValueVisible: false });
+
+    // ── 成交量 ─────────────────────────────────────────────────────────────
+    const volumeSeries  = chart.addSeries(HistogramSeries, { priceFormat: { type: "volume" }, priceScaleId: "volume" });
+    const volMA5Series  = chart.addSeries(LineSeries, { color: "rgba(251,146,60,.8)", lineWidth: 1, priceScaleId: "volume", priceLineVisible: false, lastValueVisible: false });
+    const volMA20Series = chart.addSeries(LineSeries, { color: "rgba(56,189,248,.8)", lineWidth: 1, priceScaleId: "volume", priceLineVisible: false, lastValueVisible: false });
+    chart.priceScale("volume").applyOptions({ scaleMargins: { top: volTop, bottom: 0 } });
+
+    // ── RSI 副圖 ───────────────────────────────────────────────────────────
+    let rsiSeries, rsi70Series, rsi30Series;
+    if (showRSI) {
+      rsiSeries  = chart.addSeries(LineSeries, { color: "#fb7185", lineWidth: 1.5, priceScaleId: "rsi", priceLineVisible: false, lastValueVisible: true });
+      rsi70Series = chart.addSeries(LineSeries, { color: "rgba(251,113,133,.35)", lineWidth: 1, lineStyle: 2, priceScaleId: "rsi", priceLineVisible: false, lastValueVisible: false });
+      rsi30Series = chart.addSeries(LineSeries, { color: "rgba(74,222,128,.35)", lineWidth: 1, lineStyle: 2, priceScaleId: "rsi", priceLineVisible: false, lastValueVisible: false });
+      chart.priceScale("rsi").applyOptions({
+        scaleMargins: { top: rsiTop, bottom: rsiBottom },
+        autoScale: false, minimum: 0, maximum: 100,
+      });
+    }
+
+    // ── MACD 副圖 ──────────────────────────────────────────────────────────
+    let macdLineSeries, macdSignalSeries, macdHistSeries;
+    if (showMACD) {
+      macdHistSeries   = chart.addSeries(HistogramSeries, { priceScaleId: "macd", priceLineVisible: false, lastValueVisible: false });
+      macdLineSeries   = chart.addSeries(LineSeries, { color: "#38bdf8", lineWidth: 1.5, priceScaleId: "macd", priceLineVisible: false, lastValueVisible: true });
+      macdSignalSeries = chart.addSeries(LineSeries, { color: "#f97316", lineWidth: 1.5, priceScaleId: "macd", priceLineVisible: false, lastValueVisible: false });
+      chart.priceScale("macd").applyOptions({
+        scaleMargins: { top: showRSI ? macdTop : rsiTop, bottom: rsiBottom },
+      });
+    }
 
     const candles = stock.history.map((d) => ({ time: d.time, open: d.open, high: d.high, low: d.low, close: d.close }));
     const closes = stock.history.map((x) => x.close);
@@ -2072,13 +2174,47 @@ function TradingChart({
       });
     });
 
+    // ── EMA 資料 ───────────────────────────────────────────────────────────
+    const ema9Vals  = calcEMASeries(closes, 9);
+    const ema21Vals = calcEMASeries(closes, 21);
+    const ema9Data  = stock.history.map((d, i) => ema9Vals[i]  != null ? { time: d.time, value: ema9Vals[i] } : null).filter(Boolean);
+    const ema21Data = stock.history.map((d, i) => ema21Vals[i] != null ? { time: d.time, value: ema21Vals[i] } : null).filter(Boolean);
+
+    // ── 成交量均線資料 ──────────────────────────────────────────────────────
+    const volumes = stock.history.map(d => d.volume || 0);
+    const volMA5Data  = stock.history.map((d, i) => { const v = sma(volumes.slice(0, i + 1), 5); return v ? { time: d.time, value: v } : null; }).filter(Boolean);
+    const volMA20Data = stock.history.map((d, i) => { const v = sma(volumes.slice(0, i + 1), 20); return v ? { time: d.time, value: v } : null; }).filter(Boolean);
+
+    // ── RSI 資料 ────────────────────────────────────────────────────────────
+    const rsiVals = calcRSISeries(closes, 14);
+    const rsiData = stock.history.map((d, i) => rsiVals[i] != null ? { time: d.time, value: rsiVals[i] } : null).filter(Boolean);
+    const ref70   = rsiData.map(d => ({ time: d.time, value: 70 }));
+    const ref30   = rsiData.map(d => ({ time: d.time, value: 30 }));
+
+    // ── MACD 資料 ───────────────────────────────────────────────────────────
+    const macdCalc = calcMACDSeries(closes);
+    const macdData    = stock.history.map((d, i) => macdCalc.macd[i]   != null ? { time: d.time, value: macdCalc.macd[i] }   : null).filter(Boolean);
+    const signalData  = stock.history.map((d, i) => macdCalc.signal[i] != null ? { time: d.time, value: macdCalc.signal[i] } : null).filter(Boolean);
+    const histData    = stock.history.map((d, i) => {
+      const v = macdCalc.hist[i];
+      if (v == null) return null;
+      return { time: d.time, value: v, color: v >= 0 ? "rgba(239,68,68,.75)" : "rgba(34,197,94,.75)" };
+    }).filter(Boolean);
+
+    // ── setData ─────────────────────────────────────────────────────────────
     ma5Series.setData(showMA5 ? buildMA(5) : []);
     ma20Series.setData(showMA20 ? buildMA(20) : []);
     ma60Series.setData(showMA60 ? buildMA(60) : []);
     bollUpperSeries.setData(showBollinger ? boll.map((x) => ({ time: x.time, value: x.upper })) : []);
     bollMidSeries.setData(showBollinger ? boll.map((x) => ({ time: x.time, value: x.mid })) : []);
     bollLowerSeries.setData(showBollinger ? boll.map((x) => ({ time: x.time, value: x.lower })) : []);
+    ema9Series.setData(showEMA9 ? ema9Data : []);
+    ema21Series.setData(showEMA21 ? ema21Data : []);
     volumeSeries.setData(volume);
+    volMA5Series.setData(showVolMA ? volMA5Data : []);
+    volMA20Series.setData(showVolMA ? volMA20Data : []);
+    if (showRSI && rsiSeries) { rsiSeries.setData(rsiData); rsi70Series.setData(ref70); rsi30Series.setData(ref30); }
+    if (showMACD && macdLineSeries) { macdLineSeries.setData(macdData); macdSignalSeries.setData(signalData); macdHistSeries.setData(histData); }
 
     if (shouldRestoreRange) {
       chart.timeScale().setVisibleLogicalRange(visibleRangeRef.current);
@@ -2123,7 +2259,7 @@ function TradingChart({
       chartRef.current = null;
       candleSeriesRef.current = null;
     };
-  }, [stock, showMA5, showMA20, showMA60, showBollinger, chartKey, drawingLines]);
+  }, [stock, showMA5, showMA20, showMA60, showBollinger, showEMA9, showEMA21, showVolMA, showRSI, showMACD, chartKey, drawingLines]);
 
   function getChartPoint(event) {
     const box = overlayRef.current?.getBoundingClientRect();
@@ -2919,7 +3055,13 @@ useEffect(() => {
   const [showMA20, setShowMA20] = useState(true);
   const [showMA60, setShowMA60] = useState(true);
   const [showBollinger, setShowBollinger] = useState(true);
+  const [showEMA9, setShowEMA9] = useState(false);
+  const [showEMA21, setShowEMA21] = useState(false);
+  const [showVolMA, setShowVolMA] = useState(true);
+  const [showRSI, setShowRSI] = useState(false);
+  const [showMACD, setShowMACD] = useState(false);
   const [indicatorMenuOpen, setIndicatorMenuOpen] = useState(false);
+  const [drawingColor, setDrawingColor] = useState("#ef4444");
   const [searchHistory, setSearchHistory] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem("stockRadarSearchHistory") || "[]");
@@ -3081,6 +3223,9 @@ useEffect(() => {
   });
   const [freeDrawingEnabled, setFreeDrawingEnabled] = useState(false);
   const [freeDrawingTool, setFreeDrawingTool] = useState("line");
+  const [fibHigh, setFibHigh] = useState("");
+  const [fibLow, setFibLow] = useState("");
+  const [fibLines, setFibLines] = useState([]);
 
   useEffect(() => {
     localStorage.setItem("stockRadarWatchText", watchText);
@@ -3154,7 +3299,7 @@ useEffect(() => {
     return chartLines[getChartLineKey(targetStock)] || [];
   }
 
-  function addChartLine(targetStock = stock) {
+  function addChartLine(targetStock = stock, overrides = null) {
     if (!targetStock?.symbol) {
       setError("請先選擇股票後再新增畫線");
       return;
@@ -3162,6 +3307,19 @@ useEffect(() => {
 
     const key = getChartLineKey(targetStock);
     const baseLabel = lineLabel.trim();
+
+    // Fibonacci / override 模式
+    if (overrides) {
+      const newLine = {
+        id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        kind: overrides.overrideKind || "horizontal",
+        type: overrides.overrideType || "resistance",
+        price: Number(overrides.overridePrice),
+        label: overrides.overrideLabel || "",
+      };
+      setChartLines(prev => ({ ...prev, [key]: [...(prev[key] || []), newLine] }));
+      return;
+    }
 
     let newLine = null;
 
@@ -3329,24 +3487,10 @@ useEffect(() => {
         </div>
 
         <div className="drawing-mode-tabs">
-          <button
-            className={drawingKind === "horizontal" ? "active" : "ghost"}
-            onClick={() => setDrawingKind("horizontal")}
-          >
-            水平線
-          </button>
-          <button
-            className={drawingKind === "trend" ? "active" : "ghost"}
-            onClick={() => setDrawingKind("trend")}
-          >
-            趨勢線
-          </button>
-          <button
-            className={drawingKind === "zone" ? "active" : "ghost"}
-            onClick={() => setDrawingKind("zone")}
-          >
-            區間
-          </button>
+          <button className={drawingKind === "horizontal" ? "active" : "ghost"} onClick={() => setDrawingKind("horizontal")}>水平線</button>
+          <button className={drawingKind === "trend" ? "active" : "ghost"} onClick={() => setDrawingKind("trend")}>趨勢線</button>
+          <button className={drawingKind === "zone" ? "active" : "ghost"} onClick={() => setDrawingKind("zone")}>區間</button>
+          <button className={drawingKind === "fibonacci" ? "active" : "ghost"} onClick={() => setDrawingKind("fibonacci")} style={{color:"#fbbf24"}}>🌀 Fibonacci</button>
         </div>
 
         {drawingKind === "horizontal" && (
@@ -3456,6 +3600,50 @@ useEffect(() => {
             <button className="ghost" onClick={() => addChartLine(targetStock)}>
               新增區間
             </button>
+          </div>
+        )}
+
+        {drawingKind === "fibonacci" && (
+          <div className="drawing-row" style={{flexWrap:"wrap",gap:8,alignItems:"flex-end"}}>
+            <div style={{display:"flex",flexDirection:"column",gap:3}}>
+              <span style={{fontSize:10,color:"#6b8fa8"}}>波段高點</span>
+              <input value={fibHigh} onChange={e => setFibHigh(e.target.value)} placeholder="高點價格" style={{width:120}} />
+            </div>
+            <div style={{display:"flex",flexDirection:"column",gap:3}}>
+              <span style={{fontSize:10,color:"#6b8fa8"}}>波段低點</span>
+              <input value={fibLow} onChange={e => setFibLow(e.target.value)} placeholder="低點價格" style={{width:120}} />
+            </div>
+            <button className="ghost" onClick={() => {
+              const high = parseFloat(fibHigh), low = parseFloat(fibLow);
+              if (!isNaN(high) && !isNaN(low) && high > low) {
+                const range = high - low;
+                const levels = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1.0];
+                const lines = levels.map(r => ({ ratio: r, price: high - range * r }));
+                setFibLines(lines);
+                // 加入到水平線列表
+                if (targetStock) {
+                  lines.forEach(l => {
+                    const price = l.price;
+                    const ratio = l.ratio;
+                    const label = `Fib ${(ratio * 100).toFixed(1)}%`;
+                    addChartLine(targetStock, { overrideKind:"horizontal", overridePrice: price.toFixed(2), overrideType:"resistance", overrideLabel: label });
+                  });
+                }
+              }
+            }}>繪製黃金分割</button>
+            <button className="ghost" onClick={() => { setFibHigh(targetStock?.close?.toFixed(2)||""); }}>帶入現價為高點</button>
+            {fibLines.length > 0 && (
+              <div style={{width:"100%",display:"flex",flexWrap:"wrap",gap:4,marginTop:4}}>
+                {fibLines.map(l => (
+                  <span key={l.ratio} style={{fontSize:10,padding:"2px 7px",borderRadius:4,background:"rgba(251,191,36,.12)",border:"1px solid rgba(251,191,36,.25)",color:"#fbbf24"}}>
+                    {(l.ratio*100).toFixed(1)}% = {l.price.toFixed(2)}
+                  </span>
+                ))}
+              </div>
+            )}
+            <div style={{width:"100%",fontSize:10,color:"#6b8fa8",lineHeight:1.6}}>
+              黃金比例水平線：0% / 23.6% / 38.2% / 50% / 61.8% / 78.6% / 100%，自動加入水平線列表
+            </div>
           </div>
         )}
 
@@ -5467,9 +5655,11 @@ useEffect(() => {
         .watch-menu { position: absolute; right: 0; top: 44px; z-index: 20; width: 280px; background: #0b1929; border: 1px solid rgba(14,165,233,.20); border-radius: 16px; padding: 12px; box-shadow: 0 18px 50px rgba(0,0,0,.45); }
         .chart-tools { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
         .indicator-dropdown { position: relative; }
-        .indicator-menu { position: absolute; right: 0; top: 42px; z-index: 30; width: 230px; background: #0b1929; border: 1px solid rgba(14,165,233,.20); border-radius: 14px; padding: 10px; box-shadow: 0 18px 50px rgba(0,0,0,.45); }
-        .indicator-menu .toggle-card { margin-bottom: 8px; }
+        .indicator-menu { position: absolute; right: 0; top: 42px; z-index: 30; width: 250px; background: #0b1929; border: 1px solid rgba(14,165,233,.20); border-radius: 14px; padding: 12px; box-shadow: 0 18px 50px rgba(0,0,0,.45); }
+        .indicator-menu .toggle-card { margin-bottom: 6px; }
         .indicator-menu .toggle-card:last-child { margin-bottom: 0; }
+        .ind-group-label { font-size: 10px; font-weight: 700; color: #4b6880; letter-spacing: .07em; text-transform: uppercase; margin-bottom: 5px; padding-bottom: 4px; border-bottom: .5px solid rgba(14,165,233,.10); }
+        .ind-row { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-bottom: 4px; }
         .summary-grid { display: grid; grid-template-columns: 1.1fr 1fr .8fr 1fr; gap: 10px; margin-bottom: 10px; }
         /* ── 分析看板：響應式三欄 ─────────────────────────────────────── */
         .analysis-layout {
@@ -7077,19 +7267,21 @@ useEffect(() => {
                         技術指標 ▾
                       </button>
                       {indicatorMenuOpen && (
-                        <div className="indicator-menu">
-                          <label className="toggle-card">
-                            <input type="checkbox" checked={showMA5} onChange={(e) => setShowMA5(e.target.checked)} /> MA5 日線
-                          </label>
-                          <label className="toggle-card">
-                            <input type="checkbox" checked={showMA20} onChange={(e) => setShowMA20(e.target.checked)} /> MA20 月線
-                          </label>
-                          <label className="toggle-card">
-                            <input type="checkbox" checked={showMA60} onChange={(e) => setShowMA60(e.target.checked)} /> MA60 季線
-                          </label>
-                          <label className="toggle-card">
-                            <input type="checkbox" checked={showBollinger} onChange={(e) => setShowBollinger(e.target.checked)} /> 布林通道
-                          </label>
+                        <div className="indicator-menu" style={{width:250}}>
+                          <div className="ind-group-label">📈 主圖均線</div>
+                          <div className="ind-row"><label className="toggle-card"><input type="checkbox" checked={showMA5} onChange={(e) => setShowMA5(e.target.checked)} /><span style={{color:"#fb923c"}}>MA5</span> 日線</label>
+                          <label className="toggle-card"><input type="checkbox" checked={showMA20} onChange={(e) => setShowMA20(e.target.checked)} /><span style={{color:"#38bdf8"}}>MA20</span> 月線</label></div>
+                          <div className="ind-row"><label className="toggle-card"><input type="checkbox" checked={showMA60} onChange={(e) => setShowMA60(e.target.checked)} /><span style={{color:"#a78bfa"}}>MA60</span> 季線</label>
+                          <label className="toggle-card"><input type="checkbox" checked={showBollinger} onChange={(e) => setShowBollinger(e.target.checked)} /><span style={{color:"#2dd4bf"}}>BOLL</span> 布林</label></div>
+                          <div className="ind-group-label" style={{marginTop:8}}>⚡ EMA 指數均線</div>
+                          <div className="ind-row"><label className="toggle-card"><input type="checkbox" checked={showEMA9} onChange={(e) => setShowEMA9(e.target.checked)} /><span style={{color:"#fde047"}}>EMA9</span> 短線</label>
+                          <label className="toggle-card"><input type="checkbox" checked={showEMA21} onChange={(e) => setShowEMA21(e.target.checked)} /><span style={{color:"#f97316"}}>EMA21</span> 中線</label></div>
+                          <div className="ind-group-label" style={{marginTop:8}}>📊 成交量</div>
+                          <label className="toggle-card"><input type="checkbox" checked={showVolMA} onChange={(e) => setShowVolMA(e.target.checked)} />量能均線 (MA5/MA20)</label>
+                          <div className="ind-group-label" style={{marginTop:8}}>📉 副圖指標</div>
+                          <div className="ind-row"><label className="toggle-card"><input type="checkbox" checked={showRSI} onChange={(e) => setShowRSI(e.target.checked)} /><span style={{color:"#fb7185"}}>RSI</span> 強弱指標</label>
+                          <label className="toggle-card"><input type="checkbox" checked={showMACD} onChange={(e) => setShowMACD(e.target.checked)} /><span style={{color:"#34d399"}}>MACD</span> 動能</label></div>
+                          {(showRSI || showMACD) && <div style={{fontSize:10,color:"#6b8fa8",marginTop:4,lineHeight:1.5}}>副圖顯示於主圖下方，建議區間選 6個月以上</div>}
                         </div>
                       )}
                     </div>
@@ -7111,6 +7303,11 @@ useEffect(() => {
                       showMA20={showMA20}
                       showMA60={showMA60}
                       showBollinger={showBollinger}
+                      showEMA9={showEMA9}
+                      showEMA21={showEMA21}
+                      showVolMA={showVolMA}
+                      showRSI={showRSI}
+                      showMACD={showMACD}
                       chartKey={klineType}
                       drawingLines={getDrawingLines(stock)}
                       freeDrawings={getFreeDrawings(stock)}
