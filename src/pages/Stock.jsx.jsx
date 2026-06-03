@@ -8947,6 +8947,198 @@ useEffect(() => {
   );
 }
 
+// ── 市場熱圖頁面元件 ──────────────────────────────────────────────────────────
+function HeatmapPage({ pool, dataList, onSelectStock, onRequestScan, scanning }) {
+  const [selectedSector, setSelectedSector] = useState(null);
+  const [sortMode, setSortMode] = useState("chg");
+  const dataMap = useMemo(() => {
+    const m = new Map();
+    dataList.forEach(s => {
+      const sym = String(s.symbol || "").replace(/\.(TW|TWO)$/i, "").toUpperCase();
+      if (!m.has(sym)) m.set(sym, s);
+    });
+    return m;
+  }, [dataList]);
+  const hasData = dataMap.size > 0;
+  const grouped = useMemo(() => {
+    const map = {};
+    pool.forEach(item => { const ind = item.industry || "其他"; if (!map[ind]) map[ind] = []; map[ind].push(item); });
+    return map;
+  }, [pool]);
+  const sectorStats = useMemo(() => {
+    const result = {};
+    Object.entries(grouped).forEach(([ind, items]) => {
+      const withData = items.map(i => dataMap.get(i.symbol)).filter(Boolean);
+      if (!withData.length) { result[ind] = { avg: null, up: 0, down: 0, flat: 0, total: items.length, loaded: 0, maxVol: 0 }; return; }
+      const avg  = withData.reduce((s, d) => s + (d.changePct || 0), 0) / withData.length;
+      const up   = withData.filter(d => (d.changePct || 0) > 0).length;
+      const down = withData.filter(d => (d.changePct || 0) < 0).length;
+      const maxVol = Math.max(...withData.map(d => d.volumeRatio || 0));
+      result[ind] = { avg, up, down, flat: withData.length - up - down, total: items.length, loaded: withData.length, maxVol };
+    });
+    return result;
+  }, [grouped, dataMap]);
+  const marketStats = useMemo(() => {
+    const all = [...dataMap.values()]; if (!all.length) return null;
+    const up = all.filter(s => (s.changePct || 0) > 0).length;
+    const down = all.filter(s => (s.changePct || 0) < 0).length;
+    const avgChg = all.reduce((s, d) => s + (d.changePct || 0), 0) / all.length;
+    const hot = all.filter(s => (s.volumeRatio || 0) >= 2).length;
+    return { up, down, avgChg, hot, total: all.length };
+  }, [dataMap]);
+  function tileColor(chg) {
+    if (chg == null) return { bg: "rgba(28,40,58,.8)" };
+    if (chg >= 9) return { bg: "#7f1d1d" }; if (chg >= 5) return { bg: "#991b1b" };
+    if (chg >= 2) return { bg: "#b91c1c" }; if (chg >= 0.5) return { bg: "#dc2626" };
+    if (chg > 0) return { bg: "rgba(220,38,38,.5)" };
+    if (chg <= -9) return { bg: "#14532d" }; if (chg <= -5) return { bg: "#166534" };
+    if (chg <= -2) return { bg: "#15803d" }; if (chg <= -0.5) return { bg: "#16a34a" };
+    if (chg < 0) return { bg: "rgba(22,163,74,.45)" };
+    return { bg: "rgba(40,55,75,.8)" };
+  }
+  const sortedSectors = useMemo(() => {
+    const entries = Object.entries(grouped);
+    if (sortMode === "chg")  return [...entries].sort((a, b) => (sectorStats[b[0]]?.avg ?? -999) - (sectorStats[a[0]]?.avg ?? -999));
+    if (sortMode === "name") return [...entries].sort((a, b) => a[0].localeCompare(b[0], "zh-TW"));
+    if (sortMode === "vol")  return [...entries].sort((a, b) => (sectorStats[b[0]]?.maxVol || 0) - (sectorStats[a[0]]?.maxVol || 0));
+    return entries;
+  }, [grouped, sectorStats, sortMode]);
+
+  if (!hasData) return (
+    <div className="heatmap-page">
+      <div className="hm-empty">
+        <div style={{fontSize:48,marginBottom:12}}>🗺️</div>
+        <div>尚無市場資料，請先執行掃描</div>
+        <button className="hm-scan-btn" onClick={onRequestScan} disabled={scanning}>{scanning?"掃描中...":"📡 立即掃描市場"}</button>
+      </div>
+    </div>
+  );
+
+  if (selectedSector) {
+    const items = grouped[selectedSector] || [];
+    const stats = sectorStats[selectedSector] || {};
+    const avgChg = stats.avg;
+    const avgColor = avgChg == null ? "#6b8fa8" : avgChg >= 0 ? "#fb7185" : "#4ade80";
+    const sortedItems = [...items].sort((a, b) => {
+      const da = dataMap.get(a.symbol), db = dataMap.get(b.symbol);
+      if (!da && !db) return 0; if (!da) return 1; if (!db) return -1;
+      return (db.changePct || 0) - (da.changePct || 0);
+    });
+    return (
+      <div className="heatmap-page">
+        <div className="hm-detail-header">
+          <button className="hm-back-btn" onClick={() => setSelectedSector(null)}>← 返回產業總覽</button>
+          <div className="hm-detail-title">
+            {selectedSector}
+            {avgChg != null && (
+              <span style={{fontSize:16,fontWeight:700,color:avgColor,background:avgChg>=0?"rgba(251,113,133,.12)":"rgba(74,222,128,.12)",border:"1px solid rgba(0,0,0,.15)",borderRadius:8,padding:"3px 10px"}}>
+                {avgChg>=0?"▲":"▼"} {Math.abs(avgChg).toFixed(2)}%
+              </span>
+            )}
+          </div>
+          <span style={{fontSize:12,color:"#6b8fa8"}}>{items.length} 檔 · {stats.loaded||0} 有資料</span>
+          <div style={{marginLeft:"auto"}}><button className="hm-filter-btn" onClick={onRequestScan} disabled={scanning}>{scanning?"⟳":"🔄"} 更新</button></div>
+        </div>
+        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16}}>
+          <div style={{display:"flex",height:8,borderRadius:4,overflow:"hidden",width:240,gap:1}}>
+            {stats.loaded>0&&(<>
+              <div style={{width:Math.round(stats.up/stats.loaded*100)+"%",background:"#fb7185",borderRadius:"4px 0 0 4px"}}/>
+              <div style={{width:Math.round(stats.flat/stats.loaded*100)+"%",background:"#6b8fa8"}}/>
+              <div style={{width:Math.round(stats.down/stats.loaded*100)+"%",background:"#4ade80",borderRadius:"0 4px 4px 0"}}/>
+            </>)}
+          </div>
+          <span style={{fontSize:11,color:"#fb7185"}}>▲ {stats.up}</span>
+          <span style={{fontSize:11,color:"#6b8fa8"}}>— {stats.flat}</span>
+          <span style={{fontSize:11,color:"#4ade80"}}>▼ {stats.down}</span>
+        </div>
+        <div className="hm-tiles">
+          {sortedItems.map(item => {
+            const d = dataMap.get(item.symbol);
+            const chg = d?.changePct;
+            const col = tileColor(chg);
+            const isHot = (d?.volumeRatio||0) >= 2;
+            const dn = (item.name||item.symbol).replace(/股份有限公司|有限公司/g,"").trim();
+            if (!d) return (
+              <div key={item.symbol} className="hm-tile-nodata" onClick={() => onSelectStock({symbol:item.symbol,name:item.name})}>
+                <div className="hm-tile-name">{dn.slice(0,5)}</div>
+                <div className="hm-tile-sym">{item.symbol}</div>
+              </div>
+            );
+            return (
+              <div key={item.symbol} className="hm-tile" style={{background:col.bg}} onClick={() => onSelectStock(d)}>
+                {isHot && <div className="hm-hot-dot">🔥</div>}
+                <div className="hm-tile-name">{dn.slice(0,5)}</div>
+                <div className="hm-tile-sym">{item.symbol}</div>
+                <div className="hm-tile-chg">{chg>=0?"+":""}{chg?.toFixed(2)??"--"}%</div>
+                {d.volumeRatio>=1.3 && <div className="hm-tile-vol">{d.volumeRatio.toFixed(1)}x</div>}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="heatmap-page">
+      <div className="heatmap-header">
+        <div>
+          <div className="heatmap-title">🗺️ 市場熱圖</div>
+          <div className="heatmap-subtitle">點擊任一產業，查看該產業所有個股漲跌詳情</div>
+        </div>
+        <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+          <div className="heatmap-controls">
+            {[["chg","依漲跌"],["vol","依量能"],["name","依名稱"]].map(([m,l]) => (
+              <button key={m} className={"hm-filter-btn "+(sortMode===m?"active":"")} onClick={() => setSortMode(m)}>{l}</button>
+            ))}
+          </div>
+          <button className="hm-filter-btn" onClick={onRequestScan} disabled={scanning}>{scanning?"⟳":"🔄"} 更新</button>
+        </div>
+      </div>
+      {marketStats && (
+        <div className="heatmap-stats-row">
+          <div className="hm-stat-card"><div className="hm-stat-label">有資料股票</div><div className="hm-stat-val">{marketStats.total} 檔</div></div>
+          <div className="hm-stat-card"><div className="hm-stat-label">上漲家數</div><div className="hm-stat-val" style={{color:"#fb7185"}}>{marketStats.up} 檔</div></div>
+          <div className="hm-stat-card"><div className="hm-stat-label">下跌家數</div><div className="hm-stat-val" style={{color:"#4ade80"}}>{marketStats.down} 檔</div></div>
+          <div className="hm-stat-card"><div className="hm-stat-label">市場平均</div><div className="hm-stat-val" style={{color:marketStats.avgChg>=0?"#fb7185":"#4ade80"}}>{marketStats.avgChg>=0?"+":""}{marketStats.avgChg.toFixed(2)}%</div></div>
+          <div className="hm-stat-card"><div className="hm-stat-label">爆量股 ≥2x</div><div className="hm-stat-val" style={{color:"#fbbf24"}}>{marketStats.hot} 檔</div></div>
+        </div>
+      )}
+      <div className="hm-sectors-grid">
+        {sortedSectors.map(([sector, items]) => {
+          const st = sectorStats[sector] || {};
+          const avg = st.avg;
+          const isUp = avg != null && avg > 0;
+          const isDown = avg != null && avg < 0;
+          const upPct   = st.loaded > 0 ? Math.round(st.up   / st.loaded * 100) : 0;
+          const downPct = st.loaded > 0 ? Math.round(st.down / st.loaded * 100) : 0;
+          const badgeColor = isUp ? "#fb7185" : isDown ? "#4ade80" : "#6b8fa8";
+          const cardClass = isUp ? "hm-sector-card hm-sc-up" : isDown ? "hm-sector-card hm-sc-down" : "hm-sector-card hm-sc-flat";
+          return (
+            <div key={sector} className={cardClass} onClick={() => setSelectedSector(sector)}>
+              <div className="hm-sc-name">{sector}</div>
+              <div className="hm-sc-badge" style={{color:badgeColor}}>
+                {avg != null ? <>{isUp?"▲":isDown?"▼":"—"} {Math.abs(avg).toFixed(2)}%</> : <span style={{fontSize:13,color:"#4b6880"}}>尚無資料</span>}
+              </div>
+              <div className="hm-sc-meta">
+                <span className="hm-sc-count">{st.loaded||0}/{items.length} 有資料</span>
+                {st.loaded > 0 && (<>
+                  <div className="hm-sc-bar" style={{flex:1}}>
+                    <div className="hm-sc-bar-up"   style={{width:upPct+"%"}}/>
+                    <div className="hm-sc-bar-down" style={{width:downPct+"%"}}/>
+                  </div>
+                  <span className="hm-sc-dist" style={{color:"#fb7185"}}>{st.up}▲</span>
+                  <span className="hm-sc-dist" style={{color:"#4ade80"}}>{st.down}▼</span>
+                </>)}
+              </div>
+              {st.maxVol >= 2 && <div style={{position:"absolute",top:10,right:12,fontSize:11,color:"#fbbf24"}}>🔥</div>}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 // ── 投資組合追蹤頁面元件 ─────────────────────────────────────────────────────
 const PF_KEY = "stockRadarPortfolio_v1";
 const PIE_COLORS = ["#38bdf8","#818cf8","#34d399","#fbbf24","#f472b6","#fb7185","#a78bfa","#4ade80","#60a5fa","#f59e0b"];
