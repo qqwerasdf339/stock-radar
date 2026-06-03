@@ -2899,6 +2899,13 @@ useEffect(() => {
   const [watchMenuOpen, setWatchMenuOpen] = useState(false);
   const [newWatchSymbol, setNewWatchSymbol] = useState("");
   const [favoriteNotice, setFavoriteNotice] = useState("");
+  const [toasts, setToasts] = useState([]);
+  const toastIdRef = useRef(0);
+  function showToast(message, type = "success", duration = 3500) {
+    const id = ++toastIdRef.current;
+    setToasts(prev => [...prev, { id, message, type }]);
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), duration);
+  }
   const [activeMenu, setActiveMenu] = useState("report");
   const menuHistoryRef = useRef([]);
   const lastMenuRef = useRef("report");
@@ -3567,7 +3574,7 @@ useEffect(() => {
 
   function addFavorite(targetStock = stock, group = "選單1") {
     if (!targetStock?.symbol) {
-      setFavoriteNotice("請先查詢股票，再加入收藏");
+      showToast("請先查詢股票，再加入收藏", "warning");
       return;
     }
 
@@ -3580,11 +3587,11 @@ useEffect(() => {
       );
 
       if (exists) {
-        setFavoriteNotice(`${targetSymbol} 已在${targetGroup}`);
+        showToast(`${targetSymbol} 已在${targetGroup}`, "info");
         return prev;
       }
 
-      setFavoriteNotice(`已收藏 ${targetSymbol} 到${targetGroup}`);
+      showToast(`⭐ 已收藏 ${targetSymbol} 到${targetGroup}`, "success");
       return [
         ...prev,
         {
@@ -3612,7 +3619,7 @@ useEffect(() => {
         group ? !(item.symbol === symbol && (item.group || "選單1") === group) : item.symbol !== symbol
       )
     );
-    setFavoriteNotice(`已移除 ${symbol}`);
+    showToast(`已移除 ${symbol}`, "info");
   }
 
   function removeWatchSymbol(symbol) {
@@ -3656,7 +3663,7 @@ useEffect(() => {
       ];
     });
 
-    setFavoriteNotice(`已加入 ${value}，正在更新資料`);
+    showToast(`已加入 ${value}，正在更新資料`, "success");
     setNewWatchSymbol("");
     setWatchMenuOpen(false);
 
@@ -3846,10 +3853,18 @@ useEffect(() => {
           if (hit) triggered.push({ ...alert, currentPrice: price });
         });
       });
-      if (triggered.length > 0) setAlertTriggered(prev => {
-        const ids = new Set(prev.map(a => a.id));
-        return [...prev, ...triggered.filter(a => !ids.has(a.id))];
-      });
+      if (triggered.length > 0) {
+        setAlertTriggered(prev => {
+          const ids = new Set(prev.map(a => a.id));
+          return [...prev, ...triggered.filter(a => !ids.has(a.id))];
+        });
+        triggered.forEach(a => {
+          showToast(
+            `🔔 ${a.symbol} ${a.condition === "above" ? "漲破" : "跌破"} ${a.price}（現價 ${a.currentPrice?.toFixed(2)}）`,
+            "warning", 6000
+          );
+        });
+      }
       // 移除強制跳頁：不再自動切換 activeMenu，避免在其他頁面被強制跳回
       if (!silent && !stock && result[0]) setStock(result[0]);
     } catch (err) {
@@ -5229,6 +5244,57 @@ useEffect(() => {
           color: #38bdf8; font-size: 13px; font-weight: 700; cursor: pointer;
         }
         .shortcut-panel-close:hover { background: rgba(14,165,233,.20); }
+        /* ── Toast 通知 ──────────────────────────────────────────────────────── */
+        .toast-container {
+          position: fixed; bottom: 24px; right: 24px; z-index: 99999;
+          display: flex; flex-direction: column; gap: 8px;
+          pointer-events: none;
+        }
+        .toast {
+          display: flex; align-items: flex-start; gap: 10px;
+          min-width: 260px; max-width: 360px;
+          padding: 12px 14px;
+          border-radius: 11px;
+          font-size: 13px; line-height: 1.45;
+          pointer-events: all;
+          box-shadow: 0 8px 28px rgba(0,0,0,.5);
+          animation: toast-in .25s cubic-bezier(.34,1.56,.64,1) both;
+          position: relative; overflow: hidden;
+        }
+        .toast.removing { animation: toast-out .2s ease forwards; }
+        @keyframes toast-in {
+          from { opacity: 0; transform: translateX(40px) scale(.95); }
+          to   { opacity: 1; transform: translateX(0) scale(1); }
+        }
+        @keyframes toast-out {
+          from { opacity: 1; transform: translateX(0); max-height: 80px; margin-bottom: 0; }
+          to   { opacity: 0; transform: translateX(40px); max-height: 0; margin-bottom: -8px; }
+        }
+        /* 底部進度條 */
+        .toast::after {
+          content: ""; position: absolute; bottom: 0; left: 0;
+          height: 3px; width: 100%;
+          animation: toast-bar var(--dur, 3.5s) linear forwards;
+          border-radius: 0 0 11px 11px;
+        }
+        @keyframes toast-bar { from { width: 100%; } to { width: 0; } }
+        /* 類型樣式 */
+        .toast-success { background: #0b2117; border: 1px solid rgba(74,222,128,.3); color: #dcfce7; }
+        .toast-success::after { background: #4ade80; }
+        .toast-warning { background: #1c1505; border: 1px solid rgba(251,191,36,.3); color: #fef9c3; }
+        .toast-warning::after { background: #fbbf24; }
+        .toast-error   { background: #1f0b0e; border: 1px solid rgba(251,113,133,.3); color: #ffe4e6; }
+        .toast-error::after { background: #fb7185; }
+        .toast-info    { background: #05101f; border: 1px solid rgba(56,189,248,.3); color: #e0f2fe; }
+        .toast-info::after { background: #38bdf8; }
+        .toast-icon { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
+        .toast-msg  { flex: 1; font-weight: 500; }
+        .toast-close {
+          background: none; border: none; font-size: 14px; line-height: 1;
+          cursor: pointer; opacity: .5; padding: 0; flex-shrink: 0;
+          color: inherit;
+        }
+        .toast-close:hover { opacity: 1; }
         .left-nav .nav-btn:nth-of-type(4),
         .left-nav .nav-btn:nth-of-type(8) {
           margin-top: 18px;
@@ -6580,7 +6646,7 @@ useEffect(() => {
                   </div>
                 )}
 
-                {favoriteNotice && <p className="favorite-notice">{favoriteNotice}</p>}
+                {/* favoriteNotice 已改為 toast 通知 */}
                 {error && <p className="error">{error}</p>}
 
                 </div>
@@ -8494,6 +8560,27 @@ useEffect(() => {
         </div>
       </div>
     )}
+
+    {/* ── Toast 通知區 ── */}
+    <div className="toast-container">
+      {toasts.map(t => {
+        const icons = { success: "✅", warning: "🔔", error: "❌", info: "ℹ️" };
+        return (
+          <div
+            key={t.id}
+            className={`toast toast-${t.type}`}
+            style={{ "--dur": t.type === "warning" ? "6s" : "3.5s" }}
+          >
+            <span className="toast-icon">{icons[t.type] ?? "ℹ️"}</span>
+            <span className="toast-msg">{t.message}</span>
+            <button className="toast-close"
+              onClick={() => setToasts(prev => prev.filter(x => x.id !== t.id))}>
+              ✕
+            </button>
+          </div>
+        );
+      })}
+    </div>
 
     {/* ── 快捷鍵說明面板 ── */}
     {showShortcutHelp && (
