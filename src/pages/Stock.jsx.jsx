@@ -5915,6 +5915,52 @@ useEffect(() => {
         .imt-stat-val { font-size: 18px; font-weight: 800; color: #f1f5f9; line-height: 1; }
         .imt-stat-label { font-size: 10px; color: #6b8fa8; margin-top: 3px; }
 
+        /* ── 回測績效面板 ─────────────────────────────────────────────────────── */
+        .backtest-panel {
+          background: rgba(6,14,26,.70);
+          border: 1px solid rgba(14,165,233,.14);
+          border-radius: 10px;
+          padding: 12px 14px;
+          margin-bottom: 10px;
+        }
+        .backtest-header {
+          display: flex; align-items: center; justify-content: space-between;
+          margin-bottom: 10px;
+        }
+        .backtest-title {
+          font-size: 11px; font-weight: 700; color: #6b8fa8;
+          letter-spacing: .06em; text-transform: uppercase;
+        }
+        .backtest-range {
+          font-size: 10px; color: #4b6880;
+          background: rgba(14,165,233,.06);
+          border: 1px solid rgba(14,165,233,.12);
+          border-radius: 4px; padding: 1px 6px;
+        }
+        .backtest-sparkline {
+          width: 100%; height: 52px;
+          margin-bottom: 10px;
+          display: block;
+        }
+        .backtest-stats {
+          display: grid; grid-template-columns: repeat(3,1fr); gap: 6px;
+        }
+        .backtest-stat {
+          background: rgba(14,165,233,.05);
+          border: 1px solid rgba(14,165,233,.10);
+          border-radius: 7px; padding: 7px 8px; text-align: center;
+        }
+        .backtest-stat-val {
+          font-size: 15px; font-weight: 800; line-height: 1;
+          margin-bottom: 3px; display: block;
+        }
+        .backtest-stat-label {
+          font-size: 10px; color: #6b8fa8; letter-spacing: .03em;
+        }
+        .backtest-note {
+          font-size: 10px; color: #4b6880; margin-top: 7px;
+          line-height: 1.5; text-align: center;
+        }
         /* ── 自訂股票搜尋 Autocomplete ───────────────────────────────────────── */
         .stock-search-wrap { position: relative; margin-bottom: 8px; }
         .stock-search-box {
@@ -6944,6 +6990,11 @@ useEffect(() => {
 
                     <div className="divider" />
                     <div className="score-main"><b>{stock.score}</b><span>{stock.level}</span></div>
+
+                    {/* ── 回測績效區塊 ── */}
+                    {stock.backtest?.equity?.length > 5 && (
+                      <BacktestPanel backtest={stock.backtest} range={range} />
+                    )}
                     <div className="metric-grid">
                       <MetricCard
                         value={stock.rsi?.toFixed(1)}
@@ -8619,6 +8670,94 @@ useEffect(() => {
       </div>
     )}
     </>
+  );
+}
+
+// ── 回測績效面板元件 ──────────────────────────────────────────────────────────
+function BacktestPanel({ backtest, range }) {
+  const { equity = [], totalReturn = 0, winRate = 0, maxDrawdown = 0, trades = 0 } = backtest || {};
+
+  // 繪製 Sparkline
+  const W = 260; const H = 52; const PAD = 4;
+  const vals = equity.map(e => e.value);
+  const minV = Math.min(...vals);
+  const maxV = Math.max(...vals);
+  const rangeV = maxV - minV || 1;
+  const pts = vals.map((v, i) => {
+    const x = PAD + (i / (vals.length - 1)) * (W - PAD * 2);
+    const y = PAD + (1 - (v - minV) / rangeV) * (H - PAD * 2);
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(" ");
+
+  const isPositive = totalReturn >= 0;
+  const lineColor = isPositive ? "#4ade80" : "#fb7185";
+  const fillId = isPositive ? "bt-fill-green" : "bt-fill-red";
+
+  // 標籤色
+  const retColor = totalReturn > 5 ? "#4ade80" : totalReturn > 0 ? "#86efac" : totalReturn > -10 ? "#fb7185" : "#f87171";
+  const wrColor  = winRate >= 60 ? "#4ade80" : winRate >= 50 ? "#fbbf24" : "#fb7185";
+  const ddColor  = maxDrawdown > -5 ? "#4ade80" : maxDrawdown > -15 ? "#fbbf24" : "#fb7185";
+
+  const rangeLabel = { "3mo":"3個月", "6mo":"6個月", "1y":"1年", "2y":"2年", "5y":"5年", "10y":"10年", "max":"全期" }[range] || range;
+
+  return (
+    <div className="backtest-panel">
+      <div className="backtest-header">
+        <span className="backtest-title">📈 策略回測</span>
+        <span className="backtest-range">{rangeLabel} · {trades} 筆交易</span>
+      </div>
+
+      {/* Sparkline SVG */}
+      <svg className="backtest-sparkline" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
+        <defs>
+          <linearGradient id={fillId} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={lineColor} stopOpacity="0.25" />
+            <stop offset="100%" stopColor={lineColor} stopOpacity="0.01" />
+          </linearGradient>
+        </defs>
+        {/* 基準線 100 */}
+        {(() => {
+          const baseY = PAD + (1 - (100 - minV) / rangeV) * (H - PAD * 2);
+          return <line x1={PAD} y1={baseY} x2={W - PAD} y2={baseY}
+            stroke="rgba(255,255,255,.12)" strokeWidth="1" strokeDasharray="3,3" />;
+        })()}
+        {/* 填色區 */}
+        <polyline
+          points={`${PAD},${H - PAD} ${pts} ${W - PAD},${H - PAD}`}
+          fill={`url(#${fillId})`} stroke="none"
+        />
+        {/* 主線 */}
+        <polyline points={pts} fill="none" stroke={lineColor} strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round" />
+        {/* 終點圓點 */}
+        {(() => {
+          const last = pts.split(" ").at(-1).split(",");
+          return <circle cx={last[0]} cy={last[1]} r="3" fill={lineColor} stroke="#060e1a" strokeWidth="1.5" />;
+        })()}
+      </svg>
+
+      {/* 績效數字 */}
+      <div className="backtest-stats">
+        <div className="backtest-stat">
+          <span className="backtest-stat-val" style={{ color: retColor }}>
+            {totalReturn >= 0 ? "+" : ""}{totalReturn.toFixed(1)}%
+          </span>
+          <div className="backtest-stat-label">總報酬</div>
+        </div>
+        <div className="backtest-stat">
+          <span className="backtest-stat-val" style={{ color: wrColor }}>
+            {winRate}%
+          </span>
+          <div className="backtest-stat-label">勝率</div>
+        </div>
+        <div className="backtest-stat">
+          <span className="backtest-stat-val" style={{ color: ddColor }}>
+            {maxDrawdown.toFixed(1)}%
+          </span>
+          <div className="backtest-stat-label">最大回撤</div>
+        </div>
+      </div>
+      <div className="backtest-note">策略：MA5/MA20 均線交叉 + MACD + RSI 過濾 ·  僅供參考，不構成投資建議</div>
+    </div>
   );
 }
 
