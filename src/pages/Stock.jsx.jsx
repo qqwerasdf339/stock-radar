@@ -6161,7 +6161,52 @@ useEffect(() => {
         /* 空狀態 */
         .pf-empty { text-align:center; padding:50px 24px; color:#6b8fa8; }
         .pf-empty-icon { font-size:48px; margin-bottom:12px; opacity:.4; }
-
+        /* ── 市場熱圖 ─────────────────────────────────────────────────────────── */
+        .heatmap-page { padding: 4px 0 60px; }
+        .heatmap-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; flex-wrap:wrap; gap:10px; }
+        .heatmap-title { font-size:22px; font-weight:800; color:#f1f5f9; display:flex; align-items:center; gap:10px; }
+        .heatmap-subtitle { font-size:12px; color:#6b8fa8; margin-top:3px; }
+        .heatmap-controls { display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+        .hm-filter-btn { font-size:11px; padding:4px 10px; border-radius:6px; background:rgba(14,165,233,.08); border:1px solid rgba(14,165,233,.18); color:#7dd3fc; cursor:pointer; transition:background .12s; }
+        .hm-filter-btn:hover, .hm-filter-btn.active { background:rgba(14,165,233,.22); border-color:rgba(14,165,233,.45); color:#38bdf8; }
+        .heatmap-stats-row { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:8px; margin-bottom:20px; }
+        .hm-stat-card { background:#0b1929; border:1px solid rgba(14,165,233,.12); border-radius:10px; padding:10px 14px; }
+        .hm-stat-label { font-size:10px; color:#6b8fa8; letter-spacing:.05em; margin-bottom:4px; }
+        .hm-stat-val { font-size:18px; font-weight:800; color:#f1f5f9; }
+        .hm-sectors-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:10px; }
+        .hm-sector-card { background:#0b1929; border:1px solid rgba(14,165,233,.14); border-radius:14px; padding:16px 18px; cursor:pointer; position:relative; overflow:hidden; transition:transform .15s,border-color .15s,box-shadow .15s; }
+        .hm-sector-card:hover { transform:translateY(-2px); border-color:rgba(14,165,233,.4); box-shadow:0 8px 28px rgba(0,0,0,.4); }
+        .hm-sector-card::before { content:""; position:absolute; left:0; top:0; bottom:0; width:4px; }
+        .hm-sc-up::before   { background:#fb7185; }
+        .hm-sc-down::before { background:#4ade80; }
+        .hm-sc-flat::before { background:#6b8fa8; }
+        .hm-sc-name  { font-size:16px; font-weight:800; color:#f1f5f9; margin-bottom:6px; }
+        .hm-sc-badge { display:inline-flex; align-items:center; gap:4px; font-size:18px; font-weight:800; margin-bottom:8px; }
+        .hm-sc-meta  { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+        .hm-sc-count { font-size:11px; color:#6b8fa8; }
+        .hm-sc-bar   { display:flex; height:5px; border-radius:3px; overflow:hidden; flex:1; min-width:60px; gap:1px; }
+        .hm-sc-bar-up   { background:#fb7185; border-radius:3px 0 0 3px; }
+        .hm-sc-bar-down { background:#4ade80; border-radius:0 3px 3px 0; }
+        .hm-sc-dist { font-size:10px; color:#6b8fa8; }
+        .hm-detail-header { display:flex; align-items:center; gap:12px; margin-bottom:18px; flex-wrap:wrap; }
+        .hm-back-btn { display:flex; align-items:center; gap:6px; background:rgba(14,165,233,.10); border:1px solid rgba(14,165,233,.22); color:#38bdf8; border-radius:8px; padding:7px 14px; font-size:13px; font-weight:600; cursor:pointer; transition:background .15s; }
+        .hm-back-btn:hover { background:rgba(14,165,233,.20); }
+        .hm-detail-title { font-size:22px; font-weight:800; color:#f1f5f9; display:flex; align-items:center; gap:10px; }
+        .hm-tiles { display:flex; flex-wrap:wrap; gap:6px; }
+        .hm-tile { border-radius:10px; padding:10px 12px; cursor:pointer; min-width:88px; width:88px; position:relative; transition:transform .12s,box-shadow .12s; border:1px solid transparent; display:flex; flex-direction:column; gap:2px; }
+        .hm-tile:hover { transform:scale(1.07); box-shadow:0 8px 24px rgba(0,0,0,.5); z-index:2; border-color:rgba(255,255,255,.2); }
+        .hm-tile-name { font-size:13px; font-weight:800; color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; text-shadow:0 1px 3px rgba(0,0,0,.6); }
+        .hm-tile-sym  { font-size:10px; color:rgba(255,255,255,.7); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .hm-tile-chg  { font-size:14px; font-weight:800; color:#fff; margin-top:4px; text-shadow:0 1px 3px rgba(0,0,0,.6); }
+        .hm-tile-vol  { font-size:9px; color:rgba(255,255,255,.65); }
+        .hm-hot-dot   { position:absolute; top:5px; right:7px; font-size:10px; }
+        .hm-tile-nodata { background:rgba(30,42,60,.55); border:1px dashed rgba(14,165,233,.15); min-width:80px; width:80px; border-radius:10px; padding:10px; cursor:pointer; transition:background .12s; display:flex; flex-direction:column; gap:2px; }
+        .hm-tile-nodata:hover { background:rgba(14,165,233,.10); border-color:rgba(14,165,233,.35); }
+        .hm-tile-nodata .hm-tile-name { font-size:11px; color:#b4cfe0; font-weight:700; text-shadow:none; }
+        .hm-tile-nodata .hm-tile-sym  { font-size:9px; color:#6b8fa8; }
+        .hm-empty { text-align:center; padding:60px 24px; color:#6b8fa8; font-size:14px; }
+        .hm-scan-btn { margin-top:14px; padding:10px 28px; background:rgba(14,165,233,.14); border:1px solid rgba(14,165,233,.28); border-radius:10px; color:#38bdf8; font-size:13px; font-weight:700; cursor:pointer; }
+        .hm-scan-btn:hover { background:rgba(14,165,233,.25); }
         /* ── 回測績效面板 ─────────────────────────────────────────────────────── */
         .backtest-panel {
           background: rgba(6,14,26,.70);
