@@ -2849,6 +2849,49 @@ useEffect(() => {
     window.addEventListener("offline", onOffline);
     return () => { window.removeEventListener("online", onOnline); window.removeEventListener("offline", onOffline); };
   }, []);
+
+  // ── 全站鍵盤快捷鍵 ──────────────────────────────────────────────────────
+  useEffect(() => {
+    const MENU_KEYS = {
+      "1": "report", "2": "analysis", "3": "watchlist",
+      "4": "signals", "5": "klineRadar", "6": "nextday", "7": "daytrade",
+    };
+    function handleKeyDown(e) {
+      const tag = document.activeElement?.tagName?.toLowerCase();
+      const isTyping = tag === "input" || tag === "textarea" || tag === "select"
+        || document.activeElement?.isContentEditable;
+
+      // ? → 快捷鍵說明面板（任何時候都可開）
+      if (e.key === "?" && !e.ctrlKey && !e.metaKey) {
+        setShowShortcutHelp(v => !v);
+        return;
+      }
+      // Escape → 關閉面板 / 關閉 Modal
+      if (e.key === "Escape") {
+        setShowShortcutHelp(false);
+        setIndustryPopup(null);
+        return;
+      }
+      if (isTyping) return;
+
+      // 1~7 → 切換選單
+      if (MENU_KEYS[e.key]) {
+        e.preventDefault();
+        setActiveMenu(MENU_KEYS[e.key]);
+        return;
+      }
+      // / → 聚焦搜尋框並切到分析看板
+      if (e.key === "/") {
+        e.preventDefault();
+        setActiveMenu("analysis");
+        setTimeout(() => document.querySelector(".stock-search-box")?.focus(), 80);
+        return;
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [autoScan, setAutoScan] = useState(false);
   const [error, setError] = useState("");
   const [rightView, setRightView] = useState("ai");
@@ -2879,6 +2922,7 @@ useEffect(() => {
   });
   const [searchDropdownOpen, setSearchDropdownOpen] = useState(false);
   const searchInputRef = useRef(null);
+  const [showShortcutHelp, setShowShortcutHelp] = useState(false);
   const [realtimeDayTrade, setRealtimeDayTrade] = useState(false);
   const [systemStrongList, setSystemStrongList] = useState([]);
   const [systemStrongLoading, setSystemStrongLoading] = useState(false);
@@ -5114,6 +5158,77 @@ useEffect(() => {
         .nav-btn:hover { color: #dde3ea; background: rgba(14,165,233,.08); border-color: transparent; transform: none; }
         .nav-btn.active { color: #38bdf8; background: rgba(14,165,233,.12); border-color: rgba(14,165,233,.25); box-shadow: none; font-weight: 600; }
         .nav-exit { margin-top: 2px; color: #cddae2; background: rgba(6,14,26,.40); }
+        .nav-shortcut-btn { margin-top: 8px; color: #6b8fa8; font-size: 11px; border-top: .5px solid rgba(56,189,248,.08); padding-top: 10px; }
+        .nav-shortcut-btn:hover { color: #b4cfe0; }
+        /* 快捷鍵數字 badge */
+        .nav-key {
+          margin-left: auto;
+          font-size: 10px; font-weight: 700;
+          background: rgba(56,189,248,.10);
+          border: 1px solid rgba(56,189,248,.20);
+          color: #38bdf8;
+          border-radius: 4px;
+          padding: 1px 5px;
+          line-height: 1.5;
+          flex-shrink: 0;
+          font-family: ui-monospace, monospace;
+        }
+        .nav-btn.active .nav-key { background: rgba(56,189,248,.20); border-color: rgba(56,189,248,.45); }
+        /* 快捷鍵說明面板 */
+        .shortcut-panel-overlay {
+          position: fixed; inset: 0; z-index: 9000;
+          background: rgba(0,0,0,.55); backdrop-filter: blur(3px);
+          display: flex; align-items: center; justify-content: center;
+          animation: fadeIn .15s ease;
+        }
+        .shortcut-panel {
+          background: #0b1929;
+          border: 1px solid rgba(14,165,233,.28);
+          border-radius: 18px;
+          padding: 28px 32px;
+          width: min(480px, 92vw);
+          box-shadow: 0 24px 60px rgba(0,0,0,.6);
+          animation: slideUp .18s ease;
+        }
+        .shortcut-panel-title {
+          font-size: 18px; font-weight: 800; color: #f1f5f9;
+          margin-bottom: 20px;
+          display: flex; align-items: center; gap: 10px;
+          border-bottom: 1px solid rgba(14,165,233,.12);
+          padding-bottom: 14px;
+        }
+        .shortcut-section { margin-bottom: 16px; }
+        .shortcut-section-label {
+          font-size: 10px; font-weight: 700; color: #4b6880;
+          letter-spacing: .08em; text-transform: uppercase;
+          margin-bottom: 8px;
+        }
+        .shortcut-row {
+          display: flex; align-items: center;
+          justify-content: space-between;
+          padding: 6px 0;
+          border-bottom: .5px solid rgba(14,165,233,.06);
+          font-size: 13px; color: #cddae2;
+        }
+        .shortcut-row:last-child { border-bottom: none; }
+        .shortcut-keys { display: flex; gap: 4px; }
+        .kbd {
+          display: inline-flex; align-items: center; justify-content: center;
+          background: rgba(14,165,233,.10);
+          border: 1px solid rgba(14,165,233,.28);
+          border-radius: 5px;
+          color: #38bdf8;
+          font-size: 11px; font-weight: 700;
+          font-family: ui-monospace, monospace;
+          padding: 2px 7px; min-width: 22px;
+        }
+        .shortcut-panel-close {
+          display: block; width: 100%; margin-top: 18px;
+          padding: 10px; border-radius: 9px;
+          background: rgba(14,165,233,.10); border: 1px solid rgba(14,165,233,.22);
+          color: #38bdf8; font-size: 13px; font-weight: 700; cursor: pointer;
+        }
+        .shortcut-panel-close:hover { background: rgba(14,165,233,.20); }
         .left-nav .nav-btn:nth-of-type(4),
         .left-nav .nav-btn:nth-of-type(8) {
           margin-top: 18px;
@@ -6304,14 +6419,17 @@ useEffect(() => {
             <div className="logo-icon">↗</div>
             <div><b>股市雷達</b><span>Quant Terminal</span></div>
           </div>
-          <button className={`nav-btn ${activeMenu === "report" ? "active" : ""}`} onClick={() => setActiveMenu("report")}>🏠 首頁 / 每日報告</button>
-          <button className={`nav-btn ${activeMenu === "analysis" ? "active" : ""}`} onClick={() => setActiveMenu("analysis")}>📊 分析看板</button>
-          <button className={`nav-btn ${activeMenu === "watchlist" ? "active" : ""}`} onClick={() => setActiveMenu("watchlist")}>⭐ 自選股票</button>
-          <button className={`nav-btn ${activeMenu === "signals" ? "active" : ""}`} onClick={() => setActiveMenu("signals")}>🚨 強勢掃描</button>
-          <button className={`nav-btn ${activeMenu === "klineRadar" ? "active" : ""}`} onClick={() => setActiveMenu("klineRadar")}>📡 K線訊號雷達</button>
-          <button className={`nav-btn ${activeMenu === "nextday" ? "active" : ""}`} onClick={() => setActiveMenu("nextday")}>🌙 隔日沖選股</button>
-          <button className={`nav-btn ${activeMenu === "daytrade" ? "active" : ""}`} onClick={() => setActiveMenu("daytrade")}>⚡ 當沖模式</button>
+          <button className={`nav-btn ${activeMenu === "report" ? "active" : ""}`} onClick={() => setActiveMenu("report")}>🏠 首頁 / 每日報告<span className="nav-key">1</span></button>
+          <button className={`nav-btn ${activeMenu === "analysis" ? "active" : ""}`} onClick={() => setActiveMenu("analysis")}>📊 分析看板<span className="nav-key">2</span></button>
+          <button className={`nav-btn ${activeMenu === "watchlist" ? "active" : ""}`} onClick={() => setActiveMenu("watchlist")}>⭐ 自選股票<span className="nav-key">3</span></button>
+          <button className={`nav-btn ${activeMenu === "signals" ? "active" : ""}`} onClick={() => setActiveMenu("signals")}>🚨 強勢掃描<span className="nav-key">4</span></button>
+          <button className={`nav-btn ${activeMenu === "klineRadar" ? "active" : ""}`} onClick={() => setActiveMenu("klineRadar")}>📡 K線訊號雷達<span className="nav-key">5</span></button>
+          <button className={`nav-btn ${activeMenu === "nextday" ? "active" : ""}`} onClick={() => setActiveMenu("nextday")}>🌙 隔日沖選股<span className="nav-key">6</span></button>
+          <button className={`nav-btn ${activeMenu === "daytrade" ? "active" : ""}`} onClick={() => setActiveMenu("daytrade")}>⚡ 當沖模式<span className="nav-key">7</span></button>
           <button className="nav-btn nav-exit" onClick={() => navigate("/")}>← 返回首頁</button>
+          <button className="nav-btn nav-shortcut-btn" onClick={() => setShowShortcutHelp(v => !v)}>
+            ⌨️ 快捷鍵<span className="nav-key">?</span>
+          </button>
         </aside>
 
         <section className="content">
@@ -8373,6 +8491,43 @@ useEffect(() => {
               </div>
             )}
           </div>
+        </div>
+      </div>
+    )}
+
+    {/* ── 快捷鍵說明面板 ── */}
+    {showShortcutHelp && (
+      <div className="shortcut-panel-overlay" onClick={() => setShowShortcutHelp(false)}>
+        <div className="shortcut-panel" onClick={e => e.stopPropagation()}>
+          <div className="shortcut-panel-title">⌨️ 鍵盤快捷鍵</div>
+          <div className="shortcut-section">
+            <div className="shortcut-section-label">頁面切換</div>
+            {[
+              ["1","首頁 / 每日報告"],["2","分析看板"],["3","自選股票"],
+              ["4","強勢掃描"],["5","K線訊號雷達"],["6","隔日沖選股"],["7","當沖模式"],
+            ].map(([k, label]) => (
+              <div className="shortcut-row" key={k}>
+                <span>{label}</span>
+                <span className="kbd">{k}</span>
+              </div>
+            ))}
+          </div>
+          <div className="shortcut-section">
+            <div className="shortcut-section-label">操作</div>
+            {[
+              ["/","搜尋股票（聚焦搜尋框）"],
+              ["Esc","關閉彈窗 / 面板"],
+              ["?","開啟 / 關閉此說明"],
+            ].map(([k, label]) => (
+              <div className="shortcut-row" key={k}>
+                <span>{label}</span>
+                <span className="kbd">{k}</span>
+              </div>
+            ))}
+          </div>
+          <button className="shortcut-panel-close" onClick={() => setShowShortcutHelp(false)}>
+            關閉 <span className="kbd" style={{marginLeft:6}}>Esc</span>
+          </button>
         </div>
       </div>
     )}
