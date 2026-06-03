@@ -2854,7 +2854,7 @@ useEffect(() => {
   useEffect(() => {
     const MENU_KEYS = {
       "1": "report", "2": "analysis", "3": "watchlist",
-      "4": "signals", "5": "klineRadar", "6": "nextday", "7": "daytrade",
+      "4": "signals", "5": "klineRadar", "6": "nextday", "7": "daytrade", "8": "heatmap",
     };
     function handleKeyDown(e) {
       const tag = document.activeElement?.tagName?.toLowerCase();
@@ -5915,6 +5915,116 @@ useEffect(() => {
         .imt-stat-val { font-size: 18px; font-weight: 800; color: #f1f5f9; line-height: 1; }
         .imt-stat-label { font-size: 10px; color: #6b8fa8; margin-top: 3px; }
 
+        /* ── 市場熱圖 ─────────────────────────────────────────────────────────── */
+        .heatmap-page { padding: 4px 0 40px; }
+        .heatmap-header {
+          display: flex; align-items: center; justify-content: space-between;
+          margin-bottom: 16px; flex-wrap: wrap; gap: 10px;
+        }
+        .heatmap-title { font-size: 22px; font-weight: 800; color: #f1f5f9; display: flex; align-items: center; gap: 10px; }
+        .heatmap-subtitle { font-size: 12px; color: #6b8fa8; margin-top: 3px; }
+        .heatmap-legend {
+          display: flex; align-items: center; gap: 6px; font-size: 11px; color: #6b8fa8;
+        }
+        .heatmap-legend-bar {
+          display: flex; height: 14px; width: 120px; border-radius: 4px; overflow: hidden;
+        }
+        .heatmap-controls {
+          display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+        }
+        .hm-filter-btn {
+          font-size: 11px; padding: 4px 10px; border-radius: 6px;
+          background: rgba(14,165,233,.08); border: 1px solid rgba(14,165,233,.18);
+          color: #7dd3fc; cursor: pointer; transition: background .12s;
+        }
+        .hm-filter-btn:hover, .hm-filter-btn.active {
+          background: rgba(14,165,233,.22); border-color: rgba(14,165,233,.45); color: #38bdf8;
+        }
+        .heatmap-stats-row {
+          display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+          gap: 8px; margin-bottom: 18px;
+        }
+        .hm-stat-card {
+          background: #0b1929; border: 1px solid rgba(14,165,233,.12);
+          border-radius: 10px; padding: 10px 14px;
+        }
+        .hm-stat-label { font-size: 10px; color: #6b8fa8; letter-spacing: .05em; margin-bottom: 4px; }
+        .hm-stat-val { font-size: 18px; font-weight: 800; color: #f1f5f9; }
+
+        /* 產業分組 */
+        .hm-sector {
+          margin-bottom: 16px;
+        }
+        .hm-sector-header {
+          display: flex; align-items: center; gap: 8px;
+          margin-bottom: 7px;
+        }
+        .hm-sector-name {
+          font-size: 11px; font-weight: 700; color: #b4cfe0;
+          letter-spacing: .05em;
+        }
+        .hm-sector-avg {
+          font-size: 11px; font-weight: 700; padding: 1px 7px;
+          border-radius: 5px;
+        }
+        .hm-sector-line {
+          flex: 1; height: 1px; background: rgba(14,165,233,.08);
+        }
+        /* 股票格 */
+        .hm-tiles {
+          display: flex; flex-wrap: wrap; gap: 4px;
+        }
+        .hm-tile {
+          border-radius: 6px;
+          padding: 6px 8px;
+          cursor: pointer;
+          min-width: 68px;
+          position: relative;
+          transition: transform .12s, box-shadow .12s;
+          border: 1px solid transparent;
+        }
+        .hm-tile:hover {
+          transform: scale(1.06);
+          box-shadow: 0 6px 20px rgba(0,0,0,.4);
+          z-index: 2;
+          border-color: rgba(255,255,255,.15);
+        }
+        .hm-tile-sym {
+          font-size: 12px; font-weight: 800; line-height: 1;
+          white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .hm-tile-name {
+          font-size: 9px; opacity: .75; margin-top: 2px;
+          white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .hm-tile-chg {
+          font-size: 11px; font-weight: 700; margin-top: 3px;
+        }
+        .hm-tile-vol {
+          font-size: 9px; opacity: .6; margin-top: 1px;
+        }
+        /* 無資料格 */
+        .hm-tile-nodata {
+          background: rgba(30,42,60,.6);
+          border: 1px dashed rgba(14,165,233,.12);
+          min-width: 60px; border-radius: 6px;
+          padding: 6px 8px; cursor: pointer;
+          transition: background .12s;
+        }
+        .hm-tile-nodata:hover { background: rgba(14,165,233,.08); }
+        .hm-tile-nodata .hm-tile-sym { font-size: 11px; color: #6b8fa8; font-weight: 600; }
+        /* 空狀態 */
+        .hm-empty {
+          text-align: center; padding: 60px 24px; color: #6b8fa8; font-size: 14px;
+        }
+        .hm-scan-btn {
+          margin-top: 14px; padding: 10px 28px;
+          background: rgba(14,165,233,.14); border: 1px solid rgba(14,165,233,.28);
+          border-radius: 10px; color: #38bdf8; font-size: 13px; font-weight: 700;
+          cursor: pointer; transition: background .14s;
+        }
+        .hm-scan-btn:hover { background: rgba(14,165,233,.25); }
+
         /* ── 回測績效面板 ─────────────────────────────────────────────────────── */
         .backtest-panel {
           background: rgba(6,14,26,.70);
@@ -6538,6 +6648,7 @@ useEffect(() => {
           <button className={`nav-btn ${activeMenu === "klineRadar" ? "active" : ""}`} onClick={() => setActiveMenu("klineRadar")}>📡 K線訊號雷達<span className="nav-key">5</span></button>
           <button className={`nav-btn ${activeMenu === "nextday" ? "active" : ""}`} onClick={() => setActiveMenu("nextday")}>🌙 隔日沖選股<span className="nav-key">6</span></button>
           <button className={`nav-btn ${activeMenu === "daytrade" ? "active" : ""}`} onClick={() => setActiveMenu("daytrade")}>⚡ 當沖模式<span className="nav-key">7</span></button>
+          <button className={`nav-btn ${activeMenu === "heatmap" ? "active" : ""}`} onClick={() => setActiveMenu("heatmap")}>🗺️ 市場熱圖<span className="nav-key">8</span></button>
           <button className="nav-btn nav-exit" onClick={() => navigate("/")}>← 返回首頁</button>
           <button className="nav-btn nav-shortcut-btn" onClick={() => setShowShortcutHelp(v => !v)}>
             ⌨️ 快捷鍵<span className="nav-key">?</span>
@@ -8083,6 +8194,16 @@ useEffect(() => {
             </div>
           )}
 
+          {activeMenu === "heatmap" && (
+            <HeatmapPage
+              pool={MARKET_STRONG_POOL}
+              dataList={[...systemStrongList, ...marketBreadthList]}
+              onSelectStock={(item) => { openStockAnalysisFromList(item); setActiveMenu("analysis"); }}
+              onRequestScan={() => scanSystemStrongStocks({ silent: false })}
+              scanning={systemStrongLoading}
+            />
+          )}
+
           {activeMenu === "report" && (
             <div className="card">
               <div className="section-title">
@@ -8642,7 +8763,7 @@ useEffect(() => {
             <div className="shortcut-section-label">頁面切換</div>
             {[
               ["1","首頁 / 每日報告"],["2","分析看板"],["3","自選股票"],
-              ["4","強勢掃描"],["5","K線訊號雷達"],["6","隔日沖選股"],["7","當沖模式"],
+              ["4","強勢掃描"],["5","K線訊號雷達"],["6","隔日沖選股"],["7","當沖模式"],["8","市場熱圖"],
             ].map(([k, label]) => (
               <div className="shortcut-row" key={k}>
                 <span>{label}</span>
@@ -8670,6 +8791,256 @@ useEffect(() => {
       </div>
     )}
     </>
+  );
+}
+
+// ── 市場熱圖頁面元件 ──────────────────────────────────────────────────────────
+function HeatmapPage({ pool, dataList, onSelectStock, onRequestScan, scanning }) {
+  const [sortMode, setSortMode] = useState("industry"); // industry | chg | vol
+  const [filterMode, setFilterMode] = useState("all");  // all | up | down | hot
+
+  // 把 dataList 做成 symbol → data 的 Map
+  const dataMap = useMemo(() => {
+    const m = new Map();
+    dataList.forEach(s => {
+      const sym = String(s.symbol || "").replace(/\.(TW|TWO)$/i, "");
+      if (!m.has(sym)) m.set(sym, s);
+    });
+    return m;
+  }, [dataList]);
+
+  const hasData = dataMap.size > 0;
+
+  // 依產業分組
+  const grouped = useMemo(() => {
+    const map = {};
+    pool.forEach(item => {
+      const ind = item.industry || "其他";
+      if (!map[ind]) map[ind] = [];
+      map[ind].push(item);
+    });
+    return map;
+  }, [pool]);
+
+  // 套用篩選
+  const filteredGrouped = useMemo(() => {
+    const result = {};
+    Object.entries(grouped).forEach(([ind, items]) => {
+      const filtered = items.filter(item => {
+        const d = dataMap.get(item.symbol);
+        if (!d) return filterMode === "all";
+        const chg = d.changePct || 0;
+        if (filterMode === "up")   return chg > 0;
+        if (filterMode === "down") return chg < 0;
+        if (filterMode === "hot")  return (d.volumeRatio || 0) >= 1.5;
+        return true;
+      });
+      if (filtered.length > 0) result[ind] = filtered;
+    });
+    return result;
+  }, [grouped, dataMap, filterMode]);
+
+  // 各產業平均漲跌
+  const sectorAvg = useMemo(() => {
+    const result = {};
+    Object.entries(grouped).forEach(([ind, items]) => {
+      const withData = items.map(i => dataMap.get(i.symbol)).filter(Boolean);
+      if (!withData.length) return;
+      result[ind] = withData.reduce((s, d) => s + (d.changePct || 0), 0) / withData.length;
+    });
+    return result;
+  }, [grouped, dataMap]);
+
+  // 排序產業
+  const sortedSectors = useMemo(() => {
+    const entries = Object.entries(filteredGrouped);
+    if (sortMode === "chg") return entries.sort((a, b) => (sectorAvg[b[0]] || 0) - (sectorAvg[a[0]] || 0));
+    if (sortMode === "vol") {
+      return entries.sort((a, b) => {
+        const avgVol = (items) => {
+          const d = items.map(i => dataMap.get(i.symbol)).filter(Boolean);
+          return d.length ? d.reduce((s, x) => s + (x.volumeRatio || 0), 0) / d.length : 0;
+        };
+        return avgVol(b[1]) - avgVol(a[1]);
+      });
+    }
+    return entries; // industry (original order)
+  }, [filteredGrouped, sortMode, sectorAvg, dataMap]);
+
+  // 全市場統計
+  const marketStats = useMemo(() => {
+    const all = [...dataMap.values()];
+    if (!all.length) return null;
+    const up   = all.filter(s => (s.changePct || 0) > 0).length;
+    const down = all.filter(s => (s.changePct || 0) < 0).length;
+    const flat = all.length - up - down;
+    const avgChg = all.reduce((s, d) => s + (d.changePct || 0), 0) / all.length;
+    const hot  = all.filter(s => (s.volumeRatio || 0) >= 2).length;
+    return { up, down, flat, avgChg, hot, total: all.length };
+  }, [dataMap]);
+
+  // 顏色計算：台股慣例 漲=紅 跌=綠
+  function tileColor(chg) {
+    if (chg === undefined || chg === null) return { bg: "rgba(30,42,60,.6)", text: "#9ca3af", border: "transparent" };
+    const abs = Math.abs(chg);
+    if (chg >= 9)   return { bg: "#7f1d1d", text: "#fca5a5", border: "#ef4444" };
+    if (chg >= 5)   return { bg: "#991b1b", text: "#fecaca", border: "#dc2626" };
+    if (chg >= 2)   return { bg: "#b91c1c", text: "#fee2e2", border: "#ef4444" };
+    if (chg >= 0.5) return { bg: "#dc2626", text: "#fff1f2", border: "#f87171" };
+    if (chg > 0)    return { bg: "rgba(220,38,38,.35)", text: "#fca5a5", border: "rgba(220,38,38,.4)" };
+    if (chg <= -9)  return { bg: "#14532d", text: "#86efac", border: "#22c55e" };
+    if (chg <= -5)  return { bg: "#15803d", text: "#bbf7d0", border: "#4ade80" };
+    if (chg <= -2)  return { bg: "#16a34a", text: "#dcfce7", border: "#4ade80" };
+    if (chg <= -0.5)return { bg: "#22c55e", text: "#052e16", border: "#4ade80" };
+    return { bg: "rgba(34,197,94,.30)", text: "#86efac", border: "rgba(34,197,94,.35)" };
+  }
+
+  if (!hasData) {
+    return (
+      <div className="heatmap-page">
+        <div className="heatmap-header">
+          <div>
+            <div className="heatmap-title">🗺️ 市場熱圖</div>
+            <div className="heatmap-subtitle">依產業分組，顏色代表今日漲跌幅</div>
+          </div>
+        </div>
+        <div className="hm-empty">
+          <div style={{fontSize:48,marginBottom:12}}>🗺️</div>
+          <div>尚無市場資料，請先執行掃描</div>
+          <button className="hm-scan-btn" onClick={onRequestScan} disabled={scanning}>
+            {scanning ? "掃描中..." : "📡 立即掃描市場"}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="heatmap-page">
+      {/* Header */}
+      <div className="heatmap-header">
+        <div>
+          <div className="heatmap-title">🗺️ 市場熱圖</div>
+          <div className="heatmap-subtitle">依產業分組 · 顏色深淺代表漲跌幅 · 點擊股票進入分析</div>
+        </div>
+        <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+          {/* 篩選 */}
+          <div className="heatmap-controls">
+            {[["all","全部"],["up","漲勢"],["down","跌勢"],["hot","爆量"]].map(([m,l]) => (
+              <button key={m} className={`hm-filter-btn ${filterMode===m?"active":""}`} onClick={() => setFilterMode(m)}>{l}</button>
+            ))}
+          </div>
+          {/* 排序 */}
+          <div className="heatmap-controls">
+            {[["industry","依產業"],["chg","依漲跌"],["vol","依量能"]].map(([m,l]) => (
+              <button key={m} className={`hm-filter-btn ${sortMode===m?"active":""}`} onClick={() => setSortMode(m)}>{l}</button>
+            ))}
+          </div>
+          <button className="hm-filter-btn" onClick={onRequestScan} disabled={scanning}>
+            {scanning ? "⟳" : "🔄"}
+          </button>
+        </div>
+      </div>
+
+      {/* 全市場統計 */}
+      {marketStats && (
+        <div className="heatmap-stats-row">
+          <div className="hm-stat-card">
+            <div className="hm-stat-label">有資料股票</div>
+            <div className="hm-stat-val">{marketStats.total} 檔</div>
+          </div>
+          <div className="hm-stat-card">
+            <div className="hm-stat-label">上漲家數</div>
+            <div className="hm-stat-val" style={{color:"#fb7185"}}>{marketStats.up} 檔</div>
+          </div>
+          <div className="hm-stat-card">
+            <div className="hm-stat-label">下跌家數</div>
+            <div className="hm-stat-val" style={{color:"#4ade80"}}>{marketStats.down} 檔</div>
+          </div>
+          <div className="hm-stat-card">
+            <div className="hm-stat-label">市場平均</div>
+            <div className="hm-stat-val" style={{color: marketStats.avgChg >= 0 ? "#fb7185":"#4ade80"}}>
+              {marketStats.avgChg >= 0 ? "+" : ""}{marketStats.avgChg.toFixed(2)}%
+            </div>
+          </div>
+          <div className="hm-stat-card">
+            <div className="hm-stat-label">爆量股（量比≥2）</div>
+            <div className="hm-stat-val" style={{color:"#fbbf24"}}>{marketStats.hot} 檔</div>
+          </div>
+        </div>
+      )}
+
+      {/* 色彩說明 */}
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:16,flexWrap:"wrap"}}>
+        <span style={{fontSize:10,color:"#6b8fa8"}}>漲跌色階：</span>
+        {[
+          {c:"#7f1d1d",l:"漲停"},{c:"#b91c1c",l:"+5%"},{c:"#dc2626",l:"+2%"},
+          {c:"rgba(220,38,38,.35)",l:"+0.5%"},{c:"rgba(30,42,60,.8)",l:"平盤"},
+          {c:"rgba(34,197,94,.30)",l:"-0.5%"},{c:"#22c55e",l:"-2%"},
+          {c:"#15803d",l:"-5%"},{c:"#14532d",l:"跌停"},
+        ].map(({c,l}) => (
+          <div key={l} style={{display:"flex",alignItems:"center",gap:3}}>
+            <div style={{width:14,height:14,background:c,borderRadius:3}}/>
+            <span style={{fontSize:9,color:"#6b8fa8"}}>{l}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* 產業分組熱圖 */}
+      {sortedSectors.map(([sector, items]) => {
+        const avg = sectorAvg[sector];
+        const avgColor = avg === undefined ? "#6b8fa8" : avg >= 0 ? "#fb7185" : "#4ade80";
+        return (
+          <div className="hm-sector" key={sector}>
+            <div className="hm-sector-header">
+              <span className="hm-sector-name">{sector}</span>
+              {avg !== undefined && (
+                <span className="hm-sector-avg" style={{color: avgColor, background: avg >= 0 ? "rgba(251,113,133,.12)" : "rgba(74,222,128,.12)", border: `1px solid ${avgColor}30`}}>
+                  {avg >= 0 ? "▲" : "▼"} {Math.abs(avg).toFixed(2)}%
+                </span>
+              )}
+              <div className="hm-sector-line" />
+              <span style={{fontSize:10,color:"#4b6880"}}>{items.length} 檔</span>
+            </div>
+            <div className="hm-tiles">
+              {items.map(item => {
+                const d = dataMap.get(item.symbol);
+                const chg = d?.changePct;
+                const col = tileColor(chg);
+                const isHot = (d?.volumeRatio || 0) >= 2;
+
+                if (!d) {
+                  return (
+                    <div key={item.symbol} className="hm-tile-nodata"
+                      onClick={() => onSelectStock({ symbol: item.symbol, name: item.name })}>
+                      <div className="hm-tile-sym">{item.symbol}</div>
+                      <div className="hm-tile-name" style={{color:"#4b6880"}}>{item.name}</div>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div key={item.symbol}
+                    className="hm-tile"
+                    style={{ background: col.bg, borderColor: col.border, color: col.text }}
+                    onClick={() => onSelectStock(d)}
+                    title={`${item.symbol} ${item.name}\n漲跌：${chg?.toFixed(2) ?? "--"}%\n量比：${d.volumeRatio?.toFixed(2) ?? "--"}x\nAI分：${d.score ?? "--"}`}
+                  >
+                    {isHot && <div style={{position:"absolute",top:2,right:4,fontSize:8,color:"#fbbf24"}}>🔥</div>}
+                    <div className="hm-tile-sym">{item.symbol}</div>
+                    <div className="hm-tile-name">{item.name}</div>
+                    <div className="hm-tile-chg">{chg >= 0 ? "+" : ""}{chg?.toFixed(2) ?? "--"}%</div>
+                    {d.volumeRatio >= 1.3 && (
+                      <div className="hm-tile-vol">{d.volumeRatio.toFixed(1)}x</div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
