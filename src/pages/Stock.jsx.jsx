@@ -2990,7 +2990,7 @@ useEffect(() => {
   useEffect(() => {
     const MENU_KEYS = {
       "1": "report", "2": "analysis", "3": "watchlist",
-      "4": "signals", "5": "klineRadar", "6": "nextday", "7": "daytrade", "8": "heatmap", "9": "portfolio",
+      "4": "signals", "5": "klineRadar", "6": "nextday", "7": "daytrade", "8": "heatmap", "9": "portfolio", "0": "compare",
     };
     function handleKeyDown(e) {
       const tag = document.activeElement?.tagName?.toLowerCase();
@@ -6161,6 +6161,46 @@ useEffect(() => {
         /* 空狀態 */
         .pf-empty { text-align:center; padding:50px 24px; color:#6b8fa8; }
         .pf-empty-icon { font-size:48px; margin-bottom:12px; opacity:.4; }
+        /* ── 個股比較 ─────────────────────────────────────────────────────────── */
+        .cmp-page { padding: 4px 0 60px; max-width: 1100px; }
+        .cmp-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; flex-wrap:wrap; gap:10px; }
+        .cmp-title  { font-size:22px; font-weight:800; color:#f1f5f9; display:flex; align-items:center; gap:10px; }
+        .cmp-subtitle { font-size:12px; color:#6b8fa8; margin-top:3px; }
+        /* 加股票輸入列 */
+        .cmp-add-row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:20px; }
+        .cmp-add-input { background:rgba(6,14,26,.85); border:1px solid rgba(14,165,233,.25); border-radius:9px; padding:9px 12px; font-size:14px; color:#e2e8f0; outline:none; width:140px; transition:border-color .15s; }
+        .cmp-add-input:focus { border-color:rgba(14,165,233,.6); }
+        .cmp-add-btn { padding:9px 18px; background:rgba(14,165,233,.14); border:1px solid rgba(14,165,233,.28); border-radius:9px; color:#38bdf8; font-size:13px; font-weight:700; cursor:pointer; transition:background .12s; }
+        .cmp-add-btn:hover { background:rgba(14,165,233,.25); }
+        /* 已加股票 chips */
+        .cmp-chips { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:20px; }
+        .cmp-chip  { display:flex; align-items:center; gap:6px; padding:5px 10px; border-radius:8px; font-size:12px; font-weight:700; cursor:default; }
+        .cmp-chip-del { background:none; border:none; cursor:pointer; font-size:13px; line-height:1; padding:0; opacity:.6; }
+        .cmp-chip-del:hover { opacity:1; }
+        /* 圖表卡 */
+        .cmp-chart-card { background:#0b1929; border:1px solid rgba(14,165,233,.14); border-radius:14px; padding:18px 20px; margin-bottom:18px; }
+        .cmp-chart-title { font-size:13px; font-weight:700; color:#cddae2; margin-bottom:14px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; }
+        .cmp-chart-legend { display:flex; gap:14px; flex-wrap:wrap; }
+        .cmp-legend-item { display:flex; align-items:center; gap:5px; font-size:11px; color:#cddae2; cursor:pointer; }
+        .cmp-legend-dot  { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+        /* 比較卡片列 */
+        .cmp-cards-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:12px; margin-bottom:18px; }
+        .cmp-stock-card { background:#0b1929; border:1px solid rgba(14,165,233,.14); border-radius:14px; padding:16px; cursor:pointer; transition:border-color .15s, transform .12s; }
+        .cmp-stock-card:hover { border-color:rgba(14,165,233,.4); transform:translateY(-2px); }
+        .cmp-card-header { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:12px; }
+        .cmp-card-sym  { font-size:20px; font-weight:800; color:#f1f5f9; }
+        .cmp-card-name { font-size:11px; color:#6b8fa8; margin-top:3px; }
+        .cmp-card-ret  { font-size:16px; font-weight:800; }
+        .cmp-row { display:flex; align-items:center; justify-content:space-between; padding:5px 0; border-bottom:.5px solid rgba(14,165,233,.07); font-size:12px; }
+        .cmp-row:last-child { border-bottom:none; }
+        .cmp-row-label { color:#6b8fa8; }
+        .cmp-row-val   { font-weight:700; color:#f1f5f9; }
+        /* 空狀態 */
+        .cmp-empty { text-align:center; padding:60px 24px; color:#6b8fa8; font-size:14px; }
+        .cmp-empty-icon { font-size:52px; margin-bottom:12px; opacity:.4; }
+        /* loading */
+        .cmp-loading { display:flex; align-items:center; justify-content:center; padding:48px; gap:12px; color:#6b8fa8; font-size:13px; }
+
         /* ── 市場熱圖 ─────────────────────────────────────────────────────────── */
         .heatmap-page { padding: 4px 0 60px; }
         .heatmap-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; flex-wrap:wrap; gap:10px; }
@@ -6832,6 +6872,7 @@ useEffect(() => {
           <button className={`nav-btn ${activeMenu === "daytrade" ? "active" : ""}`} onClick={() => setActiveMenu("daytrade")}>⚡ 當沖模式<span className="nav-key">7</span></button>
           <button className={`nav-btn ${activeMenu === "heatmap" ? "active" : ""}`} onClick={() => setActiveMenu("heatmap")}>🗺️ 市場熱圖<span className="nav-key">8</span></button>
           <button className={`nav-btn ${activeMenu === "portfolio" ? "active" : ""}`} onClick={() => setActiveMenu("portfolio")}>💼 投資組合<span className="nav-key">9</span></button>
+          <button className={`nav-btn ${activeMenu === "compare" ? "active" : ""}`} onClick={() => setActiveMenu("compare")}>📊 個股比較<span className="nav-key">0</span></button>
           <button className="nav-btn nav-exit" onClick={() => navigate("/")}>← 返回首頁</button>
           <button className="nav-btn nav-shortcut-btn" onClick={() => setShowShortcutHelp(v => !v)}>
             ⌨️ 快捷鍵<span className="nav-key">?</span>
@@ -8384,6 +8425,14 @@ useEffect(() => {
             </div>
           )}
 
+          {activeMenu === "compare" && (
+            <ComparePage
+              pool={MARKET_STRONG_POOL}
+              onSelectStock={(item) => { openStockAnalysisFromList(item); setActiveMenu("analysis"); }}
+              showToast={showToast}
+            />
+          )}
+
           {activeMenu === "portfolio" && (
             <PortfolioPage
               dataList={[...systemStrongList, ...marketBreadthList, ...watchList]}
@@ -8961,7 +9010,7 @@ useEffect(() => {
             <div className="shortcut-section-label">頁面切換</div>
             {[
               ["1","首頁 / 每日報告"],["2","分析看板"],["3","自選股票"],
-              ["4","強勢掃描"],["5","K線訊號雷達"],["6","隔日沖選股"],["7","當沖模式"],["8","市場熱圖"],["9","投資組合"],
+              ["4","強勢掃描"],["5","K線訊號雷達"],["6","隔日沖選股"],["7","當沖模式"],["8","市場熱圖"],["9","投資組合"],["0","個股比較"],
             ].map(([k, label]) => (
               <div className="shortcut-row" key={k}>
                 <span>{label}</span>
@@ -8989,6 +9038,305 @@ useEffect(() => {
       </div>
     )}
     </>
+  );
+}
+
+// ── 個股比較頁面元件 ──────────────────────────────────────────────────────────
+const COMPARE_COLORS = ["#38bdf8","#fb7185","#4ade80","#fbbf24","#a78bfa","#f97316"];
+const CMP_KEY = "stockRadarCompare_v1";
+
+function ComparePage({ pool, onSelectStock, showToast }) {
+  const [symbols, setSymbols] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(CMP_KEY) || "[]"); } catch { return []; }
+  });
+  const [inputVal, setInputVal] = useState("");
+  const [stockData, setStockData] = useState({});  // symbol → analysed stock
+  const [loading, setLoading] = useState(false);
+  const [range, setRange] = useState("3mo");
+
+  function save(next) {
+    setSymbols(next);
+    localStorage.setItem(CMP_KEY, JSON.stringify(next));
+  }
+
+  async function addSymbol() {
+    const sym = inputVal.trim().toUpperCase().replace(/\.(TW|TWO)$/i, "");
+    if (!sym) return;
+    if (symbols.includes(sym)) { showToast(`${sym} 已在比較清單`, "info"); return; }
+    if (symbols.length >= 4)  { showToast("最多同時比較 4 檔", "warning"); return; }
+    const next = [...symbols, sym];
+    save(next);
+    setInputVal("");
+    await fetchOne(sym);
+  }
+
+  async function fetchOne(sym) {
+    setLoading(true);
+    try {
+      const req = { "1mo":"1mo","3mo":"3mo","6mo":"6mo","1y":"1y","2y":"2y" }[range] || "3mo";
+      const data = await fetchYahooHistory(sym, req, "1d");
+      const analyzed = analyzeStock(data);
+      setStockData(prev => ({ ...prev, [sym]: analyzed }));
+    } catch(e) {
+      showToast(`${sym} 資料抓取失敗`, "error");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function refreshAll(r = range) {
+    if (!symbols.length) return;
+    setLoading(true);
+    await Promise.all(symbols.map(async sym => {
+      try {
+        const data = await fetchYahooHistory(sym, r, "1d");
+        const analyzed = analyzeStock(data);
+        setStockData(prev => ({ ...prev, [sym]: analyzed }));
+      } catch {}
+    }));
+    setLoading(false);
+  }
+
+  // 標準化報酬：把每檔的起點設為 0%，對齊後比較
+  const normalizedData = useMemo(() => {
+    const result = {};
+    symbols.forEach(sym => {
+      const d = stockData[sym];
+      if (!d?.history?.length) return;
+      const base = d.history[0].close;
+      result[sym] = d.history.map(h => ({
+        time: h.time,
+        ret: ((h.close - base) / base) * 100,
+      }));
+    });
+    return result;
+  }, [symbols, stockData]);
+
+  // SVG 折線圖
+  const SVG_W = 560, SVG_H = 200, PAD_L = 38, PAD_R = 12, PAD_T = 12, PAD_B = 24;
+  const chartW = SVG_W - PAD_L - PAD_R;
+  const chartH = SVG_H - PAD_T - PAD_B;
+
+  const allRets = Object.values(normalizedData).flatMap(pts => pts.map(p => p.ret));
+  const minRet = allRets.length ? Math.min(...allRets) : -10;
+  const maxRet = allRets.length ? Math.max(...allRets) : 10;
+  const retRange = (maxRet - minRet) || 1;
+
+  function toX(i, total) { return PAD_L + (i / Math.max(total - 1, 1)) * chartW; }
+  function toY(ret) { return PAD_T + (1 - (ret - minRet) / retRange) * chartH; }
+
+  const refLines = [0];
+  if (maxRet > 5)  refLines.push(5);
+  if (maxRet > 10) refLines.push(10);
+  if (minRet < -5)  refLines.push(-5);
+  if (minRet < -10) refLines.push(-10);
+
+  const poolMap = useMemo(() => {
+    const m = {};
+    pool.forEach(p => { m[p.symbol] = p; });
+    return m;
+  }, [pool]);
+
+  return (
+    <div className="cmp-page">
+      <div className="cmp-header">
+        <div>
+          <div className="cmp-title">📊 個股比較</div>
+          <div className="cmp-subtitle">最多 4 檔同時比較，標準化報酬走勢（起點對齊）</div>
+        </div>
+        <select value={range} onChange={e => { setRange(e.target.value); refreshAll(e.target.value); }}
+          style={{fontSize:12,padding:"6px 10px",background:"rgba(6,14,26,.85)",border:"1px solid rgba(14,165,233,.25)",borderRadius:8,color:"#e2e8f0"}}>
+          {[["1mo","1個月"],["3mo","3個月"],["6mo","6個月"],["1y","1年"],["2y","2年"]].map(([v,l]) =>
+            <option key={v} value={v}>{l}</option>)}
+        </select>
+      </div>
+
+      {/* 加股票 */}
+      <div className="cmp-add-row">
+        <input className="cmp-add-input" value={inputVal}
+          onChange={e => setInputVal(e.target.value.toUpperCase())}
+          onKeyDown={e => e.key === "Enter" && addSymbol()}
+          placeholder="輸入代號，如 2330" maxLength={8} />
+        <button className="cmp-add-btn" onClick={addSymbol} disabled={symbols.length >= 4 || loading}>
+          ＋ 加入比較
+        </button>
+        {symbols.length > 0 && (
+          <button className="cmp-add-btn" style={{background:"rgba(14,165,233,.06)"}} onClick={() => refreshAll()} disabled={loading}>
+            🔄 重新載入
+          </button>
+        )}
+        {symbols.length > 0 && (
+          <button onClick={() => { save([]); setStockData({}); }}
+            style={{fontSize:11,color:"#6b8fa8",background:"none",border:"none",cursor:"pointer",padding:"4px 8px"}}>
+            清除全部
+          </button>
+        )}
+      </div>
+
+      {/* 已選 chips */}
+      {symbols.length > 0 && (
+        <div className="cmp-chips">
+          {symbols.map((sym, i) => {
+            const d = stockData[sym];
+            const ret = d ? (((d.close - d.history?.[0]?.close) / (d.history?.[0]?.close || 1)) * 100) : null;
+            return (
+              <div key={sym} className="cmp-chip"
+                style={{ background: COMPARE_COLORS[i] + "22", border: `1px solid ${COMPARE_COLORS[i]}55`, color: COMPARE_COLORS[i] }}>
+                <span style={{ width: 10, height: 10, borderRadius: "50%", background: COMPARE_COLORS[i], display: "inline-block" }} />
+                <span>{sym}</span>
+                {ret !== null && <span style={{ fontSize: 11, opacity: .85 }}>{ret >= 0 ? "+" : ""}{ret.toFixed(1)}%</span>}
+                <button className="cmp-chip-del" style={{ color: COMPARE_COLORS[i] }}
+                  onClick={() => { const n = symbols.filter(s => s !== sym); save(n); setStockData(p => { const c = {...p}; delete c[sym]; return c; }); }}>✕</button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* 空狀態 */}
+      {symbols.length === 0 && (
+        <div className="cmp-empty">
+          <div className="cmp-empty-icon">📊</div>
+          <div>輸入股票代號開始比較</div>
+          <div style={{fontSize:12,marginTop:8,color:"#4b6880"}}>例如：加入 2330、2303、0050 同時對照報酬走勢</div>
+          <div style={{display:"flex",gap:8,justifyContent:"center",marginTop:16,flexWrap:"wrap"}}>
+            {[["2330","台積電"],["2303","聯電"],["2382","廣達"],["0050","台灣50"]].map(([sym,name]) => (
+              <button key={sym} className="cmp-add-btn" style={{fontSize:11}}
+                onClick={() => { setInputVal(sym); }}>
+                {sym} {name}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Loading */}
+      {loading && (
+        <div className="cmp-loading">
+          <div className="scan-progress-spinner" />
+          載入資料中...
+        </div>
+      )}
+
+      {/* 折線比較圖 */}
+      {!loading && Object.keys(normalizedData).length > 0 && (
+        <div className="cmp-chart-card">
+          <div className="cmp-chart-title">
+            <span>📈 標準化報酬走勢（{[["1mo","1個月"],["3mo","3個月"],["6mo","6個月"],["1y","1年"],["2y","2年"]].find(([v])=>v===range)?.[1] || range}，起點=0%）</span>
+            <div className="cmp-chart-legend">
+              {symbols.map((sym, i) => normalizedData[sym] && (
+                <div key={sym} className="cmp-legend-item">
+                  <div className="cmp-legend-dot" style={{ background: COMPARE_COLORS[i] }} />
+                  <span>{sym}</span>
+                  {(() => {
+                    const pts = normalizedData[sym];
+                    const last = pts?.[pts.length - 1]?.ret;
+                    return last != null ? <span style={{ color: last >= 0 ? "#fb7185" : "#4ade80", fontWeight: 800 }}>{last >= 0 ? "+" : ""}{last.toFixed(2)}%</span> : null;
+                  })()}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <svg width="100%" viewBox={`0 0 ${SVG_W} ${SVG_H}`} style={{ display: "block", overflow: "visible" }}>
+            {/* 參考線 */}
+            {refLines.map(r => {
+              const y = toY(r);
+              return (
+                <g key={r}>
+                  <line x1={PAD_L} y1={y} x2={SVG_W - PAD_R} y2={y}
+                    stroke={r === 0 ? "rgba(255,255,255,.2)" : "rgba(14,165,233,.12)"} strokeWidth={r === 0 ? 1.5 : 1} strokeDasharray={r === 0 ? "none" : "3,3"} />
+                  <text x={PAD_L - 4} y={y + 4} textAnchor="end" fontSize={9} fill="#6b8fa8">{r > 0 ? "+" : ""}{r}%</text>
+                </g>
+              );
+            })}
+
+            {/* 各股折線 */}
+            {symbols.map((sym, i) => {
+              const pts = normalizedData[sym];
+              if (!pts?.length) return null;
+              const points = pts.map((p, idx) => `${toX(idx, pts.length).toFixed(1)},${toY(p.ret).toFixed(1)}`).join(" ");
+              const lastPt = pts[pts.length - 1];
+              const lastX = toX(pts.length - 1, pts.length);
+              const lastY = toY(lastPt.ret);
+              return (
+                <g key={sym}>
+                  <polyline points={points} fill="none" stroke={COMPARE_COLORS[i]} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+                  <circle cx={lastX} cy={lastY} r={4} fill={COMPARE_COLORS[i]} stroke="#0b1929" strokeWidth={1.5} />
+                </g>
+              );
+            })}
+
+            {/* X 軸時間標籤（取幾個代表點） */}
+            {(() => {
+              const firstSym = symbols.find(s => normalizedData[s]);
+              const pts = firstSym ? normalizedData[firstSym] : [];
+              if (!pts.length) return null;
+              const ticks = [0, Math.floor(pts.length * 0.25), Math.floor(pts.length * 0.5), Math.floor(pts.length * 0.75), pts.length - 1].filter((v, i, a) => a.indexOf(v) === i);
+              return ticks.map(idx => (
+                <text key={idx} x={toX(idx, pts.length)} y={SVG_H - 4} textAnchor="middle" fontSize={8} fill="#6b8fa8">
+                  {String(pts[idx].time).slice(5)}
+                </text>
+              ));
+            })()}
+          </svg>
+        </div>
+      )}
+
+      {/* 並排比較卡 */}
+      {!loading && symbols.some(s => stockData[s]) && (
+        <div className="cmp-cards-grid">
+          {symbols.map((sym, i) => {
+            const d = stockData[sym];
+            if (!d) return (
+              <div key={sym} className="cmp-stock-card" style={{ borderColor: COMPARE_COLORS[i] + "44", borderTopWidth: 2, borderTopColor: COMPARE_COLORS[i] }}>
+                <div className="cmp-card-sym" style={{ color: COMPARE_COLORS[i] }}>{sym}</div>
+                <div style={{ fontSize: 12, color: "#6b8fa8", marginTop: 8 }}>載入中...</div>
+              </div>
+            );
+            const startClose = d.history?.[0]?.close;
+            const totalRet = startClose ? ((d.close - startClose) / startClose) * 100 : null;
+            const retColor = totalRet == null ? "#6b8fa8" : totalRet >= 0 ? "#fb7185" : "#4ade80";
+            const poolItem = poolMap[sym] || poolMap[sym + ".TW"] || poolMap[sym + ".TWO"];
+            const name = d.yahooName || poolItem?.name || sym;
+
+            return (
+              <div key={sym} className="cmp-stock-card"
+                style={{ borderTopWidth: 3, borderTopColor: COMPARE_COLORS[i] }}
+                onClick={() => onSelectStock(d)}>
+                <div className="cmp-card-header">
+                  <div>
+                    <div className="cmp-card-sym" style={{ color: COMPARE_COLORS[i] }}>{sym}</div>
+                    <div className="cmp-card-name">{name?.replace(/股份有限公司|有限公司/g, "").trim().slice(0, 8)}</div>
+                  </div>
+                  <div className="cmp-card-ret" style={{ color: retColor }}>
+                    {totalRet != null ? `${totalRet >= 0 ? "+" : ""}${totalRet.toFixed(2)}%` : "--"}
+                  </div>
+                </div>
+                {[
+                  ["現價", d.close?.toFixed(2) ?? "--"],
+                  ["今漲跌", d.changePct != null ? `${d.changePct >= 0 ? "+" : ""}${d.changePct.toFixed(2)}%` : "--", d.changePct >= 0 ? "#fb7185" : "#4ade80"],
+                  ["AI 分數", d.score != null ? `${d.score} / 100` : "--", d.score >= 70 ? "#4ade80" : d.score >= 50 ? "#fbbf24" : "#fb7185"],
+                  ["RSI", d.rsi != null ? d.rsi.toFixed(1) : "--", d.rsi > 70 ? "#fb7185" : d.rsi < 30 ? "#4ade80" : "#fbbf24"],
+                  ["量比", d.volumeRatio != null ? `${d.volumeRatio.toFixed(2)}x` : "--", d.volumeRatio >= 2 ? "#fbbf24" : "#cddae2"],
+                  ["勝率預測", d.winRatePredict != null ? `${d.winRatePredict}%` : "--", d.winRatePredict >= 65 ? "#4ade80" : "#cddae2"],
+                  ["停損", d.tradeSignal?.stopLoss?.toFixed(2) ?? "--"],
+                  ["停利", d.tradeSignal?.takeProfit?.toFixed(2) ?? "--"],
+                ].map(([label, val, color]) => (
+                  <div key={label} className="cmp-row">
+                    <span className="cmp-row-label">{label}</span>
+                    <span className="cmp-row-val" style={{ color: color || "#f1f5f9" }}>{val}</span>
+                  </div>
+                ))}
+                <div style={{ marginTop: 8, padding: "4px 8px", background: d.tradeSignal?.tone === "buy" ? "rgba(74,222,128,.12)" : d.tradeSignal?.tone === "sell" ? "rgba(251,113,133,.12)" : "rgba(14,165,233,.08)", borderRadius: 6, fontSize: 11, fontWeight: 700, color: d.tradeSignal?.tone === "buy" ? "#4ade80" : d.tradeSignal?.tone === "sell" ? "#fb7185" : "#38bdf8", textAlign: "center" }}>
+                  {d.tradeSignal?.action || "--"} · {d.tradeSignal?.label || ""}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }
 
