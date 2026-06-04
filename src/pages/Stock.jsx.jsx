@@ -3071,6 +3071,42 @@ useEffect(() => {
   });
   const [searchDropdownOpen, setSearchDropdownOpen] = useState(false);
   const searchInputRef = useRef(null);
+  // ── Hover Prefetch 快取 ──────────────────────────────────────────────────
+  const prefetchCache = useRef(new Map());  // symbol → { analyzedStock, fetchedAt }
+  const prefetchTimer = useRef(null);       // debounce timer
+
+  function prefetchStock(item) {
+    if (!item?.symbol) return;
+    const target = String(item.symbol).replace(/\.(TW|TWO)$/i, "").toUpperCase();
+
+    // 已快取且未過期（5分鐘）→ 跳過
+    const cached = prefetchCache.current.get(target);
+    if (cached && Date.now() - cached.fetchedAt < 5 * 60 * 1000) return;
+
+    // debounce 120ms，避免快速滑過大量行觸發大量請求
+    clearTimeout(prefetchTimer.current);
+    prefetchTimer.current = setTimeout(async () => {
+      try {
+        const req = getKlineRequest(klineType, range);
+        const safeReq = req.interval === "1d" && ["1d","5d"].includes(req.range)
+          ? { range: range || "1y", interval: "1d" } : req;
+        const data = await fetchYahooHistory(target, safeReq.range, safeReq.interval);
+        const analyzed = analyzeStock(data);
+        const displayName = (!analyzed.name || analyzed.name === analyzed.symbol || !/[一-鿿]/.test(analyzed.name))
+          ? (item.name || analyzed.name) : analyzed.name;
+        const ind = getIndustry(analyzed.symbol);
+        prefetchCache.current.set(target, {
+          analyzedStock: {
+            ...analyzed,
+            name: displayName,
+            baseType: item.baseType || ind || analyzed.baseType,
+            officialIndustry: item.officialIndustry || ind || analyzed.officialIndustry,
+          },
+          fetchedAt: Date.now(),
+        });
+      } catch { /* 預載失敗靜默忽略 */ }
+    }, 120);
+  }
   const [showShortcutHelp, setShowShortcutHelp] = useState(false);
   const [realtimeDayTrade, setRealtimeDayTrade] = useState(false);
   const [systemStrongList, setSystemStrongList] = useState([]);
@@ -3978,6 +4014,18 @@ useEffect(() => {
     setStock(immediateStock);
     document.title = `${item.name || target} ${target} | 股市雷達`;
 
+    // ── 檢查 Hover Prefetch 快取 ─────────────────────────────────────────────
+    const prefetched = prefetchCache.current.get(target);
+    const isPrefetchFresh = prefetched && Date.now() - prefetched.fetchedAt < 5 * 60 * 1000;
+
+    if (isPrefetchFresh) {
+      // ✅ 預載命中：直接顯示，幾乎零等待
+      setStock(prefetched.analyzedStock);
+      document.title = `${prefetched.analyzedStock.name || target} ${target} | 股市雷達`;
+      setLoading(false);
+      return;  // 完成，不需再抓一次
+    }
+
     // 若快取已有足夠 K 線（≥30根），不需立即 loading 遮蔽；靜默背景更新即可
     const hasCachedChart = (item.history?.length ?? 0) >= 30;
     if (!hasCachedChart) setLoading(true);
@@ -4003,11 +4051,14 @@ useEffect(() => {
         baseType: item.baseType || stockIndustry2 || analyzed.baseType,
         officialIndustry: item.officialIndustry || stockIndustry2 || analyzed.officialIndustry,
       };
+
+      // 同時存入 prefetch cache，讓下次切回這檔時也是即時的
+      prefetchCache.current.set(target, { analyzedStock: finalStock, fetchedAt: Date.now() });
+
       setStock(finalStock);
       document.title = `${displayName || analyzed.symbol} ${analyzed.symbol} | 股市雷達`;
     } catch (err) {
       console.warn("openStockAnalysisFromList failed", target, err);
-      // 若快取有資料，保留快取不報錯；若沒有才顯示錯誤
       if (!hasCachedChart) {
         setStock(item);
         setError(err.message || "股票完整K線載入失敗，暫時顯示清單快取資料");
@@ -7786,7 +7837,7 @@ useEffect(() => {
                       const trend = chg >= 3 ? "▲▲▲" : chg >= 1 ? "▲▲" : chg > 0 ? "▲" : chg <= -3 ? "▼▼▼" : chg <= -1 ? "▼▼" : chg < 0 ? "▼" : "—";
                       const trendColor = chg > 0 ? "#4ade80" : chg < 0 ? "#fb7185" : "#6b8fa8";
                       rows.push(
-                      <tr key={s.symbol} className="wl-row" onClick={() => openStockAnalysisFromList(s)}>
+                      <tr key={s.symbol} className="wl-row" onMouseEnter={() => prefetchStock(s)} onClick={() => openStockAnalysisFromList(s)}>
                         {/* 股票欄 */}
                         <td className="wl-cell">
                           <div className="wl-stock">
@@ -8015,7 +8066,7 @@ useEffect(() => {
                           else { hint="量能不足，等量能配合"; hintColor="#6b8fa8"; }
                           const cleanSym = String(s.symbol||"").replace(/\.(TW|TWO)$/i,"");
                           return (
-                            <tr key={s.symbol} onClick={() => openStockAnalysisFromList(s)} className="scan-row">
+                            <tr key={s.symbol} onMouseEnter={() => prefetchStock(s)} onClick={() => openStockAnalysisFromList(s)} className="scan-row">
                               <td className="scan-rank" style={{textAlign:"center",padding:"12px 6px"}}>{i+1}</td>
                               <td style={{padding:"10px 10px"}}>
                                 <div style={{display:"flex",alignItems:"center",gap:8}}>
@@ -8187,7 +8238,7 @@ useEffect(() => {
                         {filteredKlineRadarList.map((s, i) => {
                           const adv = buildAutoTradeAdvice(s);
                           return (
-                            <tr key={s.symbol} onClick={() => openStockAnalysisFromList(s)} className="scan-row">
+                            <tr key={s.symbol} onMouseEnter={() => prefetchStock(s)} onClick={() => openStockAnalysisFromList(s)} className="scan-row">
                               <td className="scan-rank">{i + 1}</td>
                               <td>
                                 <div className="scan-stock-name">{getDisplayName(s.symbol, s.name)}</div>
@@ -8318,7 +8369,7 @@ useEffect(() => {
                         {sortedNextDayList.map((s, i) => {
                           const adv = buildAutoTradeAdvice(s);
                           return (
-                            <tr key={s.symbol} onClick={() => openStockAnalysisFromList(s)} className="scan-row">
+                            <tr key={s.symbol} onMouseEnter={() => prefetchStock(s)} onClick={() => openStockAnalysisFromList(s)} className="scan-row">
                               <td className="scan-rank">{i + 1}</td>
                               <td>
                                 <div className="scan-stock-name">{getDisplayName(s.symbol, s.name)}</div>
@@ -8811,7 +8862,7 @@ useEffect(() => {
                             <thead><tr><th>排名</th><th>股票</th><th>產業</th><th>AI</th><th>漲幅</th><th>量比</th><th>訊號</th></tr></thead>
                             <tbody>
                               {reportStrongTop50.map((s, index) => (
-                                <tr key={s.symbol} onClick={() => openStockAnalysisFromList(s)}>
+                                <tr key={s.symbol} onMouseEnter={() => prefetchStock(s)} onClick={() => openStockAnalysisFromList(s)}>
                                   <td>{index + 1}</td>
                                   <td>
                                     <div className="stock-name-stack">
@@ -8866,7 +8917,7 @@ useEffect(() => {
                             <thead><tr><th>排名</th><th>股票</th><th>產業</th><th>AI</th><th>跌幅</th><th>量比</th><th>訊號</th></tr></thead>
                             <tbody>
                               {reportWeakTop50.map((s, index) => (
-                                <tr key={s.symbol} onClick={() => openStockAnalysisFromList(s)}>
+                                <tr key={s.symbol} onMouseEnter={() => prefetchStock(s)} onClick={() => openStockAnalysisFromList(s)}>
                                   <td>{index + 1}</td>
                                   <td>
                                     <div className="stock-name-stack">
@@ -8901,7 +8952,7 @@ useEffect(() => {
                         <thead><tr><th>股票</th><th>分數</th><th>開高率</th><th>訊號</th><th>假突破</th></tr></thead>
                         <tbody>
                           {reportNextDayCandidates.map((s) => (
-                            <tr key={s.symbol} onClick={() => openStockAnalysisFromList(s)}>
+                            <tr key={s.symbol} onMouseEnter={() => prefetchStock(s)} onClick={() => openStockAnalysisFromList(s)}>
                               <td>
                                 <div className="stock-name-stack">
                                   <span className="stock-name-main small">{getDisplayName(s.symbol, s.name)}</span>
