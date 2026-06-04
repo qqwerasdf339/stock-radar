@@ -3953,9 +3953,36 @@ useEffect(() => {
     setQuery(target);
     rememberSearchKeyword(target);
     setActiveMenu("analysis");
-    setLoading(true);
     setError("");
 
+    // ── 第一步：立刻顯示清單快取資料，讓用戶馬上看到新股票 ────────────────
+    // item 本身可能來自 systemStrongList / klineRadarList，已有基本分析資料
+    // 有 history 就直接顯示圖表；沒有就先顯示基本資訊（讓畫面馬上清空舊股）
+    const immediateStock = {
+      // 先用 analyzeStock 過一次（若 item.history 存在，立刻有完整技術指標）
+      ...(item.history?.length ? analyzeStock({ ...item, history: item.history }) : {}),
+      ...item,
+      symbol: target,
+      name: item.name || target,
+      // 確保有基本欄位，避免 render 出錯
+      tags: item.tags || [],
+      tradeSignal: item.tradeSignal || { action: "載入中", label: "正在取得K線資料", reasons: [], risk: [], tone: "hold", stopLoss: null, takeProfit: null },
+      score: item.score ?? null,
+      rsi: item.rsi ?? null,
+      macdHist: item.macdHist ?? null,
+      changePct: item.changePct ?? 0,
+      close: item.close ?? null,
+      history: item.history || [],  // 有快取就用，沒有就空陣列
+      backtest: item.backtest || { trades: 0, winRate: 0, totalReturn: 0, maxDrawdown: 0, equity: [] },
+    };
+    setStock(immediateStock);
+    document.title = `${item.name || target} ${target} | 股市雷達`;
+
+    // 若快取已有足夠 K 線（≥30根），不需立即 loading 遮蔽；靜默背景更新即可
+    const hasCachedChart = (item.history?.length ?? 0) >= 30;
+    if (!hasCachedChart) setLoading(true);
+
+    // ── 第二步：背景抓取完整 K 線並更新 ─────────────────────────────────────
     try {
       const request = getKlineRequest(klineType, range);
       const safeRequest =
@@ -3980,8 +4007,11 @@ useEffect(() => {
       document.title = `${displayName || analyzed.symbol} ${analyzed.symbol} | 股市雷達`;
     } catch (err) {
       console.warn("openStockAnalysisFromList failed", target, err);
-      setStock(item);
-      setError(err.message || "股票完整K線載入失敗，暫時顯示清單快取資料");
+      // 若快取有資料，保留快取不報錯；若沒有才顯示錯誤
+      if (!hasCachedChart) {
+        setStock(item);
+        setError(err.message || "股票完整K線載入失敗，暫時顯示清單快取資料");
+      }
     } finally {
       setLoading(false);
     }
