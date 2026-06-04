@@ -2990,7 +2990,7 @@ useEffect(() => {
   useEffect(() => {
     const MENU_KEYS = {
       "1": "report", "2": "analysis", "3": "watchlist",
-      "4": "signals", "5": "klineRadar", "6": "nextday", "7": "daytrade", "8": "heatmap", "9": "portfolio", "0": "compare",
+      "4": "signals", "5": "klineRadar", "6": "nextday", "7": "daytrade", "8": "heatmap", "9": "portfolio", "0": "compare", "-": "screener",
     };
     function handleKeyDown(e) {
       const tag = document.activeElement?.tagName?.toLowerCase();
@@ -6161,6 +6161,69 @@ useEffect(() => {
         /* 空狀態 */
         .pf-empty { text-align:center; padding:50px 24px; color:#6b8fa8; }
         .pf-empty-icon { font-size:48px; margin-bottom:12px; opacity:.4; }
+        /* ── 選股精靈 ─────────────────────────────────────────────────────────── */
+        .scr-page { padding: 4px 0 60px; }
+        .scr-title { font-size:22px; font-weight:800; color:#f1f5f9; display:flex; align-items:center; gap:10px; }
+        .scr-subtitle { font-size:12px; color:#6b8fa8; margin-top:3px; }
+        /* 策略模板列 */
+        .scr-presets { display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:8px; margin-bottom:20px; }
+        .scr-preset { background:#0b1929; border:1px solid rgba(14,165,233,.14); border-radius:12px; padding:12px 14px; cursor:pointer; transition:border-color .15s,transform .12s; }
+        .scr-preset:hover { border-color:rgba(14,165,233,.45); transform:translateY(-1px); }
+        .scr-preset.active-preset { border-color:#38bdf8; background:rgba(14,165,233,.10); }
+        .scr-preset-icon { font-size:22px; margin-bottom:6px; }
+        .scr-preset-name { font-size:12px; font-weight:700; color:#f1f5f9; margin-bottom:3px; }
+        .scr-preset-desc { font-size:10px; color:#6b8fa8; line-height:1.4; }
+        /* 主佈局 */
+        .scr-layout { display:grid; grid-template-columns:260px 1fr; gap:14px; align-items:start; }
+        @media(max-width:900px){ .scr-layout { grid-template-columns:1fr; } }
+        /* 左側篩選面板 */
+        .scr-panel { background:#0b1929; border:1px solid rgba(14,165,233,.14); border-radius:14px; padding:18px; display:flex; flex-direction:column; gap:14px; position:sticky; top:10px; }
+        .scr-panel-title { font-size:14px; font-weight:700; color:#f1f5f9; border-bottom:1px solid rgba(14,165,233,.10); padding-bottom:10px; display:flex; align-items:center; justify-content:space-between; }
+        .scr-filter-group { display:flex; flex-direction:column; gap:6px; }
+        .scr-filter-label { font-size:10px; font-weight:700; color:#6b8fa8; letter-spacing:.06em; text-transform:uppercase; display:flex; align-items:center; justify-content:space-between; }
+        .scr-filter-val { font-size:11px; font-weight:700; color:#38bdf8; }
+        /* Range slider */
+        .scr-range-wrap { display:flex; gap:6px; align-items:center; }
+        .scr-range { -webkit-appearance:none; appearance:none; height:4px; border-radius:2px; outline:none; cursor:pointer; flex:1; }
+        .scr-range::-webkit-slider-thumb { -webkit-appearance:none; width:14px; height:14px; border-radius:50%; background:#38bdf8; cursor:pointer; border:2px solid #060e1a; }
+        .scr-range-num { font-size:11px; color:#cddae2; min-width:28px; text-align:center; background:rgba(14,165,233,.08); border:1px solid rgba(14,165,233,.18); border-radius:5px; padding:2px 5px; }
+        /* Toggle buttons */
+        .scr-toggle-row { display:flex; flex-wrap:wrap; gap:4px; }
+        .scr-toggle { font-size:10px; padding:3px 8px; border-radius:5px; border:1px solid rgba(14,165,233,.18); background:rgba(14,165,233,.05); color:#7dd3fc; cursor:pointer; transition:all .12s; }
+        .scr-toggle.active { background:rgba(14,165,233,.22); border-color:rgba(14,165,233,.5); color:#38bdf8; font-weight:700; }
+        /* 執行按鈕 */
+        .scr-run-btn { width:100%; padding:10px; border-radius:9px; background:linear-gradient(135deg,rgba(14,165,233,.25),rgba(14,165,233,.15)); border:1px solid rgba(14,165,233,.35); color:#38bdf8; font-size:13px; font-weight:800; cursor:pointer; transition:background .15s; letter-spacing:.04em; }
+        .scr-run-btn:hover { background:linear-gradient(135deg,rgba(14,165,233,.4),rgba(14,165,233,.25)); }
+        .scr-reset-btn { width:100%; padding:7px; border-radius:7px; background:none; border:1px solid rgba(14,165,233,.12); color:#6b8fa8; font-size:11px; cursor:pointer; }
+        .scr-reset-btn:hover { border-color:rgba(14,165,233,.3); color:#b4cfe0; }
+        /* 右側結果 */
+        .scr-result { background:#0b1929; border:1px solid rgba(14,165,233,.14); border-radius:14px; overflow:hidden; }
+        .scr-result-header { display:flex; align-items:center; justify-content:space-between; padding:14px 18px; border-bottom:1px solid rgba(14,165,233,.10); flex-wrap:wrap; gap:8px; }
+        .scr-result-count { font-size:13px; font-weight:700; color:#f1f5f9; }
+        .scr-result-count span { color:#fbbf24; }
+        .scr-sort-row { display:flex; gap:5px; font-size:10px; flex-wrap:wrap; }
+        .scr-sort-btn { padding:3px 8px; border-radius:5px; border:1px solid rgba(14,165,233,.15); background:transparent; color:#7dd3fc; cursor:pointer; }
+        .scr-sort-btn.active { background:rgba(14,165,233,.18); color:#38bdf8; border-color:rgba(14,165,233,.4); }
+        .scr-empty { padding:60px 24px; text-align:center; color:#6b8fa8; font-size:13px; }
+        /* 結果表 */
+        .scr-table { width:100%; border-collapse:collapse; }
+        .scr-table th { padding:9px 12px; text-align:left; font-size:10px; font-weight:700; color:#6b8fa8; letter-spacing:.07em; text-transform:uppercase; border-bottom:1px solid rgba(14,165,233,.12); white-space:nowrap; cursor:pointer; user-select:none; }
+        .scr-table th:hover { color:#b4cfe0; }
+        .scr-table td { padding:10px 12px; border-bottom:.5px solid rgba(14,165,233,.06); vertical-align:middle; }
+        .scr-table tr { transition:background .1s; cursor:pointer; }
+        .scr-table tr:hover td { background:rgba(14,165,233,.06); }
+        .scr-table tr:last-child td { border-bottom:none; }
+        .scr-rank { font-size:10px; color:#6b8fa8; font-weight:700; }
+        .scr-sym  { font-size:14px; font-weight:800; color:#f1f5f9; }
+        .scr-name { font-size:10px; color:#6b8fa8; margin-top:2px; }
+        .scr-ind  { font-size:10px; color:#38bdf8; background:rgba(14,165,233,.10); border-radius:4px; padding:1px 6px; white-space:nowrap; }
+        /* score bar */
+        .scr-score-bar { display:flex; align-items:center; gap:6px; }
+        .scr-bar-bg { height:5px; width:50px; background:rgba(14,165,233,.12); border-radius:3px; overflow:hidden; }
+        .scr-bar-fill { height:100%; border-radius:3px; }
+        /* signal badge */
+        .scr-signal { font-size:10px; font-weight:700; padding:2px 7px; border-radius:5px; white-space:nowrap; }
+
         /* ── 個股比較 ─────────────────────────────────────────────────────────── */
         .cmp-page { padding: 4px 0 60px; max-width: 1100px; }
         .cmp-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; flex-wrap:wrap; gap:10px; }
@@ -6873,6 +6936,7 @@ useEffect(() => {
           <button className={`nav-btn ${activeMenu === "heatmap" ? "active" : ""}`} onClick={() => setActiveMenu("heatmap")}>🗺️ 市場熱圖<span className="nav-key">8</span></button>
           <button className={`nav-btn ${activeMenu === "portfolio" ? "active" : ""}`} onClick={() => setActiveMenu("portfolio")}>💼 投資組合<span className="nav-key">9</span></button>
           <button className={`nav-btn ${activeMenu === "compare" ? "active" : ""}`} onClick={() => setActiveMenu("compare")}>📊 個股比較<span className="nav-key">0</span></button>
+          <button className={`nav-btn ${activeMenu === "screener" ? "active" : ""}`} style={{color: activeMenu==="screener"?"#38bdf8":"#fbbf24", borderColor: activeMenu==="screener"?"rgba(14,165,233,.25)":"transparent"}} onClick={() => setActiveMenu("screener")}>🎯 選股精靈<span className="nav-key">-</span></button>
           <button className="nav-btn nav-exit" onClick={() => navigate("/")}>← 返回首頁</button>
           <button className="nav-btn nav-shortcut-btn" onClick={() => setShowShortcutHelp(v => !v)}>
             ⌨️ 快捷鍵<span className="nav-key">?</span>
@@ -8425,6 +8489,17 @@ useEffect(() => {
             </div>
           )}
 
+          {activeMenu === "screener" && (
+            <ScreenerPage
+              dataList={[...systemStrongList, ...marketBreadthList]}
+              pool={MARKET_STRONG_POOL}
+              onSelectStock={(item) => { openStockAnalysisFromList(item); setActiveMenu("analysis"); }}
+              onRequestScan={() => scanSystemStrongStocks({ silent: false })}
+              scanning={systemStrongLoading}
+              showToast={showToast}
+            />
+          )}
+
           {activeMenu === "compare" && (
             <ComparePage
               pool={MARKET_STRONG_POOL}
@@ -9010,7 +9085,7 @@ useEffect(() => {
             <div className="shortcut-section-label">頁面切換</div>
             {[
               ["1","首頁 / 每日報告"],["2","分析看板"],["3","自選股票"],
-              ["4","強勢掃描"],["5","K線訊號雷達"],["6","隔日沖選股"],["7","當沖模式"],["8","市場熱圖"],["9","投資組合"],["0","個股比較"],
+              ["4","強勢掃描"],["5","K線訊號雷達"],["6","隔日沖選股"],["7","當沖模式"],["8","市場熱圖"],["9","投資組合"],["0","個股比較"],["-","選股精靈"],
             ].map(([k, label]) => (
               <div className="shortcut-row" key={k}>
                 <span>{label}</span>
@@ -9038,6 +9113,368 @@ useEffect(() => {
       </div>
     )}
     </>
+  );
+}
+
+// ── 選股精靈元件 ──────────────────────────────────────────────────────────────
+const SCREENER_PRESETS = [
+  {
+    id: "bull_ma", icon: "🚀", name: "均線多頭", desc: "MA5>MA20>MA60，趨勢向上，動能充足",
+    filters: { scoreMin:65, rsiMin:50, rsiMax:72, volRatioMin:1.0, maPattern:"多頭", macdDir:"any", changePctMin:-99 },
+  },
+  {
+    id: "oversold", icon: "💎", name: "超賣反彈", desc: "RSI<35 超賣區，等待技術反彈機會",
+    filters: { scoreMin:45, rsiMin:0, rsiMax:35, volRatioMin:0.5, maPattern:"any", macdDir:"any", changePctMin:-99 },
+  },
+  {
+    id: "volume_breakout", icon: "🔥", name: "量能爆發", desc: "成交量爆發≥2倍，資金積極進場",
+    filters: { scoreMin:55, rsiMin:45, rsiMax:85, volRatioMin:2.0, maPattern:"any", macdDir:"any", changePctMin:0.5 },
+  },
+  {
+    id: "strong_breakout", icon: "⚡", name: "強勢突破", desc: "AI≥75，漲幅≥2%，放量突破",
+    filters: { scoreMin:75, rsiMin:55, rsiMax:80, volRatioMin:1.5, maPattern:"any", macdDir:"positive", changePctMin:2 },
+  },
+  {
+    id: "low_risk", icon: "🛡️", name: "低風險進場", desc: "RSI中性、縮量整理、均線支撐",
+    filters: { scoreMin:60, rsiMin:40, rsiMax:60, volRatioMin:0.3, maPattern:"any", macdDir:"any", changePctMin:-2 },
+  },
+  {
+    id: "macd_golden", icon: "✨", name: "MACD翻紅", desc: "MACD柱由負轉正，動能即將爆發",
+    filters: { scoreMin:50, rsiMin:40, rsiMax:75, volRatioMin:0.8, maPattern:"any", macdDir:"positive", changePctMin:-99 },
+  },
+];
+
+const SCREENER_DEFAULT = { scoreMin:0, rsiMin:0, rsiMax:100, volRatioMin:0, maPattern:"any", macdDir:"any", changePctMin:-20, industry:"all" };
+
+function ScreenerPage({ dataList, pool, onSelectStock, onRequestScan, scanning, showToast }) {
+  const [filters, setFilters] = useState(SCREENER_DEFAULT);
+  const [sortBy, setSortBy] = useState("score");
+  const [sortDir, setSortDir] = useState(-1);  // -1=desc, 1=asc
+  const [activePreset, setActivePreset] = useState(null);
+  const [hasRun, setHasRun] = useState(false);
+  const [results, setResults] = useState([]);
+
+  // 所有產業選項
+  const industries = useMemo(() => {
+    const s = new Set(["all"]);
+    pool.forEach(p => { if (p.industry) s.add(p.industry); });
+    return [...s];
+  }, [pool]);
+
+  // 資料 Map
+  const dataMap = useMemo(() => {
+    const m = new Map();
+    dataList.forEach(s => {
+      const sym = String(s.symbol || "").replace(/\.(TW|TWO)$/i, "").toUpperCase();
+      if (!m.has(sym)) m.set(sym, s);
+    });
+    return m;
+  }, [dataList]);
+
+  function applyPreset(preset) {
+    setFilters({ ...SCREENER_DEFAULT, ...preset.filters });
+    setActivePreset(preset.id);
+  }
+
+  function setFilter(key, val) {
+    setFilters(f => ({ ...f, [key]: val }));
+    setActivePreset(null);
+  }
+
+  function runScreener() {
+    const filtered = [];
+    dataMap.forEach((s, sym) => {
+      const poolItem = pool.find(p => p.symbol === sym || p.symbol === sym + ".TW" || p.symbol === sym + ".TWO");
+      const industry = poolItem?.industry || s.baseType || "其他";
+
+      if (filters.industry !== "all" && industry !== filters.industry) return;
+      if ((s.score ?? 0) < filters.scoreMin) return;
+      if ((s.rsi ?? 50) < filters.rsiMin || (s.rsi ?? 50) > filters.rsiMax) return;
+      if ((s.volumeRatio ?? 1) < filters.volRatioMin) return;
+      if ((s.changePct ?? 0) < filters.changePctMin) return;
+
+      if (filters.maPattern !== "any") {
+        const mp = s.maPattern || "";
+        if (filters.maPattern === "多頭" && !mp.includes("多頭")) return;
+        if (filters.maPattern === "空頭" && !mp.includes("空頭") && !mp.includes("下方") && !mp.includes("壓力")) return;
+        if (filters.maPattern === "整理" && (mp.includes("多頭") || mp.includes("空頭") || mp.includes("壓力"))) return;
+      }
+
+      if (filters.macdDir !== "any") {
+        const hist = s.macdHist ?? 0;
+        if (filters.macdDir === "positive" && hist <= 0) return;
+        if (filters.macdDir === "negative" && hist >= 0) return;
+      }
+
+      filtered.push({ ...s, industry, sym });
+    });
+
+    const sorted = filtered.sort((a, b) => {
+      const va = a[sortBy] ?? a.score ?? 0;
+      const vb = b[sortBy] ?? b.score ?? 0;
+      return (vb - va) * sortDir * -1;
+    });
+
+    setResults(sorted);
+    setHasRun(true);
+    showToast(`✅ 找到 ${sorted.length} 檔符合條件`, sorted.length > 0 ? "success" : "info");
+  }
+
+  function resetFilters() {
+    setFilters(SCREENER_DEFAULT);
+    setActivePreset(null);
+    setResults([]);
+    setHasRun(false);
+  }
+
+  function handleSort(col) {
+    if (sortBy === col) setSortDir(d => d * -1);
+    else { setSortBy(col); setSortDir(-1); }
+  }
+
+  const sortedResults = useMemo(() => {
+    return [...results].sort((a, b) => {
+      const getVal = (item) => {
+        if (sortBy === "score")      return item.score ?? 0;
+        if (sortBy === "changePct")  return item.changePct ?? 0;
+        if (sortBy === "rsi")        return item.rsi ?? 50;
+        if (sortBy === "volumeRatio")return item.volumeRatio ?? 0;
+        if (sortBy === "winRatePredict") return item.winRatePredict ?? 0;
+        return item.score ?? 0;
+      };
+      return (getVal(b) - getVal(a)) * (sortDir === -1 ? 1 : -1);
+    });
+  }, [results, sortBy, sortDir]);
+
+  const rangeStyle = (val, min=0, max=100) => {
+    const pct = Math.round(((val - min)/(max - min)) * 100);
+    return { background: `linear-gradient(to right, #38bdf8 ${pct}%, rgba(14,165,233,.15) ${pct}%)` };
+  };
+
+  return (
+    <div className="scr-page">
+      {/* Header */}
+      <div style={{marginBottom:20}}>
+        <div className="scr-title">🎯 智能選股精靈</div>
+        <div className="scr-subtitle">設定篩選條件或選擇策略模板，從 {dataMap.size} 檔已載入股票中精選標的</div>
+      </div>
+
+      {/* 資料不足提示 */}
+      {dataMap.size < 10 && (
+        <div style={{background:"rgba(251,191,36,.08)",border:"1px solid rgba(251,191,36,.25)",borderRadius:10,padding:"10px 14px",marginBottom:16,display:"flex",alignItems:"center",gap:10}}>
+          <span style={{fontSize:14}}>⚠️</span>
+          <span style={{fontSize:12,color:"#fbbf24"}}>尚未掃描市場資料（{dataMap.size} 檔），建議先至「強勢掃描」執行掃描後再使用選股精靈。</span>
+          <button onClick={onRequestScan} disabled={scanning} style={{marginLeft:"auto",padding:"5px 12px",background:"rgba(251,191,36,.15)",border:"1px solid rgba(251,191,36,.3)",borderRadius:6,color:"#fbbf24",fontSize:11,fontWeight:700,cursor:"pointer"}}>
+            {scanning?"掃描中...":"立即掃描"}
+          </button>
+        </div>
+      )}
+
+      {/* 策略模板 */}
+      <div className="scr-presets">
+        {SCREENER_PRESETS.map(p => (
+          <div key={p.id} className={`scr-preset ${activePreset===p.id?"active-preset":""}`} onClick={() => applyPreset(p)}>
+            <div className="scr-preset-icon">{p.icon}</div>
+            <div className="scr-preset-name">{p.name}</div>
+            <div className="scr-preset-desc">{p.desc}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* 主佈局 */}
+      <div className="scr-layout">
+        {/* 左側篩選面板 */}
+        <div className="scr-panel">
+          <div className="scr-panel-title">
+            🎛️ 篩選條件
+            <span style={{fontSize:10,color:"#38bdf8",fontWeight:400}}>{dataMap.size} 檔可篩</span>
+          </div>
+
+          {/* AI 分數 */}
+          <div className="scr-filter-group">
+            <div className="scr-filter-label">AI 分數 <span className="scr-filter-val">≥ {filters.scoreMin}</span></div>
+            <input type="range" className="scr-range" min={0} max={100} step={5} value={filters.scoreMin}
+              style={rangeStyle(filters.scoreMin)}
+              onChange={e => setFilter("scoreMin", +e.target.value)} />
+            <div style={{display:"flex",justifyContent:"space-between",fontSize:9,color:"#4b6880"}}>
+              <span>0</span><span>25</span><span>50</span><span>75</span><span>100</span>
+            </div>
+          </div>
+
+          {/* RSI 區間 */}
+          <div className="scr-filter-group">
+            <div className="scr-filter-label">RSI 區間 <span className="scr-filter-val">{filters.rsiMin} ~ {filters.rsiMax}</span></div>
+            <div className="scr-range-wrap">
+              <span className="scr-range-num">{filters.rsiMin}</span>
+              <input type="range" className="scr-range" min={0} max={100} step={5} value={filters.rsiMin}
+                style={rangeStyle(filters.rsiMin)}
+                onChange={e => setFilter("rsiMin", Math.min(+e.target.value, filters.rsiMax - 5))} />
+              <input type="range" className="scr-range" min={0} max={100} step={5} value={filters.rsiMax}
+                style={rangeStyle(filters.rsiMax)}
+                onChange={e => setFilter("rsiMax", Math.max(+e.target.value, filters.rsiMin + 5))} />
+              <span className="scr-range-num">{filters.rsiMax}</span>
+            </div>
+            <div style={{display:"flex",justifyContent:"space-evenly",fontSize:9,color:"#4b6880",marginTop:2}}>
+              <span style={{color:"#4ade80"}}>超賣&lt;30</span><span>中性40-60</span><span style={{color:"#fb7185"}}>過熱&gt;70</span>
+            </div>
+          </div>
+
+          {/* 量比 */}
+          <div className="scr-filter-group">
+            <div className="scr-filter-label">最低量比 <span className="scr-filter-val">≥ {filters.volRatioMin}x</span></div>
+            <input type="range" className="scr-range" min={0} max={3} step={0.1} value={filters.volRatioMin}
+              style={rangeStyle(filters.volRatioMin, 0, 3)}
+              onChange={e => setFilter("volRatioMin", +parseFloat(e.target.value).toFixed(1))} />
+            <div style={{display:"flex",justifyContent:"space-between",fontSize:9,color:"#4b6880"}}>
+              <span>任意</span><span>正常1x</span><span>放量1.5x</span><span>爆量3x</span>
+            </div>
+          </div>
+
+          {/* 最低漲幅 */}
+          <div className="scr-filter-group">
+            <div className="scr-filter-label">最低漲幅 <span className="scr-filter-val">≥ {filters.changePctMin >= 0 ? "+" : ""}{filters.changePctMin}%</span></div>
+            <input type="range" className="scr-range" min={-10} max={10} step={0.5} value={filters.changePctMin}
+              style={rangeStyle(filters.changePctMin + 10, 0, 20)}
+              onChange={e => setFilter("changePctMin", +parseFloat(e.target.value).toFixed(1))} />
+            <div style={{display:"flex",justifyContent:"space-between",fontSize:9,color:"#4b6880"}}>
+              <span style={{color:"#4ade80"}}>-10%</span><span>0%</span><span style={{color:"#fb7185"}}>+10%</span>
+            </div>
+          </div>
+
+          {/* 均線狀態 */}
+          <div className="scr-filter-group">
+            <div className="scr-filter-label">均線狀態</div>
+            <div className="scr-toggle-row">
+              {[["any","任意"],["多頭","多頭排列"],["整理","橫盤整理"],["空頭","空頭排列"]].map(([v,l]) => (
+                <button key={v} className={`scr-toggle ${filters.maPattern===v?"active":""}`}
+                  onClick={() => setFilter("maPattern", v)}>{l}</button>
+              ))}
+            </div>
+          </div>
+
+          {/* MACD 方向 */}
+          <div className="scr-filter-group">
+            <div className="scr-filter-label">MACD 柱</div>
+            <div className="scr-toggle-row">
+              {[["any","任意"],["positive","翻紅 ↑"],["negative","翻黑 ↓"]].map(([v,l]) => (
+                <button key={v} className={`scr-toggle ${filters.macdDir===v?"active":""}`}
+                  onClick={() => setFilter("macdDir", v)}>{l}</button>
+              ))}
+            </div>
+          </div>
+
+          {/* 產業 */}
+          <div className="scr-filter-group">
+            <div className="scr-filter-label">產業篩選</div>
+            <select value={filters.industry} onChange={e => setFilter("industry", e.target.value)}
+              style={{width:"100%",fontSize:12,padding:"6px 8px",borderRadius:7,border:"1px solid rgba(14,165,233,.2)",background:"#0b1929",color:"#e2e8f0"}}>
+              <option value="all">全部產業</option>
+              {industries.filter(i => i !== "all").map(i => <option key={i} value={i}>{i}</option>)}
+            </select>
+          </div>
+
+          <button className="scr-run-btn" onClick={runScreener}>
+            🔍 執行選股
+          </button>
+          <button className="scr-reset-btn" onClick={resetFilters}>重設條件</button>
+        </div>
+
+        {/* 右側結果 */}
+        <div className="scr-result">
+          <div className="scr-result-header">
+            <div className="scr-result-count">
+              {hasRun ? <>找到 <span>{sortedResults.length}</span> 檔符合條件</> : "請設定條件後點擊「執行選股」"}
+            </div>
+            {hasRun && sortedResults.length > 0 && (
+              <div className="scr-sort-row">
+                <span style={{fontSize:10,color:"#6b8fa8",alignSelf:"center"}}>排序：</span>
+                {[["score","AI分"],["changePct","漲跌"],["rsi","RSI"],["volumeRatio","量比"],["winRatePredict","勝率"]].map(([col,label]) => (
+                  <button key={col} className={`scr-sort-btn ${sortBy===col?"active":""}`} onClick={() => handleSort(col)}>
+                    {label}{sortBy===col?(sortDir===-1?"↓":"↑"):""}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {!hasRun ? (
+            <div className="scr-empty">
+              <div style={{fontSize:48,marginBottom:12}}>🎯</div>
+              <div>選擇策略模板或自訂條件，點擊執行選股</div>
+              <div style={{fontSize:11,color:"#4b6880",marginTop:8}}>目前已載入 {dataMap.size} 檔股票資料</div>
+            </div>
+          ) : sortedResults.length === 0 ? (
+            <div className="scr-empty">
+              <div style={{fontSize:48,marginBottom:12}}>😔</div>
+              <div>沒有股票符合目前條件</div>
+              <div style={{fontSize:11,color:"#4b6880",marginTop:8}}>嘗試放寬篩選條件或更換策略模板</div>
+            </div>
+          ) : (
+            <div style={{overflowX:"auto"}}>
+              <table className="scr-table">
+                <thead>
+                  <tr>
+                    <th style={{width:30}}>#</th>
+                    <th>股票</th>
+                    <th style={{textAlign:"center"}}>AI分</th>
+                    <th style={{textAlign:"right"}} onClick={() => handleSort("changePct")} className="scr-table th">今漲跌</th>
+                    <th style={{textAlign:"right"}}>現價</th>
+                    <th style={{textAlign:"center"}}>RSI</th>
+                    <th style={{textAlign:"right"}}>量比</th>
+                    <th style={{textAlign:"center"}}>均線</th>
+                    <th style={{textAlign:"center"}}>訊號</th>
+                    <th style={{textAlign:"right"}}>勝率</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sortedResults.map((s, idx) => {
+                    const score = s.score ?? 0;
+                    const scoreColor = score >= 80 ? "#4ade80" : score >= 60 ? "#38bdf8" : score >= 40 ? "#fbbf24" : "#fb7185";
+                    const chg = s.changePct ?? 0;
+                    const rsi = s.rsi ?? 50;
+                    const rsiColor = rsi >= 70 ? "#fb7185" : rsi <= 30 ? "#4ade80" : "#fbbf24";
+                    const volColor = (s.volumeRatio||0) >= 2 ? "#fbbf24" : (s.volumeRatio||0) >= 1.3 ? "#38bdf8" : "#cddae2";
+                    const tone = s.tradeSignal?.tone || "hold";
+                    const signalStyle = tone === "buy" ? {background:"rgba(74,222,128,.15)",color:"#4ade80",border:"1px solid rgba(74,222,128,.3)"} : tone === "sell" ? {background:"rgba(251,113,133,.15)",color:"#fb7185",border:"1px solid rgba(251,113,133,.3)"} : {background:"rgba(14,165,233,.10)",color:"#38bdf8",border:"1px solid rgba(14,165,233,.25)"};
+                    const poolItem = pool.find(p => p.symbol === s.symbol || p.symbol === s.symbol+".TW");
+                    const displayName = (s.yahooName || poolItem?.name || s.name || s.symbol || "").replace(/股份有限公司|有限公司/g,"").trim().slice(0,8);
+                    return (
+                      <tr key={s.symbol||idx} onClick={() => onSelectStock(s)}>
+                        <td><span className="scr-rank">{idx+1}</span></td>
+                        <td>
+                          <div className="scr-sym">{String(s.symbol||"").replace(/\.(TW|TWO)$/i,"")}</div>
+                          <div className="scr-name">{displayName}</div>
+                          {s.industry && <span className="scr-ind">{s.industry}</span>}
+                        </td>
+                        <td>
+                          <div className="scr-score-bar">
+                            <div className="scr-bar-bg"><div className="scr-bar-fill" style={{width:`${score}%`,background:scoreColor}}/></div>
+                            <span style={{fontSize:12,fontWeight:700,color:scoreColor,minWidth:24}}>{score}</span>
+                          </div>
+                        </td>
+                        <td style={{textAlign:"right",fontSize:13,fontWeight:700,color:chg>=0?"#fb7185":"#4ade80"}}>
+                          {chg>=0?"+":""}{chg.toFixed(2)}%
+                        </td>
+                        <td style={{textAlign:"right",fontSize:12,color:"#f1f5f9"}}>{s.close?.toFixed(2)??("--")}</td>
+                        <td style={{textAlign:"center",fontSize:12,fontWeight:700,color:rsiColor}}>{rsi.toFixed(1)}</td>
+                        <td style={{textAlign:"right",fontSize:12,fontWeight:700,color:volColor}}>{(s.volumeRatio??0).toFixed(2)}x</td>
+                        <td style={{textAlign:"center"}}>
+                          <span style={{fontSize:10,padding:"2px 5px",borderRadius:4,background:"rgba(14,165,233,.08)",color:"#6b8fa8"}}>{(s.maPattern||"--").slice(0,4)}</span>
+                        </td>
+                        <td><span className="scr-signal" style={signalStyle}>{s.tradeSignal?.action||"--"}</span></td>
+                        <td style={{textAlign:"right",fontSize:12,fontWeight:700,color:(s.winRatePredict||0)>=65?"#4ade80":"#cddae2"}}>
+                          {s.winRatePredict??("--")}%
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 
